@@ -1,0 +1,124 @@
+'use client'
+
+import Link from 'next/link'
+import Image from 'next/image'
+
+interface SearchUser {
+  id: string
+  username: string
+  fullName?: string | null
+  avatar?: string | null
+  avatarUrl?: string | null
+  isVerified?: boolean
+}
+
+interface SearchResultsProps {
+  results: SearchUser[]
+  onSelect: (username: string) => void
+  isLoading: boolean
+}
+
+// Avatar bileşeni - güvenli render ve fallback
+function Avatar({ src, alt }: { src?: string | null; alt: string }) {
+  if (!src) {
+    // Fallback: baş harf avatarı
+    const letter = (alt?.[0] || '?').toUpperCase()
+    return (
+      <div className="w-9 h-9 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 dark:bg-orange-500/20 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+        {letter}
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/5 dark:ring-white/10 flex-shrink-0">
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="36px"
+        className="object-cover"
+        referrerPolicy="no-referrer"
+        onError={(e) => {
+          // Hata durumunda fallback'e geç
+          const target = e.target as HTMLImageElement
+          target.style.display = 'none'
+          const parent = target.parentElement
+          if (parent) {
+            const letter = (alt?.[0] || '?').toUpperCase()
+            parent.innerHTML = `<div class="w-full h-full rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 dark:bg-orange-500/20 flex items-center justify-center text-sm font-semibold">${letter}</div>`
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+export function SearchResults({ results, onSelect, isLoading }: SearchResultsProps) {
+  if (isLoading) {
+    return (
+      <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50 max-h-96 overflow-y-auto">
+        <div className="p-4 text-center">
+          <div className="inline-block w-5 h-5 border-2 border-blue-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Aranıyor...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (results.length === 0) {
+    return (
+      <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50">
+        <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          Kullanıcı bulunamadı
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50 max-h-96 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="py-2">
+        {results.map((user) => (
+          <button
+            key={user.id}
+            onClick={() => onSelect(user.username)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50/60 dark:hover:bg-orange-500/10 rounded-xl transition-colors text-left group"
+          >
+            {/* Avatar */}
+            <Avatar
+              src={user.avatarUrl || user.avatar || undefined}
+              alt={user.fullName || user.username}
+            />
+
+            {/* User Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-1">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {user.fullName || user.username}
+                </p>
+                {user.isVerified && (
+                  <svg
+                    className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                @{user.username}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
