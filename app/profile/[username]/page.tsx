@@ -12,6 +12,7 @@ import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
 import { Plus, Grid, FileText, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
+import UserBadge from '@/components/UserBadge'
 
 function ProfileContent() {
   const params = useParams()
@@ -226,8 +227,22 @@ function ProfileContent() {
   const handleFollow = () => {
     if (profile.isFollowing) {
       followMutation.mutate('unfollow')
+    } else if (profile.hasRequested) {
+      // Cancel follow request
+      handleCancelRequest()
     } else {
       followMutation.mutate('follow')
+    }
+  }
+
+  const handleCancelRequest = async () => {
+    if (!profile.id) return
+    try {
+      await api.post(`/follow/request/${profile.id}/cancel`)
+      queryClient.invalidateQueries({ queryKey: ['profile', username] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } catch (error) {
+      console.error('Failed to cancel request:', error)
     }
   }
 
@@ -295,8 +310,11 @@ function ProfileContent() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-4">
-                <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100">{profile.username}</h1>
-                {profile.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
+                <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  {profile.username}
+                  {profile.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
+                  <UserBadge role={profile.role} />
+                </h1>
               </div>
               {/* Sağ Buton Grubu - Profili Düzenle + Yeni Gönderi */}
               {profile.isOwnProfile && (
@@ -330,12 +348,12 @@ function ProfileContent() {
                 <>
                   <button
                     onClick={handleFollow}
-                    disabled={followMutation.isPending || profile.hasRequested}
+                    disabled={followMutation.isPending}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
                       profile.isFollowing
                         ? 'border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
                         : profile.hasRequested
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-not-allowed'
+                        ? 'bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
                         : 'bg-[#ff7b00] text-white hover:bg-[#e36f00]'
                     }`}
                   >
@@ -344,7 +362,7 @@ function ProfileContent() {
                       : profile.isFollowing
                       ? 'Takibi Bırak'
                       : profile.hasRequested
-                      ? 'İstek Gönderildi'
+                      ? 'İstek Gönderildi (Geri Çek)'
                       : profile.isPrivate
                       ? 'Takip İsteği Gönder'
                       : 'Takip Et'}
@@ -393,132 +411,86 @@ function ProfileContent() {
           </div>
         </div>
 
-        {/* Sekme Butonları - Instagram Tarzı İkonlu Sekmeler - Sadece kendi profili için */}
-        {profile.isOwnProfile && (
-          <>
-            {/* İkonlu Sekme Geçişleri - Instagram Tarzı + Tooltip */}
-            <div className="flex justify-center gap-10 mb-6 border-b border-gray-200 dark:border-gray-700 pb-3 relative">
-              {/* Gönderiler Sekmesi */}
-              <div
-                className="relative flex flex-col items-center"
-                onMouseEnter={() => setHoveredTab('posts')}
-                onMouseLeave={() => setHoveredTab(null)}
-              >
-                <button
-                  onClick={() => setActiveTab('posts')}
-                  className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
-                    activeTab === 'posts'
-                      ? 'text-[#ff7b00]'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
-                  }`}
-                >
-                  <Grid 
-                    size={22} 
-                    className={`transition-all duration-200 ${
-                      activeTab === 'posts' 
-                        ? 'scale-110' 
-                        : 'group-hover:scale-105'
-                    }`}
-                    strokeWidth={activeTab === 'posts' ? 2.5 : 1.75}
-                  />
-                  {/* Aktif sekme alt çizgisi */}
-                  {activeTab === 'posts' && (
-                    <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
-                  )}
-                </button>
-
-                {/* Tooltip - Gönderiler */}
-                {hoveredTab === 'posts' && (
-                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
-                    Gönderiler
-                    {/* Tooltip ok */}
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Yazılar Sekmesi */}
-              <div
-                className="relative flex flex-col items-center"
-                onMouseEnter={() => setHoveredTab('articles')}
-                onMouseLeave={() => setHoveredTab(null)}
-              >
-                <button
-                  onClick={() => setActiveTab('articles')}
-                  className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
-                    activeTab === 'articles'
-                      ? 'text-[#ff7b00]'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
-                  }`}
-                >
-                  <FileText 
-                    size={22} 
-                    className={`transition-all duration-200 ${
-                      activeTab === 'articles' 
-                        ? 'scale-110' 
-                        : 'group-hover:scale-105'
-                    }`}
-                    strokeWidth={activeTab === 'articles' ? 2.5 : 1.75}
-                  />
-                  {/* Aktif sekme alt çizgisi */}
-                  {activeTab === 'articles' && (
-                    <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
-                  )}
-                </button>
-
-                {/* Tooltip - Yazılar */}
-                {hoveredTab === 'articles' && (
-                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
-                    Yazılar
-                    {/* Tooltip ok */}
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Taslaklar Sekmesi - Sadece kendi profili için */}
-              {profile.isOwnProfile && (
-                <div
-                  className="relative flex flex-col items-center"
-                  onMouseEnter={() => setHoveredTab('drafts')}
-                  onMouseLeave={() => setHoveredTab(null)}
-                >
-                  <button
-                    onClick={() => setActiveTab('drafts')}
-                    className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
-                      activeTab === 'drafts'
-                        ? 'text-[#ff7b00]'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
-                    }`}
-                  >
-                    <FileText
-                      size={22}
-                      className={`transition-all duration-200 ${
-                        activeTab === 'drafts'
-                          ? 'scale-110'
-                          : 'group-hover:scale-105'
-                      }`}
-                      strokeWidth={activeTab === 'drafts' ? 2.5 : 1.75}
-                    />
-                    {/* Aktif sekme alt çizgisi */}
-                    {activeTab === 'drafts' && (
-                      <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
-                    )}
-                  </button>
-
-                  {/* Tooltip - Taslaklar */}
-                  {hoveredTab === 'drafts' && (
-                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
-                      Taslaklar
-                      {/* Tooltip ok */}
-                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
-                    </div>
-                  )}
-                </div>
+        {/* Sekme Butonları - Instagram Tarzı İkonlu Sekmeler - Tüm kullanıcılar için görünür */}
+        <div className="flex justify-center gap-10 mb-6 border-b border-gray-200 dark:border-gray-700 pb-3 relative">
+          {/* Gönderiler Sekmesi */}
+          <div
+            className="relative flex flex-col items-center"
+            onMouseEnter={() => setHoveredTab('posts')}
+            onMouseLeave={() => setHoveredTab(null)}
+          >
+            <button
+              onClick={() => setActiveTab('posts')}
+              className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
+                activeTab === 'posts'
+                  ? 'text-[#ff7b00]'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
+              }`}
+            >
+              <Grid 
+                size={22} 
+                className={`transition-all duration-200 ${
+                  activeTab === 'posts' 
+                    ? 'scale-110' 
+                    : 'group-hover:scale-105'
+                }`}
+                strokeWidth={activeTab === 'posts' ? 2.5 : 1.75}
+              />
+              {/* Aktif sekme alt çizgisi */}
+              {activeTab === 'posts' && (
+                <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
               )}
-            </div>
-          </>
-        )}
+            </button>
+
+            {/* Tooltip - Gönderiler */}
+            {hoveredTab === 'posts' && (
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
+                Gönderiler
+                {/* Tooltip ok */}
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
+              </div>
+            )}
+          </div>
+
+          {/* Yazılar Sekmesi */}
+          <div
+            className="relative flex flex-col items-center"
+            onMouseEnter={() => setHoveredTab('articles')}
+            onMouseLeave={() => setHoveredTab(null)}
+          >
+            <button
+              onClick={() => setActiveTab('articles')}
+              className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
+                activeTab === 'articles'
+                  ? 'text-[#ff7b00]'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
+              }`}
+            >
+              <FileText 
+                size={22} 
+                className={`transition-all duration-200 ${
+                  activeTab === 'articles' 
+                    ? 'scale-110' 
+                    : 'group-hover:scale-105'
+                }`}
+                strokeWidth={activeTab === 'articles' ? 2.5 : 1.75}
+              />
+              {/* Aktif sekme alt çizgisi */}
+              {activeTab === 'articles' && (
+                <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
+              )}
+            </button>
+
+            {/* Tooltip - Yazılar */}
+            {hoveredTab === 'articles' && (
+              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
+                Yazılar
+                {/* Tooltip ok */}
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Sekme İçerikleri */}
         {activeTab === 'articles' ? (

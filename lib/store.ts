@@ -8,6 +8,7 @@ interface User {
   fullName?: string
   avatar?: string
   bio?: string
+  role?: string
   isPrivate?: boolean
   isVerified?: boolean
   isAdmin?: boolean

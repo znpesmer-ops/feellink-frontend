@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Sparkles, PenTool, X, BookOpen, Heart } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { io, Socket } from 'socket.io-client'
+import api from '@/lib/api'
 
 type Author = {
   id: number
@@ -22,90 +24,105 @@ type Author = {
 export default function RightSidebar() {
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({})
   const [selectedWriter, setSelectedWriter] = useState<Author | null>(null)
-  const [topPosts, setTopPosts] = useState<any[]>([])
+  const [topLikedArticles, setTopLikedArticles] = useState<any[]>([])
+  const [museums, setMuseums] = useState<any[]>([])
+  const [authors, setAuthors] = useState<Author[]>([])
 
-  // 📊 En çok beğenilen yazıları yükle
+  // 📊 Global sidebar verilerini yükle
   useEffect(() => {
-    const posts = JSON.parse(localStorage.getItem('published-posts-feellink') || '[]')
-    const sorted = [...posts]
-      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
-      .slice(0, 5)
-    setTopPosts(sorted)
-    
-    // Storage değişikliklerini dinle
-    const handleStorageChange = () => {
-      const updated = JSON.parse(localStorage.getItem('published-posts-feellink') || '[]')
-      const sortedUpdated = [...updated]
-        .sort((a, b) => (b.likes || 0) - (a.likes || 0))
-        .slice(0, 5)
-      setTopPosts(sortedUpdated)
+    const fetchGlobalData = async () => {
+      try {
+        const res = await api.get('/sidebar/global')
+        setMuseums(res.data.museums || [])
+        setAuthors(res.data.authors || [])
+        setTopLikedArticles(res.data.topLikedArticles || [])
+      } catch (err) {
+        console.error('Sidebar verisi alınamadı', err)
+        // Fallback: Eğer API çalışmazsa eski sabit verileri kullan
+        setMuseums([
+          { 
+            id: 1, 
+            name: 'İstanbul Modern', 
+            image: '/museums/modern.jpg',
+            color: 'from-[#f97316]/80 to-[#fbbf24]/60'
+          },
+          { 
+            id: 2, 
+            name: 'Pera Müzesi', 
+            image: '/museums/pera.jpg',
+            color: 'from-[#fb923c]/80 to-[#fed7aa]/60'
+          },
+          { 
+            id: 3, 
+            name: 'Odunpazarı Müzesi', 
+            image: '/museums/odunpazari.jpg',
+            color: 'from-[#fcd34d]/80 to-[#fde68a]/60'
+          },
+          { 
+            id: 4, 
+            name: 'Sabancı Müzesi', 
+            image: '/museums/sabanci.jpg',
+            color: 'from-[#f59e0b]/80 to-[#fcd34d]/60'
+          },
+        ])
+        setAuthors([
+          {
+            id: 1,
+            slug: 'zeynep',
+            name: 'Zeynep Esmer',
+            avatar: '/users/zeynep.jpg',
+            preview: 'Duyguların izi her eserde saklıdır.',
+            bio: 'Çağdaş sanat pratiklerinde hafıza, duygu ve materyal ilişkisini araştıran bir sanatçı ve yazar. Feellink\'in kurucu üyelerindendir.',
+            lastPost: {
+              title: 'Duyguların Malzemesi: Hafıza ve Nesneler Arasında',
+              preview: 'Nesneler yalnızca fiziksel değil, duygusal taşıyıcılardır. Her malzeme, geçmişten bugüne bir iz taşır. Bu yazı, sanatın duygusal hafızayı nasıl görünür kıldığını inceliyor...',
+              link: '/writer/zeynep',
+            },
+          },
+          {
+            id: 2,
+            slug: 'sude',
+            name: 'Sude Esmer',
+            avatar: '/users/sude.jpg',
+            preview: 'Bellek, malzeme ve zamanın sessiz diyaloğu.',
+            bio: 'Atık malzeme ve kültürel bellek temalı üretim yapan bir sanatçı. Yazılarında sürdürülebilirlik, çevre etiği ve toplumsal hafıza üzerine odaklanır.',
+            lastPost: {
+              title: 'Sessiz Dönüşüm: Atığın Estetiği',
+              preview: 'Bir atığın güzelliğini görebilmek, yalnızca çevresel değil, etik bir farkındalıktır. Bu yazıda sanat ve atık arasındaki görünmez estetik diyaloğu keşfediyoruz...',
+              link: '/writer/sude',
+            },
+          },
+        ])
+      }
     }
-    
-    window.addEventListener('storage', handleStorageChange)
-    // Custom event için listener (aynı tab'da localStorage değişiklikleri)
-    window.addEventListener('localPostsUpdated', handleStorageChange)
-    
+
+    fetchGlobalData()
+
+    // 🔥 Socket.IO bağlantısı - gerçek zamanlı güncelleme
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const socket: Socket = io(baseURL, {
+      transports: ['websocket'],
+    })
+
+    socket.on('connect', () => {
+      console.log('Sidebar socket bağlı')
+    })
+
+    socket.on('sidebarUpdate', (newData: any) => {
+      console.log('Sidebar güncellendi:', newData)
+      setMuseums(newData.museums || [])
+      setAuthors(newData.authors || [])
+      setTopLikedArticles(newData.topLikedArticles || [])
+    })
+
+    socket.on('connect_error', (error) => {
+      console.error('Sidebar socket bağlantı hatası:', error)
+    })
+
     return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('localPostsUpdated', handleStorageChange)
+      socket.disconnect()
     }
   }, [])
-
-  const museums = [
-    { 
-      id: 1, 
-      name: 'İstanbul Modern', 
-      image: '/museums/modern.jpg',
-      color: 'from-[#f97316]/80 to-[#fbbf24]/60'
-    },
-    { 
-      id: 2, 
-      name: 'Pera Müzesi', 
-      image: '/museums/pera.jpg',
-      color: 'from-[#fb923c]/80 to-[#fed7aa]/60'
-    },
-    { 
-      id: 3, 
-      name: 'Odunpazarı Müzesi', 
-      image: '/museums/odunpazari.jpg',
-      color: 'from-[#fcd34d]/80 to-[#fde68a]/60'
-    },
-    { 
-      id: 4, 
-      name: 'Sabancı Müzesi', 
-      image: '/museums/sabanci.jpg',
-      color: 'from-[#f59e0b]/80 to-[#fcd34d]/60'
-    },
-  ]
-
-  const authors: Author[] = [
-    {
-      id: 1,
-      slug: 'zeynep',
-      name: 'Zeynep Esmer',
-      avatar: '/users/zeynep.jpg',
-      preview: 'Duyguların izi her eserde saklıdır.',
-      bio: 'Çağdaş sanat pratiklerinde hafıza, duygu ve materyal ilişkisini araştıran bir sanatçı ve yazar. Feellink\'in kurucu üyelerindendir.',
-      lastPost: {
-        title: 'Duyguların Malzemesi: Hafıza ve Nesneler Arasında',
-        preview: 'Nesneler yalnızca fiziksel değil, duygusal taşıyıcılardır. Her malzeme, geçmişten bugüne bir iz taşır. Bu yazı, sanatın duygusal hafızayı nasıl görünür kıldığını inceliyor...',
-        link: '/writer/zeynep',
-      },
-    },
-    {
-      id: 2,
-      slug: 'sude',
-      name: 'Sude Esmer',
-      avatar: '/users/sude.jpg',
-      preview: 'Bellek, malzeme ve zamanın sessiz diyaloğu.',
-      bio: 'Atık malzeme ve kültürel bellek temalı üretim yapan bir sanatçı. Yazılarında sürdürülebilirlik, çevre etiği ve toplumsal hafıza üzerine odaklanır.',
-      lastPost: {
-        title: 'Sessiz Dönüşüm: Atığın Estetiği',
-        preview: 'Bir atığın güzelliğini görebilmek, yalnızca çevresel değil, etik bir farkındalıktır. Bu yazıda sanat ve atık arasındaki görünmez estetik diyaloğu keşfediyoruz...',
-        link: '/writer/sude',
-      },
-    },
-  ]
 
   return (
     <>
@@ -157,17 +174,17 @@ export default function RightSidebar() {
       </div>
 
       {/* 🔥 En Çok Beğenilenler */}
-      {topPosts.length > 0 && (
+      {topLikedArticles.length > 0 && (
         <div className="mt-10">
           <h3 className="text-lg font-semibold mb-4 text-[#ff7b00] tracking-wide flex items-center gap-2">
             <span>🔥</span>
             <span>En Çok Beğenilenler</span>
           </h3>
           <div className="space-y-3">
-            {topPosts.map((post, index) => (
+            {topLikedArticles.map((article, index) => (
               <Link
-                key={post.id}
-                href={`/posts/${post.id}`}
+                key={article.id}
+                href={`/articles/${article.id}`}
                 className="block p-3 rounded-xl
                          bg-gray-50 dark:bg-gray-800/50
                          border border-gray-200 dark:border-gray-700/40
@@ -178,18 +195,18 @@ export default function RightSidebar() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-[#222] dark:text-gray-100 line-clamp-2 mb-1 group-hover:text-[#ff7b00] transition-colors">
-                      {post.title}
+                      {article.title}
                     </p>
                     <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                      <span>{post.author}</span>
+                      <span>{article.author?.fullName || article.author?.username}</span>
                       <span>•</span>
                       <div className="flex items-center gap-1">
                         <Heart size={12} className="text-[#ff7b00] fill-[#ff7b00]" />
-                        <span>{post.likes || 0}</span>
+                        <span>{article.totalLikes || 0}</span>
                       </div>
                     </div>
                   </div>
-                  {index === 0 && topPosts.length > 0 && (
+                  {index === 0 && topLikedArticles.length > 0 && (
                     <div className="flex-shrink-0">
                       <span className="text-xs font-bold text-[#ff7b00] bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded-full">
                         #1

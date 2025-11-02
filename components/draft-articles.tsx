@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
-import { FileText, Publish, Edit, Trash2 } from 'lucide-react'
+import { FileText, Send, Edit, Trash2 } from 'lucide-react'
 import api from '@/lib/api'
 import { initPostsSocket } from '@/lib/socket'
 
@@ -167,7 +167,7 @@ export default function DraftArticles({ authorId }: DraftArticlesProps) {
                   </>
                 ) : (
                   <>
-                    <Publish size={16} />
+                    <Send size={16} />
                     <span>Yayınla</span>
                   </>
                 )}

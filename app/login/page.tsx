@@ -20,6 +20,7 @@ export default function LoginPage() {
   const { setAuth, accessToken, user } = useAuthStore()
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
+  const [mode, setMode] = useState<'user' | 'corporate'>('user')
 
   // Eğer zaten giriş yapılmışsa feed'e yönlendir
   useEffect(() => {
@@ -41,12 +42,14 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     try {
       setError('')
-      const response = await api.post('/auth/login', data)
+      const endpoint = mode === 'corporate' ? '/auth/login-corporate' : '/auth/login'
+      const response = await api.post(endpoint, data)
       setAuth(
         response.data.user,
         response.data.accessToken,
         response.data.refreshToken
       )
+      // All users go to feed for now (collections page will be created later)
       router.push('/feed')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed')
@@ -69,6 +72,31 @@ export default function LoginPage() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
             Sign in to your account
           </h2>
+          {/* Mode Tabs */}
+          <div className="flex justify-center mt-4 mb-2 border-b border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setMode('user')}
+              className={`px-6 py-2 text-sm font-medium ${
+                mode === 'user'
+                  ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
+                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              Kullanıcı Girişi
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('corporate')}
+              className={`px-6 py-2 text-sm font-medium ${
+                mode === 'corporate'
+                  ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
+                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              Kurumsal Giriş
+            </button>
+          </div>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           {error && (
@@ -111,16 +139,16 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#ff7b00] hover:bg-[#e36f00] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ff7b00] disabled:opacity-50"
             >
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
+              {isSubmitting ? 'Signing in...' : mode === 'corporate' ? 'Kurumsal Giriş Yap' : 'Giriş Yap'}
             </button>
           </div>
 
           <div className="text-center">
             <a
               href="/register"
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 text-sm"
+              className="text-[#ff7b00] dark:text-[#ff7b00] hover:text-[#e36f00] dark:hover:text-[#e36f00] text-sm"
             >
               Don't have an account? Sign up
             </a>

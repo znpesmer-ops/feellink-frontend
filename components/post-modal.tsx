@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dynamic from 'next/dynamic'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight } from 'lucide-react'
-import CommentReactions from './CommentReactions'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
+import UserBadge from './UserBadge'
+
+const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface PostModalProps {
   postId: string
@@ -19,12 +25,15 @@ interface Comment {
   id: string
   content: string
   createdAt: string
+  isLikedByCurrentUser?: boolean
+  likesCount?: number
   user: {
     id: string
     username: string
     fullName: string | null
     avatar: string | null
     isVerified: boolean
+    role?: string
   }
 }
 
@@ -41,6 +50,7 @@ interface Post {
     fullName: string | null
     avatar: string | null
     isVerified: boolean
+    role?: string
   }
   media: Array<{
     id: string
@@ -325,11 +335,12 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                 )}
               </div>
               <div>
-                <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
                   {post.user.username}
                   {post.user.isVerified && (
                     <span className="ml-1 text-blue-500">✓</span>
                   )}
+                  <UserBadge role={post.user.role} />
                 </p>
                 {post.location && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">{post.location}</p>
@@ -430,7 +441,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                 {post.comments.map((comment: any) => (
                   <div key={comment.id}>
                     {/* Ana yorum */}
-                    <div className="flex gap-3 group">
+                    <div className="flex gap-2 group">
                       <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {comment.user.avatar ? (
                           <img
@@ -444,10 +455,11 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           </span>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900 dark:text-gray-100">
-                          <span className="font-semibold">{comment.user.username}</span>{' '}
-                          {comment.content}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
+                          <span className="font-semibold">{comment.user.username}</span>
+                          <UserBadge role={comment.user.role} />
+                          <span>{comment.content}</span>
                         </p>
                         <div className="flex items-center gap-3 mt-1">
                           <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -468,29 +480,28 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           </button>
                         </div>
                       </div>
-                      {comment.user.id === user?.id && (
-                        <button
-                          onClick={() => handleDeleteComment(comment.id)}
-                          disabled={deleteCommentMutation.isPending}
-                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                          title="Yorumu sil"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      {/* Beğeni butonu - her zaman görünür */}
+                      <div className="flex-shrink-0">
+                        <CommentLikeButton
+                          commentId={comment.id}
+                          initialLiked={comment.isLikedByCurrentUser || false}
+                          initialCount={comment.likesCount || 0}
+                          type="post"
+                        />
+                      </div>
                     </div>
 
-                    {/* Emoji Tepkileri */}
-                    <div className="ml-11 mt-1">
+                    {/* Emoji Tepkileri kaldırıldı */}
+                    {/* <div className="ml-11 mt-1">
                       <CommentReactions commentId={comment.id} postId={postId} />
-                    </div>
+                    </div> */}
 
                     {/* Yanıtlar (Replies) */}
                     {comment.replies && comment.replies.length > 0 && (
                       <div className="ml-10 mt-2 space-y-2">
                         {comment.replies.map((reply: any) => (
                           <div key={reply.id}>
-                            <div className="flex gap-2 group">
+                            <div className="flex gap-2">
                               <CornerUpRight size={12} className="text-gray-400 dark:text-gray-500 mt-1 flex-shrink-0" />
                               <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {reply.user.avatar ? (
@@ -505,31 +516,31 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex-1">
-                                <p className="text-sm text-gray-900 dark:text-gray-100">
-                                  <span className="font-semibold">{reply.user.username}</span>{' '}
-                                  {reply.content}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
+                                  <span className="font-semibold">{reply.user.username}</span>
+                                  <UserBadge role={reply.user.role} />
+                                  <span>{reply.content}</span>
                                 </p>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                   {new Date(reply.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
-                              {reply.user.id === user?.id && (
-                                <button
-                                  onClick={() => handleDeleteComment(reply.id)}
-                                  disabled={deleteCommentMutation.isPending}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                                  title="Yanıtı sil"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
+                              {/* Beğeni butonu - her zaman görünür */}
+                              <div className="flex-shrink-0">
+                                <CommentLikeButton
+                                  commentId={reply.id}
+                                  initialLiked={reply.isLikedByCurrentUser || false}
+                                  initialCount={reply.likesCount || 0}
+                                  type="post"
+                                />
+                              </div>
                             </div>
 
-                            {/* Yanıt için Emoji Tepkileri */}
-                            <div className="ml-9 mt-1">
+                            {/* Yanıt için Emoji Tepkileri kaldırıldı */}
+                            {/* <div className="ml-9 mt-1">
                               <CommentReactions commentId={reply.id} postId={postId} />
-                            </div>
+                            </div> */}
                           </div>
                         ))}
                       </div>

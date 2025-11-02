@@ -142,9 +142,9 @@ export default function PostCard({ post, onLike }: PostCardProps) {
       onClick={handleCardClick}
       className="bg-white/80 dark:bg-[#1a1a1a]/70 backdrop-blur-md border border-gray-200 dark:border-gray-700/40 rounded-2xl shadow-sm p-5 transition-all hover:shadow-md cursor-pointer group"
     >
-      {/* Kapak görseli */}
+      {/* Kapak görseli - Kare form */}
       {post.cover && (
-        <div className="relative w-full h-[200px] mb-4 rounded-xl overflow-hidden">
+        <div className="relative w-full aspect-square mb-4 rounded-2xl overflow-hidden">
           <img
             src={post.cover}
             alt={post.title}

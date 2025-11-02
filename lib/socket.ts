@@ -8,7 +8,8 @@ export const initSocket = (token: string): Socket => {
     return socket
   }
 
-  socket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001', {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  socket = io(baseURL, {
     auth: {
       token,
     },
@@ -23,7 +24,8 @@ export const initChatSocket = (token: string): Socket => {
     return chatSocket
   }
 
-  chatSocket = io(`${process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'}/chat`, {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  chatSocket = io(`${baseURL}/chat`, {
     auth: {
       token,
     },
@@ -43,7 +45,8 @@ export const getChatSocket = (): Socket | null => {
 
 export const initCommentsSocket = (token: string): Socket => {
   // Comments socket için ayrı bir instance oluştur
-  const commentsSocket = io(`${process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'}/comments`, {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const commentsSocket = io(`${baseURL}/comments`, {
     auth: {
       token,
     },
@@ -55,7 +58,8 @@ export const initCommentsSocket = (token: string): Socket => {
 
 export const initPostsSocket = (token: string): Socket => {
   // Posts socket için ayrı bir instance oluştur
-  const postsSocket = io(`${process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001'}/posts`, {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const postsSocket = io(`${baseURL}/posts`, {
     auth: {
       token,
     },
@@ -63,6 +67,19 @@ export const initPostsSocket = (token: string): Socket => {
   })
 
   return postsSocket
+}
+
+export const initArticlesSocket = (token: string): Socket => {
+  // Articles socket için ayrı bir instance oluştur
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const articlesSocket = io(`${baseURL}/articles`, {
+    auth: {
+      token,
+    },
+    transports: ['websocket'],
+  })
+
+  return articlesSocket
 }
 
 export const disconnectSocket = () => {

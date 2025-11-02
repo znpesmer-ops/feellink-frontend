@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import UserBadge from './UserBadge'
 
 interface SearchUser {
   id: string
@@ -10,6 +11,7 @@ interface SearchUser {
   avatar?: string | null
   avatarUrl?: string | null
   isVerified?: boolean
+  role?: string
 }
 
 interface SearchResultsProps {
@@ -110,6 +112,7 @@ export function SearchResults({ results, onSelect, isLoading }: SearchResultsPro
                     />
                   </svg>
                 )}
+                <UserBadge role={user.role} className="-ml-1" />
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                 @{user.username}

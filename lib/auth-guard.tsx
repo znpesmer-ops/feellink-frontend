@@ -20,6 +20,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       // Verify token is valid by calling /auth/me
       try {
         const response = await api.get('/auth/me')
+        // Update user info in case role or other fields changed
+        const currentRefreshToken = useAuthStore.getState().refreshToken
+        if (accessToken && currentRefreshToken) {
+          setAuth(response.data, accessToken, currentRefreshToken)
+        }
         // Token is valid, user is authenticated
       } catch (error: any) {
         // Token invalid, try to refresh

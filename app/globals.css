@@ -76,6 +76,23 @@ body {
   animation: pop 0.3s ease-in-out;
 }
 
+/* Highlight animation for comments */
+@keyframes orangeFlash {
+  0% {
+    background-color: rgba(249, 115, 22, 0.25);
+    transform: scale(1.03);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.highlighted {
+  animation: orangeFlash 2s ease-in-out;
+  border-radius: 10px;
+}
+
 /* Scrollbar hide utility */
 .scrollbar-hide,
 .hide-scrollbar {

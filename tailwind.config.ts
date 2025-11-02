@@ -21,6 +21,21 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'sans-serif'],
       },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        softPulse: {
+          '0%': { boxShadow: '0 0 0 rgba(249,115,22,0.3)' },
+          '50%': { boxShadow: '0 0 10px rgba(249,115,22,0.2)' },
+          '100%': { boxShadow: '0 0 0 rgba(249,115,22,0.3)' },
+        },
+      },
+      animation: {
+        fadeIn: 'fadeIn 0.3s ease-in-out',
+        softPulse: 'softPulse 1.5s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { FileText, Edit, Eye, Heart, MessageCircle } from 'lucide-react'
 import api from '@/lib/api'
-import { initPostsSocket } from '@/lib/socket'
+import { initArticlesSocket } from '@/lib/socket'
 
 interface Article {
   id: string
@@ -55,29 +55,44 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
 
     loadArticles()
 
-    // Socket.IO ile gerçek zamanlı güncelleme (sadece kendi yazıları için)
-    if (accessToken && targetUserId === user?.id) {
-      const postsSocket = initPostsSocket(accessToken)
+    // Socket.IO ile gerçek zamanlı güncelleme
+    if (accessToken) {
+      const articlesSocket = initArticlesSocket(accessToken)
 
-      const handleArticleCreated = (article: Article) => {
-        if (article.authorId === targetUserId) {
+      const handleArticleCreated = (article: any) => {
+        // Sadece ilgili author'a ait yazıları ekle
+        if (article.authorId === targetUserId || article.author?.id === targetUserId) {
           setArticles((prev) => {
+            // Duplicate check
             if (prev.some((a) => a.id === article.id)) return prev
             return [article, ...prev]
           })
         }
       }
 
+      const handleArticleUpdated = (updatedArticle: any) => {
+        // Yorum veya beğeni sayısı güncellendiğinde
+        setArticles((prev) =>
+          prev.map((a) => 
+            a.id === updatedArticle.id 
+              ? { ...a, _count: updatedArticle._count || a._count }
+              : a
+          )
+        )
+      }
+
       const handleArticleDeleted = ({ id }: { id: string }) => {
         setArticles((prev) => prev.filter((a) => a.id !== id))
       }
 
-      postsSocket.on('articleCreated', handleArticleCreated)
-      postsSocket.on('articleDeleted', handleArticleDeleted)
+      articlesSocket.on('articleCreated', handleArticleCreated)
+      articlesSocket.on('articleUpdated', handleArticleUpdated)
+      articlesSocket.on('articleDeleted', handleArticleDeleted)
 
       return () => {
-        postsSocket.off('articleCreated', handleArticleCreated)
-        postsSocket.off('articleDeleted', handleArticleDeleted)
+        articlesSocket.off('articleCreated', handleArticleCreated)
+        articlesSocket.off('articleUpdated', handleArticleUpdated)
+        articlesSocket.off('articleDeleted', handleArticleDeleted)
       }
     }
   }, [targetUserId, accessToken, user?.id])
@@ -116,11 +131,11 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
         <div
           key={article.id}
           className="bg-white/80 dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 
-                     rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group relative"
+                     rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all group relative"
         >
           {article.coverImage ? (
             <div 
-              className="relative w-full h-[120px] overflow-hidden cursor-pointer"
+              className="relative w-full aspect-square overflow-hidden cursor-pointer"
               onClick={() => router.push(`/articles/${article.id}`)}
             >
               <img
@@ -135,7 +150,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
             </div>
           ) : (
             <div 
-              className="relative w-full h-[120px] bg-gradient-to-br from-orange-100/50 to-orange-200/30 dark:from-orange-950/30 dark:to-orange-900/20 flex items-center justify-center cursor-pointer"
+              className="relative w-full aspect-square bg-gradient-to-br from-orange-100/50 to-orange-200/30 dark:from-orange-950/30 dark:to-orange-900/20 flex items-center justify-center cursor-pointer"
               onClick={() => router.push(`/articles/${article.id}`)}
             >
               <span className="text-gray-400 dark:text-gray-500 text-xs">Kapak görseli yok</span>

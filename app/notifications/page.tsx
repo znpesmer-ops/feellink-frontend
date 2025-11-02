@@ -7,12 +7,15 @@ import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { AuthGuard } from '@/lib/auth-guard'
+import { MessageCircle, Heart, CornerDownRight, BellOff, UserPlus, UserCheck, Bell } from 'lucide-react'
+import UserBadge from '@/components/UserBadge'
 
 function NotificationsContent() {
   const router = useRouter()
   const { accessToken, user } = useAuthStore()
   const queryClient = useQueryClient()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [filter, setFilter] = useState<'all' | 'unread' | 'comment' | 'reply'>('all')
 
   // Infinite scroll notifications query
   const {
@@ -59,6 +62,24 @@ function NotificationsContent() {
     const socket = initSocket(accessToken)
 
     socket.on('notification', (notification) => {
+      // If it's a follow_request_cancelled event, remove the notification from the list
+      if (notification.type === 'follow_request_cancelled') {
+        queryClient.setQueryData(['notifications'], (old: any) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page: any[]) =>
+              page.filter((n: any) =>
+                !(n.type === 'follow_request' && n.fromUserId === notification.fromUserId)
+              )
+            ),
+          }
+        })
+        // Decrement unread count if there was an unread notification
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+        return
+      }
+
       // Add new notification to the beginning of the list
       queryClient.setQueryData(['notifications'], (old: any) => {
         if (!old) return old
@@ -129,10 +150,43 @@ function NotificationsContent() {
     }
   }
 
+  // Handle accept follow request
+  const handleAcceptFollowRequest = async (fromUserId: string) => {
+    try {
+      await api.post(`/follow/request/${fromUserId}/accept`)
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Failed to accept follow request:', error)
+      alert('İstek kabul edilemedi. Tekrar deneyin.')
+    }
+  }
+
+  // Handle reject follow request
+  const handleRejectFollowRequest = async (fromUserId: string) => {
+    try {
+      await api.post(`/follow/request/${fromUserId}/reject`)
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Failed to reject follow request:', error)
+      alert('İstek reddedilemedi. Tekrar deneyin.')
+    }
+  }
+
   const notifications = data?.pages.flatMap((page) => page) || []
 
+  // Filter notifications
+  const filteredNotifications = notifications.filter((n: any) => {
+    if (filter === 'all') return true
+    if (filter === 'unread') return !n.isRead
+    if (filter === 'comment') return n.type === 'comment'
+    if (filter === 'reply') return n.type === 'reply'
+    return true
+  })
+
   // Group notifications by date
-  const groupedNotifications = notifications.reduce((acc: any, notification: any) => {
+  const groupedNotifications = filteredNotifications.reduce((acc: any, notification: any) => {
     const date = new Date(notification.createdAt).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -146,20 +200,109 @@ function NotificationsContent() {
     return acc
   }, {})
 
+  // Format time ago helper
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+    if (diffInSeconds < 60) return 'şimdi'
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} dk önce`
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} sa önce`
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} gün önce`
+    
+    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+  }
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'like':
-        return '❤️'
+      case 'comment_like':
+        return <Heart className="w-5 h-5" />
       case 'comment':
-        return '💬'
+        return <MessageCircle className="w-5 h-5" />
+      case 'reply':
+        return <CornerDownRight className="w-5 h-5" />
       case 'follow':
-        return '➕'
+        return <UserPlus className="w-5 h-5" />
       case 'follow_request':
-        return '📥'
+        return <UserCheck className="w-5 h-5" />
       case 'follow_accept':
-        return '✅'
+        return <UserCheck className="w-5 h-5" />
       default:
-        return '🔔'
+        return <Bell className="w-5 h-5" />
+    }
+  }
+  
+  const getNotificationIconColor = (type: string) => {
+    switch (type) {
+      case 'like':
+      case 'comment_like':
+        return 'text-orange-500'
+      case 'comment':
+        return 'text-blue-500'
+      case 'reply':
+        return 'text-gray-500'
+      case 'follow':
+      case 'follow_request':
+      case 'follow_accept':
+        return 'text-green-500'
+      default:
+        return 'text-gray-500'
+    }
+  }
+  
+  const getNotificationBgColor = (type: string) => {
+    switch (type) {
+      case 'like':
+      case 'comment_like':
+        return 'bg-orange-50 dark:bg-orange-500/20'
+      case 'comment':
+        return 'bg-blue-50 dark:bg-blue-500/20'
+      case 'reply':
+        return 'bg-gray-100 dark:bg-gray-700'
+      case 'follow':
+      case 'follow_request':
+      case 'follow_accept':
+        return 'bg-green-50 dark:bg-green-500/20'
+      default:
+        return 'bg-gray-50 dark:bg-gray-700'
+    }
+  }
+
+  const getNotificationBorderColor = (type: string) => {
+    switch (type) {
+      case 'like':
+      case 'comment_like':
+        return 'ring-orange-500/20 border-orange-500/30 dark:border-orange-500/40'
+      case 'comment':
+        return 'ring-blue-500/20 border-blue-500/30 dark:border-blue-500/40'
+      case 'reply':
+        return 'ring-gray-500/20 border-gray-500/30 dark:border-gray-500/40'
+      case 'follow':
+      case 'follow_request':
+      case 'follow_accept':
+        return 'ring-green-500/20 border-green-500/30 dark:border-green-500/40'
+      default:
+        return 'ring-gray-500/20 border-gray-500/30 dark:border-gray-500/40'
+    }
+  }
+
+  const getNotificationHoverColor = (type: string) => {
+    switch (type) {
+      case 'like':
+      case 'comment_like':
+        return 'hover:bg-orange-50/80 dark:hover:bg-orange-500/15'
+      case 'comment':
+        return 'hover:bg-blue-50/80 dark:hover:bg-blue-500/15'
+      case 'reply':
+        return 'hover:bg-gray-100/80 dark:hover:bg-gray-800/70'
+      case 'follow':
+      case 'follow_request':
+      case 'follow_accept':
+        return 'hover:bg-green-50/80 dark:hover:bg-green-500/15'
+      default:
+        return 'hover:bg-gray-100/80 dark:hover:bg-gray-800/70'
     }
   }
 
@@ -167,8 +310,12 @@ function NotificationsContent() {
     switch (notification.type) {
       case 'like':
         return `gönderini beğendi`
+      case 'comment_like':
+        return `yorumunu beğendi`
       case 'comment':
         return `gönderine yorum yaptı`
+      case 'reply':
+        return `yorumuna yanıt verdi`
       case 'follow':
         return `seni takip etti`
       case 'follow_request':
@@ -176,7 +323,7 @@ function NotificationsContent() {
       case 'follow_accept':
         return `takip isteğini kabul etti`
       default:
-        return 'yeni bildirim gönderdi'
+        return notification.message || 'yeni bildirim gönderdi'
     }
   }
 
@@ -197,14 +344,41 @@ function NotificationsContent() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Bildirimler</h1>
-        {unreadCount > 0 && (
+        <div className="flex gap-2">
           <button
             onClick={markAllAsRead}
-            className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+            className={`text-sm font-medium px-3 py-1.5 rounded-full transition-all ${
+              unreadCount > 0
+                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+            }`}
+            disabled={unreadCount === 0}
           >
             Tümünü okundu işaretle
           </button>
-        )}
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {[
+          { key: 'all', label: 'Tümü' },
+          { key: 'unread', label: 'Okunmamış' },
+          { key: 'comment', label: 'Yorumlar' },
+          { key: 'reply', label: 'Yanıtlar' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setFilter(tab.key as any)}
+            className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all ${
+              filter === tab.key
+                ? 'bg-orange-500 text-white shadow-md'
+                : 'bg-gray-100 dark:bg-[#1b1b1b] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#222]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Notifications List */}
@@ -217,107 +391,117 @@ function NotificationsContent() {
                 {dateNotifications.map((notification: any) => (
                   <div
                     key={notification.id}
-                    className={`p-4 rounded-lg border flex items-start space-x-3 cursor-pointer transition-colors ${
-                      !notification.isRead 
-                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30' 
-                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    className={`p-3 rounded-lg border transition-all cursor-pointer animate-fadeIn ${
+                      !notification.isRead
+                        ? `${getNotificationBgColor(notification.type)} ring-1 ${getNotificationBorderColor(notification.type)} ${getNotificationHoverColor(notification.type)}`
+                        : 'bg-gray-50/60 dark:bg-gray-800/50 border-gray-200/70 dark:border-gray-700/40 hover:bg-gray-100/70 dark:hover:bg-gray-800/70'
                     }`}
-                    onClick={() => {
+                    onClick={async () => {
                       if (!notification.isRead) {
-                        markAsRead(notification.id)
+                        await markAsRead(notification.id)
+                      }
+                      
+                      // Yönlendirme - fallback mantığı
+                      if (notification.targetUrl) {
+                        const urlPath = notification.targetUrl.split('#')[0]
+                        const hash = notification.targetUrl.split('#')[1]
+                        
+                        // Eğer zaten o sayfadaysa sadece scroll yap
+                        if (window.location.pathname === urlPath) {
+                          if (hash) {
+                            setTimeout(() => {
+                              // Hash zaten 'cmt-123' formatında, document.getElementById için ekstra 'cmt-' ekleme
+                              const element = document.getElementById(hash.startsWith('cmt-') ? hash : `cmt-${hash}`)
+                              if (element) {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              }
+                            }, 100)
+                          }
+                        } else {
+                          router.push(notification.targetUrl)
+                        }
+                      } else if (notification.articleId) {
+                        // targetUrl yoksa articleId üzerinden oluştur
+                        const url = `/articles/${notification.articleId}${notification.commentId ? `#cmt-${notification.commentId}` : ""}`;
+                        router.push(url)
+                      } else if (notification.postId) {
+                        // Gönderi için fallback
+                        router.push(`/posts/${notification.postId}`)
+                      } else if (notification.sender?.username) {
+                        // Hiçbiri yoksa gönderen profil
+                        router.push(`/profile/${notification.sender.username}`)
                       }
                     }}
                   >
-                    <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
-                          {notification.user?.username || notification.fromUserId || 'Birisi'}
-                        </span>
-                        <span className="text-gray-900 dark:text-gray-100">{getNotificationText(notification)}</span>
-                      </div>
-                      {(notification.postId || notification.payload?.postId) && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gönderiyi görüntüle →</p>
-                      )}
-                      {notification.type === 'follow_request' && notification.fromUserId && (
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation()
-                              try {
-                                // Optimistic update: remove notification from UI immediately
-                                queryClient.setQueryData(['notifications'], (oldData: any) => {
-                                  if (!oldData) return oldData
-                                  return {
-                                    ...oldData,
-                                    pages: oldData.pages.map((page: any) =>
-                                      page.filter((n: any) => 
-                                        !(n.type === 'follow_request' && n.fromUserId === notification.fromUserId)
-                                      )
-                                    ),
-                                  }
-                                })
-                                
-                                await api.post(`/follow/request/${notification.fromUserId}/accept`)
-                                
-                                // Refresh data to ensure sync
-                                queryClient.invalidateQueries({ queryKey: ['notifications'] })
-                                queryClient.invalidateQueries({ queryKey: ['profile'] })
-                              } catch (error: any) {
-                                // Revert on error
-                                queryClient.invalidateQueries({ queryKey: ['notifications'] })
-                                console.error('Accept error:', error)
-                                alert(error.response?.data?.message || 'İstek kabul edilemedi')
+                    <div className="flex items-start gap-3">
+                      {/* Kullanıcı Avatar + İkon */}
+                      <div className="relative flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                          {notification.sender?.avatar ? (
+                            <img
+                              src={
+                                notification.sender.avatar.startsWith('http')
+                                  ? notification.sender.avatar
+                                  : `${process.env.NEXT_PUBLIC_CDN}/${notification.sender.avatar}`
                               }
+                              alt={notification.sender.username || 'User'}
+                              className="w-full h-full rounded-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-gray-600 dark:text-gray-300 font-semibold text-sm">
+                              {notification.sender?.username?.charAt(0).toUpperCase() || 'U'}
+                            </span>
+                          )}
+                        </div>
+                        {/* İkon - Avatar'ın sağ alt köşesinde */}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${getNotificationBgColor(notification.type)} border-2 border-white dark:border-gray-800 flex items-center justify-center ${getNotificationIconColor(notification.type)}`}>
+                          {getNotificationIcon(notification.type)}
+                        </div>
+                      </div>
+
+                      {/* İçerik */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1 flex-wrap">
+                          <span className="font-semibold text-orange-600 dark:text-orange-400">
+                            {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
+                          </span>
+                          <UserBadge role={notification.sender?.role} />
+                          <span>{getNotificationText(notification)}</span>
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {formatTimeAgo(notification.createdAt)}
+                        </p>
+                      </div>
+
+                      {/* Action Buttons - Only for follow_request */}
+                      {notification.type === 'follow_request' && (
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAcceptFollowRequest(notification.fromUserId)
                             }}
-                            className="px-3 py-1.5 bg-[#ff7b00] text-white text-sm rounded-lg hover:bg-[#e36f00] transition-colors font-medium"
+                            className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-lg transition font-medium"
                           >
                             Kabul Et
                           </button>
                           <button
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation()
-                              try {
-                                // Optimistic update: remove notification from UI immediately
-                                queryClient.setQueryData(['notifications'], (oldData: any) => {
-                                  if (!oldData) return oldData
-                                  return {
-                                    ...oldData,
-                                    pages: oldData.pages.map((page: any) =>
-                                      page.filter((n: any) => 
-                                        !(n.type === 'follow_request' && n.fromUserId === notification.fromUserId)
-                                      )
-                                    ),
-                                  }
-                                })
-                                
-                                await api.post(`/follow/request/${notification.fromUserId}/reject`)
-                                
-                                // Refresh data to ensure sync
-                                queryClient.invalidateQueries({ queryKey: ['notifications'] })
-                              } catch (error: any) {
-                                // Revert on error
-                                queryClient.invalidateQueries({ queryKey: ['notifications'] })
-                                console.error('Reject error:', error)
-                                alert(error.response?.data?.message || 'İstek reddedilemedi')
-                              }
+                              handleRejectFollowRequest(notification.fromUserId)
                             }}
-                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                            className="text-xs bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-1.5 rounded-lg transition font-medium"
                           >
                             Reddet
                           </button>
                         </div>
                       )}
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        {new Date(notification.createdAt).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                      </p>
+
+                      {/* Okunmamış göstergesi - Turuncu nokta */}
+                      {notification.type !== 'follow_request' && !notification.isRead && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-[#ff7b00] flex-shrink-0 mt-2 animate-pulse shadow-sm"></div>
+                      )}
                     </div>
-                    {!notification.isRead && (
-                      <div className="w-2 h-2 bg-[#ff7b00] rounded-full"></div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -325,9 +509,10 @@ function NotificationsContent() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400 mb-2">Henüz bildirim yok</p>
-          <p className="text-gray-400 dark:text-gray-500 text-sm">
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
+          <BellOff className="text-6xl mb-4 opacity-50" />
+          <p className="text-lg font-medium">Yeni bildirimin yok</p>
+          <p className="text-sm mt-2">
             Beğeni, yorum ve yeni takipçiler geldiğinde burada görünecek.
           </p>
         </div>
