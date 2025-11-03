@@ -2,16 +2,20 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Compass, User, Bell, Settings, MessageSquare, FileText, Calendar, Ticket, Layers, CalendarPlus } from 'lucide-react'
+import { Home, Compass, User, Bell, Settings, MessageSquare, FileText, Calendar, Ticket, Layers, CalendarPlus, PlusCircle, BarChart3 } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
-import { initSocket } from '@/lib/socket'
+import { initSocket, initChatSocket } from '@/lib/socket'
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, accessToken } = useAuthStore()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false)
+
+  // Basit role kontrolü - case-insensitive
+  const isCorporate = user?.role?.toUpperCase() === 'CORPORATE'
 
   // Fetch unread notification count and setup socket
   useEffect(() => {
@@ -37,17 +41,46 @@ export function Sidebar() {
     }
   }, [accessToken])
 
+  // Setup chat socket for real-time message notifications
+  useEffect(() => {
+    if (!accessToken) return
+
+    // Setup chat socket connection for real-time messages
+    const chatSocket = initChatSocket(accessToken)
+
+    chatSocket.on('new_message', () => {
+      // Kullanıcı mesajlar sayfasındaysa gösterme
+      if (pathname !== '/messages') {
+        setHasUnreadMessages(true)
+      }
+    })
+
+    chatSocket.on('connect', () => {
+      console.log('Chat socket connected for sidebar')
+    })
+
+    return () => {
+      chatSocket.off('new_message')
+      chatSocket.off('connect')
+    }
+  }, [accessToken, pathname])
+
+  // Reset unread messages indicator when user visits messages page
+  useEffect(() => {
+    if (pathname === '/messages') {
+      setHasUnreadMessages(false)
+    }
+  }, [pathname])
+
   if (!accessToken) {
     return null
   }
-
-  const isCorporate = user?.role === 'CORPORATE'
 
   const navItems = [
     { name: 'Ana Sayfa', href: '/feed', icon: Home },
     { name: 'Keşfet', href: '/explore', icon: Compass },
     { name: 'Etkinlikler', href: '/events', icon: Calendar },
-    { name: 'Mesajlar', href: '/messages', icon: MessageSquare },
+    { name: 'Mesajlar', href: '/messages', icon: MessageSquare, hasUnread: hasUnreadMessages },
     { name: 'Yazılar', href: '/articles', icon: FileText },
     { name: 'Profil', href: `/profile/${user?.username || ''}`, icon: User },
     { name: 'Bildirimler', href: '/notifications', icon: Bell, badge: unreadCount },
@@ -59,6 +92,9 @@ export function Sidebar() {
   const corporateItems = isCorporate ? [
     { name: 'Koleksiyonlarım', href: '/collections', icon: Layers },
     { name: 'Etkinliklerim', href: '/my-events', icon: CalendarPlus },
+    { name: 'Etkinlik Oluştur', href: '/corporate/events/new', icon: PlusCircle },
+    { name: 'Bilet Oluştur', href: '/corporate/tickets/new', icon: Ticket },
+    { name: 'Analizlerim', href: '/analytics', icon: BarChart3 },
   ] : []
 
   return (
@@ -74,7 +110,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-col space-y-3 w-full">
-        {navItems.map(({ name, href, icon: Icon, badge }) => {
+        {navItems.map(({ name, href, icon: Icon, badge, hasUnread }) => {
           // Profile için özel kontrol (dinamik username ile)
           let isActive = false
           if (name === 'Profil') {
@@ -100,6 +136,9 @@ export function Sidebar() {
               />
               <span>{name}</span>
               {badge && badge > 0 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#ff7b00] rounded-full animate-pulse"></span>
+              )}
+              {hasUnread && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#ff7b00] rounded-full animate-pulse"></span>
               )}
             </Link>

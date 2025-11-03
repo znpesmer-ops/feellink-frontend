@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
@@ -435,36 +436,64 @@ function NotificationsContent() {
                   >
                     <div className="flex items-start gap-3">
                       {/* Kullanıcı Avatar + İkon */}
-                      <div className="relative flex-shrink-0">
-                        <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-                          {notification.sender?.avatar ? (
-                            <img
-                              src={
-                                notification.sender.avatar.startsWith('http')
-                                  ? notification.sender.avatar
-                                  : `${process.env.NEXT_PUBLIC_CDN}/${notification.sender.avatar}`
-                              }
-                              alt={notification.sender.username || 'User'}
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
+                      {notification.sender?.username ? (
+                        <Link
+                          href={`/profile/${notification.sender.username}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="relative flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                        >
+                          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                            {notification.sender?.avatar ? (
+                              <img
+                                src={
+                                  notification.sender.avatar.startsWith('http')
+                                    ? notification.sender.avatar
+                                    : `${process.env.NEXT_PUBLIC_CDN}/${notification.sender.avatar}`
+                                }
+                                alt={notification.sender.username || 'User'}
+                                className="w-full h-full rounded-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-gray-600 dark:text-gray-300 font-semibold text-sm">
+                                {notification.sender?.username?.charAt(0).toUpperCase() || 'U'}
+                              </span>
+                            )}
+                          </div>
+                          {/* İkon - Avatar'ın sağ alt köşesinde */}
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${getNotificationBgColor(notification.type)} border-2 border-white dark:border-gray-800 flex items-center justify-center ${getNotificationIconColor(notification.type)}`}>
+                            {getNotificationIcon(notification.type)}
+                          </div>
+                        </Link>
+                      ) : (
+                        <div className="relative flex-shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
                             <span className="text-gray-600 dark:text-gray-300 font-semibold text-sm">
-                              {notification.sender?.username?.charAt(0).toUpperCase() || 'U'}
+                              U
                             </span>
-                          )}
+                          </div>
+                          {/* İkon - Avatar'ın sağ alt köşesinde */}
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${getNotificationBgColor(notification.type)} border-2 border-white dark:border-gray-800 flex items-center justify-center ${getNotificationIconColor(notification.type)}`}>
+                            {getNotificationIcon(notification.type)}
+                          </div>
                         </div>
-                        {/* İkon - Avatar'ın sağ alt köşesinde */}
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${getNotificationBgColor(notification.type)} border-2 border-white dark:border-gray-800 flex items-center justify-center ${getNotificationIconColor(notification.type)}`}>
-                          {getNotificationIcon(notification.type)}
-                        </div>
-                      </div>
+                      )}
 
                       {/* İçerik */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1 flex-wrap">
-                          <span className="font-semibold text-orange-600 dark:text-orange-400">
-                            {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
-                          </span>
+                          {notification.sender?.username ? (
+                            <Link
+                              href={`/profile/${notification.sender.username}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-semibold text-orange-600 dark:text-orange-400 hover:opacity-80 transition cursor-pointer"
+                            >
+                              {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
+                            </Link>
+                          ) : (
+                            <span className="font-semibold text-orange-600 dark:text-orange-400">
+                              {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
+                            </span>
+                          )}
                           <UserBadge role={notification.sender?.role} />
                           <span>{getNotificationText(notification)}</span>
                         </p>

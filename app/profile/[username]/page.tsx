@@ -10,7 +10,7 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from '@/components/UserBadge'
 
@@ -25,7 +25,7 @@ function ProfileContent() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'drafts'>('posts')
+  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'drafts' | 'events'>('posts')
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [profilePosts, setProfilePosts] = useState<any[]>([])
 
@@ -34,10 +34,17 @@ function ProfileContent() {
     queryKey: ['profile', username],
     queryFn: async () => {
       const response = await api.get(`/users/profile/${username}`)
+      // Debug: Log profile data to check role value
+      if (response.data) {
+        console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
+      }
       return response.data
     },
     enabled: !!accessToken && !!username,
   })
+
+  // Helper function to check if user is corporate
+  const isCorporateUser = profile?.role?.toUpperCase() === 'CORPORATE'
 
   // Get user posts
   const { data: userPostsData } = useQuery({
@@ -48,6 +55,17 @@ function ProfileContent() {
       return response.data
     },
     enabled: !!accessToken && !!profile?.id,
+  })
+
+  // Get user events (only for corporate users)
+  const { data: userEvents } = useQuery({
+    queryKey: ['user-events', profile?.id],
+      queryFn: async () => {
+      if (!profile?.id || !isCorporateUser) return []
+      const response = await api.get(`/events?authorId=${profile.id}`)
+      return response.data
+    },
+    enabled: !!accessToken && !!profile?.id && isCorporateUser,
   })
 
   // Update profilePosts when data changes
@@ -490,10 +508,132 @@ function ProfileContent() {
               </div>
             )}
           </div>
+
+          {/* Etkinlikler Sekmesi - Sadece Corporate Kullanıcılar İçin */}
+          {isCorporateUser && (
+            <div
+              className="relative flex flex-col items-center"
+              onMouseEnter={() => setHoveredTab('events')}
+              onMouseLeave={() => setHoveredTab(null)}
+            >
+              <button
+                onClick={() => setActiveTab('events')}
+                className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
+                  activeTab === 'events'
+                    ? 'text-[#ff7b00]'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-[#ff7b00]'
+                }`}
+                title="Bu kurumsal hesabın oluşturduğu etkinlikleri görüntüle"
+              >
+                <Calendar 
+                  size={22} 
+                  className={`transition-all duration-200 ${
+                    activeTab === 'events' 
+                      ? 'scale-110' 
+                      : 'group-hover:scale-105'
+                  }`}
+                  strokeWidth={activeTab === 'events' ? 2.5 : 1.75}
+                />
+                {/* Aktif sekme alt çizgisi */}
+                {activeTab === 'events' && (
+                  <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-[#ff7b00] rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
+                )}
+              </button>
+
+              {/* Tooltip - Etkinlikler */}
+              {hoveredTab === 'events' && (
+                <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff7b00] dark:text-orange-400 shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
+                  Kurumsal hesabın oluşturduğu etkinlikler
+                  {/* Tooltip ok */}
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Sekme İçerikleri */}
-        {activeTab === 'articles' ? (
+        {activeTab === 'events' && isCorporateUser ? (
+          <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
+            {userEvents && userEvents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {userEvents.map((event: any) => {
+                  const hasTickets = event.tickets && event.tickets.length > 0
+                  const isFree = hasTickets && event.tickets.some((t: any) => t.price === 0)
+                  const hasPaidTickets = hasTickets && event.tickets.some((t: any) => t.price > 0)
+                  
+                  return (
+                    <div
+                      key={event.id}
+                      onClick={() => router.push(`/events/${event.id}`)}
+                      className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer group"
+                    >
+                      {/* Etkinlik Görseli */}
+                      {event.coverImage ? (
+                        <div className="w-full h-40 relative overflow-hidden">
+                          <img
+                            src={event.coverImage}
+                            alt={event.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-40 bg-gradient-to-br from-[#ff7b00]/20 to-[#ff7b00]/5 dark:from-[#ff7b00]/10 dark:to-[#ff7b00]/5 flex items-center justify-center">
+                          <Calendar className="w-12 h-12 text-[#ff7b00] opacity-50" />
+                        </div>
+                      )}
+                      
+                      {/* Etkinlik Bilgileri */}
+                      <div className="p-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-[#ff7b00] transition-colors">
+                          {event.title}
+                        </h3>
+                        {event.description && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">
+                            {event.description}
+                          </p>
+                        )}
+                        
+                        {/* Tarih ve Durum */}
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                            <Calendar size={14} />
+                            <span>{new Date(event.date).toLocaleDateString('tr-TR', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-1 rounded-full font-medium ${
+                              (isFree && !hasPaidTickets) || !hasTickets
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                : 'bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 text-[#ff7b00]'
+                            }`}
+                          >
+                            {(isFree && !hasPaidTickets) || !hasTickets ? 'Ücretsiz' : 'Ücretli'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  <Calendar className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                </div>
+                <p className="text-gray-500 dark:text-gray-400 font-medium">
+                  Henüz oluşturulmuş etkinlik yok
+                </p>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'articles' ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             <UserArticles authorId={profile.id} />
           </div>

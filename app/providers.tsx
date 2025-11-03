@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
+import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from '@/lib/store'
 import { useNotificationStore } from '@/lib/store-notifications'
 import { ThemeProvider } from '@/lib/theme-context'
@@ -111,6 +112,35 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <AuthInitializer>
           {children}
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#1a1a1a',
+                color: '#fff',
+                borderRadius: '12px',
+                padding: '14px 18px',
+                fontSize: '14px',
+                fontWeight: 500,
+                border: '1px solid rgba(255, 123, 0, 0.2)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              },
+              className: '',
+              success: {
+                iconTheme: {
+                  primary: '#ff7b00',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
         </AuthInitializer>
       </QueryClientProvider>
     </ThemeProvider>

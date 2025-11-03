@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calendar, MapPin, Ticket, Loader2 } from "lucide-react";
+import { Calendar, Ticket, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import RightSidebar from "@/components/right-sidebar";
 
@@ -52,7 +52,7 @@ export default function EventsFeedPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#ff7b00]" />
       </div>
     );
   }
@@ -61,9 +61,11 @@ export default function EventsFeedPage() {
     <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
       {/* Orta içerik */}
       <div className="flex-1 max-w-[1200px] space-y-10 mx-auto xl:mr-[420px]">
-        <h1 className="text-3xl font-bold text-[#ff7b00] mb-8">
-          🎨 Etkinlikler
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-[#ff7b00]">
+            Etkinlikler
+          </h1>
+        </div>
 
         {/* Filtre Çubuğu */}
         <div className="flex flex-wrap gap-2 mb-8">

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Heart } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -165,7 +166,11 @@ export default function PostCard({ post, onLike }: PostCardProps) {
 
       {/* Alt bilgi */}
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
+        <Link
+          href={`/profile/${post.authorUsername || post.author}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-2 hover:opacity-80 transition cursor-pointer"
+        >
           {post.authorAvatar ? (
             <img
               src={post.authorAvatar}
@@ -190,7 +195,7 @@ export default function PostCard({ post, onLike }: PostCardProps) {
               })}
             </p>
           </div>
-        </div>
+        </Link>
 
         {/* Beğeni butonu - Animasyonlu */}
         <button

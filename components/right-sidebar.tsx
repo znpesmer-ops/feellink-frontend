@@ -176,9 +176,8 @@ export default function RightSidebar() {
       {/* 🔥 En Çok Beğenilenler */}
       {topLikedArticles.length > 0 && (
         <div className="mt-10">
-          <h3 className="text-lg font-semibold mb-4 text-[#ff7b00] tracking-wide flex items-center gap-2">
-            <span>🔥</span>
-            <span>En Çok Beğenilenler</span>
+          <h3 className="text-lg font-semibold mb-4 text-[#ff7b00] tracking-wide">
+            En Çok Beğenilenler
           </h3>
           <div className="space-y-3">
             {topLikedArticles.map((article, index) => (
@@ -282,7 +281,6 @@ export default function RightSidebar() {
                      focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50
                      group"
         >
-          <span className="text-base">📚</span>
           <span>Tüm Yayınlanan Yazıları Gör</span>
           <span className="group-hover:translate-x-0.5 transition-transform">→</span>
         </Link>

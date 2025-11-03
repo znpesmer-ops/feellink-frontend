@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight } from 'lucide-react'
+import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin } from 'lucide-react'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
@@ -25,6 +26,7 @@ interface Comment {
   id: string
   content: string
   createdAt: string
+  isPinned?: boolean
   isLikedByCurrentUser?: boolean
   likesCount?: number
   user: {
@@ -35,6 +37,7 @@ interface Comment {
     isVerified: boolean
     role?: string
   }
+  replies?: Comment[]
 }
 
 interface Post {
@@ -74,6 +77,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   const [animateLike, setAnimateLike] = useState(false)
   const [pingAnimating, setPingAnimating] = useState(false)
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ commentId: string; x: number; y: number } | null>(null)
 
   // Fetch post details
   const { data: post, isLoading } = useQuery<Post>({
@@ -259,6 +263,28 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     return () => window.removeEventListener('keydown', handleEscape)
   }, [onClose])
 
+  // Close context menu on outside click
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null)
+    }
+    if (contextMenu) {
+      window.addEventListener('click', handleClickOutside)
+      return () => window.removeEventListener('click', handleClickOutside)
+    }
+  }, [contextMenu])
+
+  // Handle pin/unpin comment
+  const handlePinComment = async (commentId: string, currentPinned: boolean) => {
+    try {
+      await api.post(`/posts/comments/${commentId}/pin`, { pinned: !currentPinned })
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      setContextMenu(null)
+    } catch (error) {
+      console.error('Error pinning comment:', error)
+    }
+  }
+
   if (isLoading || !post) {
     return (
       <div
@@ -312,56 +338,62 @@ export function PostModal({ postId, onClose }: PostModalProps) {
 
         {/* Right side - Details */}
         <div className="md:w-2/5 flex flex-col h-[90vh] md:h-auto max-h-[90vh]">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+          {/* Header - Instagram Style: User + Caption */}
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-start gap-3 flex-shrink-0">
             <div
-              className="flex items-center gap-3 cursor-pointer"
+              className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer"
               onClick={() => {
                 onClose()
                 router.push(`/profile/${post.user.username}`)
               }}
             >
-              <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {post.user.avatar ? (
-                  <img
-                    src={post.user.avatar}
-                    alt={post.user.username}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-gray-500 dark:text-gray-300 text-sm">
-                    {post.user.username[0].toUpperCase()}
+              {post.user.avatar ? (
+                <img
+                  src={post.user.avatar}
+                  alt={post.user.username}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-gray-500 dark:text-gray-300 text-sm">
+                  {post.user.username[0].toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-100 dark:text-gray-100 font-semibold text-sm">
+                    {post.user.fullName || post.user.username}
                   </span>
-                )}
-              </div>
-              <div>
-                <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                  {post.user.username}
                   {post.user.isVerified && (
                     <span className="ml-1 text-blue-500">✓</span>
                   )}
                   <UserBadge role={post.user.role} />
-                </p>
-                {post.location && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{post.location}</p>
-                )}
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                >
+                  <X size={20} className="text-gray-600 dark:text-gray-400" />
+                </button>
               </div>
+              {post.caption && (
+                <p className="text-gray-400 dark:text-gray-400 text-sm mt-[2px] leading-snug whitespace-pre-wrap break-words">
+                  {post.caption}
+                </p>
+              )}
             </div>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-            >
-              <X size={20} className="text-gray-600 dark:text-gray-400" />
-            </button>
           </div>
 
-          {/* Action buttons - Immediately below header */}
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-4 flex-shrink-0">
-            <div className="flex items-center gap-2">
+          {/* Action buttons - Instagram Style: Like count next to icon */}
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-4 text-gray-700 dark:text-gray-400">
               <button
                 onClick={handleLike}
                 disabled={likeMutation.isPending}
-                className={`relative transition-transform active:scale-95 ${animateLike ? 'scale-125' : 'scale-100'}`}
+                className={`relative flex items-center gap-1 hover:text-[#ff7b00] transition-colors ${
+                  animateLike ? 'scale-125' : 'scale-100'
+                }`}
               >
                 <Heart
                   size={24}
@@ -374,28 +406,18 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                 {(animateLike || pingAnimating) && (
                   <span className="absolute inset-0 animate-ping bg-[#ff7b00]/40 rounded-full"></span>
                 )}
+                {post._count.likes > 0 && (
+                  <span className="text-sm font-medium">{post._count.likes}</span>
+                )}
               </button>
-              {post._count.likes > 0 && (
-                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {post._count.likes}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <MessageCircle
-                size={24}
-                className="text-gray-700 dark:text-gray-300"
-              />
-              {post._count.comments > 0 && (
-                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {post._count.comments}
-                </span>
-              )}
+              <button className="hover:text-[#ff7b00] transition-colors">
+                <MessageCircle size={24} className="text-gray-700 dark:text-gray-300" />
+              </button>
             </div>
             <button
               onClick={handleSave}
               disabled={saveMutation.isPending}
-              className="transition-transform active:scale-95"
+              className="hover:text-[#ff7b00] transition-colors"
             >
               <Bookmark
                 size={24}
@@ -408,41 +430,33 @@ export function PostModal({ postId, onClose }: PostModalProps) {
             </button>
           </div>
 
-          {/* Comments Section */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Caption */}
-            {post.caption && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {post.user.avatar ? (
-                    <img
-                      src={post.user.avatar}
-                      alt={post.user.username}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-gray-500 dark:text-gray-300 text-xs">
-                      {post.user.username[0].toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">
-                    <span className="font-semibold">{post.user.username}</span>{' '}
-                    {post.caption}
-                  </p>
-                </div>
-              </div>
-            )}
 
+          {/* Comments Section - Instagram Style */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {/* Comments */}
             {post.comments && post.comments.length > 0 ? (
-              <div className="space-y-3">
+              <>
                 {post.comments.map((comment: any) => (
                   <div key={comment.id}>
                     {/* Ana yorum */}
-                    <div className="flex gap-2 group">
-                      <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <div
+                      className="flex gap-2 items-start group relative"
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        // Sadece gönderi sahibi pin yapabilir
+                        if (user?.id === post.user.id) {
+                          setContextMenu({
+                            commentId: comment.id,
+                            x: e.pageX,
+                            y: e.pageY,
+                          })
+                        }
+                      }}
+                    >
+                      <Link
+                        href={`/profile/${comment.user.username}`}
+                        className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                      >
                         {comment.user.avatar ? (
                           <img
                             src={comment.user.avatar}
@@ -454,13 +468,36 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                             {comment.user.username[0].toUpperCase()}
                           </span>
                         )}
-                      </div>
+                      </Link>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                          <span className="font-semibold">{comment.user.username}</span>
-                          <UserBadge role={comment.user.role} />
-                          <span>{comment.content}</span>
-                        </p>
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-1">
+                              <Link
+                                href={`/profile/${comment.user.username}`}
+                                className="text-sm text-gray-200 dark:text-gray-100 font-medium hover:opacity-80 transition cursor-pointer inline-block"
+                              >
+                                {comment.user.username}
+                              </Link>
+                              <UserBadge role={comment.user.role} />
+                              {comment.isPinned && (
+                                <Pin size={12} className="text-[#ff7b00] fill-[#ff7b00]" />
+                              )}
+                            </div>
+                            <span className="text-sm text-gray-400 dark:text-gray-400 ml-2">
+                              {comment.content}
+                            </span>
+                          </div>
+                          {/* Beğeni butonu - her zaman görünür */}
+                          <div className="flex-shrink-0">
+                            <CommentLikeButton
+                              commentId={comment.id}
+                              initialLiked={comment.isLikedByCurrentUser || false}
+                              initialCount={comment.likesCount || 0}
+                              type="post"
+                            />
+                          </div>
+                        </div>
                         <div className="flex items-center gap-3 mt-1">
                           <p className="text-xs text-gray-400 dark:text-gray-500">
                             {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
@@ -480,15 +517,35 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           </button>
                         </div>
                       </div>
-                      {/* Beğeni butonu - her zaman görünür */}
-                      <div className="flex-shrink-0">
-                        <CommentLikeButton
-                          commentId={comment.id}
-                          initialLiked={comment.isLikedByCurrentUser || false}
-                          initialCount={comment.likesCount || 0}
-                          type="post"
-                        />
-                      </div>
+                      
+                      {/* Context Menu - Sadece gönderi sahibine göster */}
+                      {contextMenu?.commentId === comment.id && user?.id === post.user.id && (
+                        <div
+                          className="fixed z-50 bg-gray-900 dark:bg-[#1a1a1a] text-gray-200 text-sm rounded-lg shadow-xl border border-gray-700 dark:border-gray-600 animate-in fade-in zoom-in-95 duration-150"
+                          style={{
+                            top: `${contextMenu.y - 80}px`,
+                            left: `${contextMenu.x - 180}px`,
+                            width: '180px',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => handlePinComment(comment.id, comment.isPinned || false)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-800 dark:hover:bg-gray-700 rounded-t-lg flex items-center gap-2 transition-colors"
+                          >
+                            <Pin size={14} className={comment.isPinned ? 'text-[#ff7b00] fill-[#ff7b00]' : 'text-gray-400'} />
+                            <span className={comment.isPinned ? 'text-[#ff7b00]' : ''}>
+                              {comment.isPinned ? 'Sabitlemeyi Kaldır' : 'Yorumu Sabitle'}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => setContextMenu(null)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-800 dark:hover:bg-gray-700 rounded-b-lg text-gray-400 hover:text-gray-200 transition-colors"
+                          >
+                            İptal
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Emoji Tepkileri kaldırıldı */}
@@ -503,7 +560,10 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           <div key={reply.id}>
                             <div className="flex gap-2">
                               <CornerUpRight size={12} className="text-gray-400 dark:text-gray-500 mt-1 flex-shrink-0" />
-                              <div className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                              <Link
+                                href={`/profile/${reply.user.username}`}
+                                className="w-7 h-7 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                              >
                                 {reply.user.avatar ? (
                                   <img
                                     src={reply.user.avatar}
@@ -515,10 +575,15 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                     {reply.user.username[0].toUpperCase()}
                                   </span>
                                 )}
-                              </div>
+                              </Link>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                                  <span className="font-semibold">{reply.user.username}</span>
+                                  <Link
+                                    href={`/profile/${reply.user.username}`}
+                                    className="font-semibold hover:opacity-80 transition cursor-pointer"
+                                  >
+                                    {reply.user.username}
+                                  </Link>
                                   <UserBadge role={reply.user.role} />
                                   <span>{reply.content}</span>
                                 </p>
@@ -545,21 +610,19 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                         ))}
                       </div>
                     )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-gray-500 dark:text-gray-400 text-sm">Henüz yorum yok.</p>
-            </div>
-          )}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <p className="text-center text-gray-500 dark:text-gray-400 text-sm mt-10">Henüz yorum yok.</p>
+            )}
           </div>
 
           {/* Comment Input */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
+          <div className="border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
             {/* Yanıt veriliyor etiketi */}
             {replyingTo && (
-              <div className="mb-2 flex items-center gap-2">
+              <div className="px-4 pt-3 pb-2 flex items-center gap-2">
                 <span className="text-xs text-[#ff7b00] bg-orange-50 dark:bg-orange-500/10 px-2 py-1 rounded-lg font-medium">
                   Yanıt veriliyor...
                 </span>
@@ -571,22 +634,22 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                 </button>
               </div>
             )}
-            {/* Comment form */}
-            <form onSubmit={handleComment} className="flex items-center gap-2">
+            {/* Comment form - Instagram Style */}
+            <form onSubmit={handleComment} className="flex items-center px-4 py-3">
               <MentionInput
                 value={commentText}
                 setValue={setCommentText}
                 placeholder={replyingTo ? "Yanıt yaz..." : "Yorum ekle..."}
                 disabled={isPostingComment}
-                className="flex-1"
+                className="flex-1 bg-transparent text-gray-300 dark:text-gray-300 text-sm outline-none"
               />
               <button
                 type="submit"
                 disabled={!commentText.trim() || isPostingComment}
-                className="px-4 py-2 bg-[#ff7b00] text-white rounded-lg hover:bg-[#e36f00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white rounded-full p-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPostingComment ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <Send size={16} />
                 )}

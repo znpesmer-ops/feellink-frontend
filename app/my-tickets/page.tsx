@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { QrCode, Calendar, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
+import { Calendar, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import RightSidebar from "@/components/right-sidebar";
 
@@ -44,7 +45,7 @@ export default function MyTicketsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#ff7b00]" />
       </div>
     );
   }
@@ -53,9 +54,11 @@ export default function MyTicketsPage() {
     <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
       {/* Orta içerik */}
       <div className="flex-1 max-w-[1200px] space-y-10 mx-auto xl:mr-[420px]">
-        <h1 className="text-3xl font-bold text-[#ff7b00] mb-8">
-          🎟️ Biletlerim
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-[#ff7b00]">
+            Biletlerim
+          </h1>
+        </div>
 
         {tickets.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
@@ -133,13 +136,33 @@ export default function MyTicketsPage() {
                   )}
 
                   {/* PDF Download Button */}
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/tickets/pdf/${t.code}`}
-                    download
-                    className="text-center mt-4 py-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white px-4 rounded-xl font-medium transition flex items-center justify-center gap-2"
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await api.get(`/tickets/pdf/${t.code}`, {
+                          responseType: 'blob',
+                        });
+                        
+                        // Blob'dan dosya oluştur ve indir
+                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', `${t.ticket.event.title.replace(/[^a-z0-9]/gi, '_')}_Bilet_${t.code}.pdf`);
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        window.URL.revokeObjectURL(url);
+                        
+                        toast.success('🎟️ Bilet PDF\'i başarıyla indirildi!');
+                      } catch (error: any) {
+                        console.error('PDF indirme hatası:', error);
+                        toast.error(error.response?.data?.message || 'PDF indirme sırasında bir hata oluştu.');
+                      }
+                    }}
+                    className="text-center mt-4 py-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white px-4 rounded-xl font-medium transition flex items-center justify-center gap-2 w-full"
                   >
-                    <span>📥 PDF İndir</span>
-                  </a>
+                    <span>PDF İndir</span>
+                  </button>
                 </div>
               </div>
             ))}

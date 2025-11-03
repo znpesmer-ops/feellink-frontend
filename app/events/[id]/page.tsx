@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Calendar, Users, MessageCircle, Ticket, Loader2, X, Plus } from "lucide-react";
+import { Calendar, Users, MessageCircle, Ticket, Loader2, X, Plus, AlertCircle } from "lucide-react";
+import toast from "react-hot-toast";
 import api from "@/lib/api";
 import RightSidebar from "@/components/right-sidebar";
 import CreateTicketModal from "@/components/tickets/CreateTicketModal";
@@ -51,6 +52,21 @@ export default function EventDetailPage() {
   const [showParticipants, setShowParticipants] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [purchasing, setPurchasing] = useState(false);
+
+  // ESC tuşu ile modal kapatma
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showPurchaseModal) {
+        setShowPurchaseModal(false);
+        setSelectedTicket(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showPurchaseModal]);
 
   useEffect(() => {
     async function fetchData() {
@@ -84,17 +100,26 @@ export default function EventDetailPage() {
     }
   };
 
-  const handleBuyTicket = async (ticketId: string) => {
-    if (!confirm("Bu bileti satın almak istediğinizden emin misiniz?")) {
-      return;
-    }
+  const handleBuyTicket = (ticket: any) => {
+    setSelectedTicket(ticket);
+    setShowPurchaseModal(true);
+  };
+
+  const confirmPurchase = async () => {
+    if (!selectedTicket) return;
+    
+    setPurchasing(true);
     try {
-      const res = await api.post("/tickets/purchase", { ticketId });
-      alert("Bilet satın alındı! E-postanı kontrol et.");
+      const res = await api.post("/tickets/purchase", { ticketId: selectedTicket.id });
+      toast.success("🎟️ Bilet başarıyla satın alındı! E-postanızı kontrol edin.");
+      setShowPurchaseModal(false);
+      setSelectedTicket(null);
       // QR kodu göster veya başka bir işlem yap
       console.log("Purchase result:", res.data);
     } catch (error: any) {
-      alert(error.response?.data?.message || "Bilet satın alınamadı");
+      toast.error(error.response?.data?.message || "Bilet satın alınamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setPurchasing(false);
     }
   };
 
@@ -193,7 +218,7 @@ export default function EventDetailPage() {
                     </p>
                     <p className="text-2xl font-bold text-[#ff7b00] mb-4">{ticket.price} ₺</p>
                     <button
-                      onClick={() => handleBuyTicket(ticket.id)}
+                      onClick={() => handleBuyTicket(ticket)}
                       disabled={ticket.sold >= ticket.capacity}
                       className="w-full bg-[#ff7b00] hover:bg-[#e36f00] disabled:bg-gray-300 text-white px-4 py-2 rounded-xl font-medium transition"
                     >
@@ -332,6 +357,87 @@ export default function EventDetailPage() {
           onClose={() => setShowTicketModal(false)}
           eventId={event.id}
         />
+      )}
+
+      {/* Bilet Satın Alma Onay Modal */}
+      {showPurchaseModal && selectedTicket && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPurchaseModal(false);
+              setSelectedTicket(null);
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700/40 overflow-hidden transform transition-all duration-200 scale-100">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#ff7b00]/10 to-[#ff7b00]/5 dark:from-[#ff7b00]/20 dark:to-[#ff7b00]/10 px-6 py-4 border-b border-gray-200 dark:border-gray-700/40">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-[#ff7b00]" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Bilet Satın Al
+                </h2>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <p className="text-gray-600 dark:text-gray-400">
+                Bu bileti satın almak istediğinizden emin misiniz?
+              </p>
+
+              {/* Ticket Info */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    {selectedTicket.type}
+                  </span>
+                  <span className="text-2xl font-bold text-[#ff7b00]">
+                    {selectedTicket.price} ₺
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  <span>Kapasite: {selectedTicket.capacity}</span>
+                  <span>Satılan: {selectedTicket.sold}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-200 dark:border-gray-700/40 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPurchaseModal(false);
+                  setSelectedTicket(null);
+                }}
+                disabled={purchasing}
+                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
+              >
+                İptal
+              </button>
+              <button
+                onClick={confirmPurchase}
+                disabled={purchasing}
+                className="flex-1 px-4 py-2.5 bg-[#ff7b00] hover:bg-[#e36f00] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl transition font-medium flex items-center justify-center gap-2"
+              >
+                {purchasing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    İşleniyor...
+                  </>
+                ) : (
+                  <>
+                    <Ticket className="w-4 h-4" />
+                    Satın Al
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

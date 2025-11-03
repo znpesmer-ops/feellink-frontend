@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import { Heart, MessageCircle } from 'lucide-react'
+import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
@@ -10,7 +13,9 @@ import { AuthGuard } from '@/lib/auth-guard'
 function ExploreContent() {
   const router = useRouter()
   const { accessToken } = useAuthStore()
-  const [selectedPost, setSelectedPost] = useState<any>(null)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<string>('Tümü')
+  const [hoveredPostId, setHoveredPostId] = useState<string | null>(null)
 
   // Infinite scroll explore query
   const {
@@ -66,188 +71,168 @@ function ExploreContent() {
     )
   }
 
+  const filters = ['Tümü', 'Sanatçılar', 'Koleksiyonlar', 'Etkinlikler']
+
   return (
     <>
-      <div className="max-w-6xl mx-auto py-8 px-4">
-        {/* Grid View */}
-        <div className="grid grid-cols-3 gap-1">
-          {posts.map((post: any) => (
-            <div
-              key={post.id}
-              className="aspect-square relative cursor-pointer group overflow-hidden"
-              onClick={() => setSelectedPost(post)}
+      <div className="max-w-7xl mx-auto py-8 px-4">
+        {/* Filtre Barı */}
+        <div className="flex items-center justify-center gap-4 mt-6 mb-8">
+          {filters.map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setActiveFilter(filter)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                activeFilter === filter
+                  ? 'border-[#ff7b00] text-[#ff7b00] bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-[#ff7b00] hover:border-[#ff7b00]'
+              }`}
             >
-              {post.media && post.media.length > 0 && (
-                <>
-                  {post.media[0].type === 'video' ? (
-                    <video
-                      src={post.media[0].url}
-                      className="w-full h-full object-cover"
-                      muted
-                    />
-                  ) : (
-                    <img
-                      src={post.media[0].url}
-                      alt={post.caption || 'Post'}
-                      className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-4 text-white">
-                      <span className="font-semibold">❤️ {post._count.likes}</span>
-                      <span className="font-semibold">💬 {post._count.comments}</span>
-                    </div>
+              {filter}
+            </button>
+          ))}
+        </div>
+
+        {/* Düzenli Grid View */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+          {posts.map((post: any, index: number) => (
+            <motion.div
+              key={post.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: index * 0.05 }}
+              className="relative group bg-white dark:bg-[#111] rounded-2xl border border-transparent dark:border-gray-800 hover:border-[#ff7b00]/60 transition-all duration-300 shadow-md hover:shadow-[#ff7b00]/10 cursor-pointer overflow-hidden"
+              onClick={() => setSelectedPostId(post.id)}
+              onMouseEnter={() => setHoveredPostId(post.id)}
+              onMouseLeave={() => setHoveredPostId(null)}
+            >
+              {/* Media Container */}
+              <div className="relative w-full overflow-hidden">
+                {post.media && post.media.length > 0 && (
+                  <>
+                    {post.media[0].type === 'video' ? (
+                      <video
+                        src={post.media[0].url}
+                        className="w-full h-[380px] object-cover rounded-t-2xl"
+                        muted
+                      />
+                    ) : (
+                      <img
+                        src={post.media[0].url}
+                        alt={post.caption || 'Post'}
+                        className="w-full h-[380px] object-cover rounded-t-2xl"
+                      />
+                    )}
+                    {/* Gradient Overlay - Turuncu Glow */}
+                    <div className="absolute inset-0 rounded-t-2xl bg-gradient-to-t from-[#ff7b00]/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    
+                    {/* Hover Stats - Only show if no pinned comment */}
+                    {!post.pinnedComment && (
+                      <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="flex items-center gap-4 text-white">
+                          <div className="flex items-center gap-1.5">
+                            <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
+                            <span className="text-sm font-semibold">{post._count.likes}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <MessageCircle className="w-4 h-4" />
+                            <span className="text-sm font-semibold">{post._count.comments}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pinned Comment Preview - Hover */}
+                    {hoveredPostId === post.id && post.pinnedComment && (
+                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/60 backdrop-blur-md transition-opacity duration-300 ease-in-out text-white rounded-b-2xl z-10">
+                        <p className="text-sm text-gray-100 leading-snug">
+                          <span className="font-semibold text-[#ff7b00]">{post.pinnedComment.user}</span>
+                          {' '}
+                          <span className="text-gray-200">{post.pinnedComment.text}</span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Pinned Icon - Top Right */}
+                    {post.pinnedComment && (
+                      <div className="absolute top-3 right-3 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                        <span className="text-[#ff7b00] text-xs">📌</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Card Content */}
+              <div className="p-4">
+                {post.user && (
+                  <div className="flex items-center gap-2 mb-2">
+                    {post.user.avatar ? (
+                      <img
+                        src={post.user.avatar}
+                        alt={post.user.username}
+                        className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/users/default.jpg'
+                        }}
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 flex items-center justify-center text-[#ff7b00] font-bold text-xs">
+                        {post.user.username?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                    )}
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      {post.user.username}
+                    </p>
                   </div>
-                </>
-              )}
-            </div>
+                )}
+                {post.caption && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
+                    {post.caption}
+                  </p>
+                )}
+                <button className="text-[#ff7b00] text-xs font-medium hover:underline">
+                  Gönderiyi Gör
+                </button>
+              </div>
+            </motion.div>
           ))}
         </div>
 
         {/* Load More */}
         {isFetchingNextPage && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-gray-100"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#ff7b00]"></div>
           </div>
         )}
 
+        {/* End Message */}
         {!hasNextPage && posts.length > 0 && (
-          <div className="text-center py-8">
-            <p className="text-gray-500 dark:text-gray-400">You've seen all posts! 🎉</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="text-center mt-10"
+          >
+            <div className="text-gray-400 dark:text-gray-500 text-sm bg-gray-50 dark:bg-[#181818] py-3 rounded-full w-fit mx-auto px-6 border border-gray-200 dark:border-gray-700">
+              Tüm paylaşımları gördün — harikasın!
+            </div>
+          </motion.div>
         )}
 
         {posts.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-500 dark:text-gray-400">No posts to explore yet.</p>
+            <p className="text-gray-500 dark:text-gray-400">Henüz keşfedilecek paylaşım bulunmuyor.</p>
           </div>
         )}
       </div>
 
       {/* Post Detail Modal */}
-      {selectedPost && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedPost(null)}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col md:flex-row">
-              {/* Media Side */}
-              <div className="md:w-2/3 bg-black dark:bg-gray-900 flex items-center justify-center">
-                {selectedPost.media && selectedPost.media.length > 0 && (
-                  selectedPost.media[0].type === 'video' ? (
-                    <video
-                      src={selectedPost.media[0].url}
-                      controls
-                      className="w-full h-full object-contain max-h-[90vh]"
-                    />
-                  ) : (
-                    <img
-                      src={selectedPost.media[0].url}
-                      alt={selectedPost.caption || 'Post'}
-                      className="w-full h-full object-contain max-h-[90vh]"
-                    />
-                  )
-                )}
-              </div>
-
-              {/* Details Side */}
-              <div className="md:w-1/3 flex flex-col bg-white dark:bg-gray-800">
-                {/* Header */}
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
-                      {selectedPost.user.avatar ? (
-                        <img
-                          src={selectedPost.user.avatar}
-                          alt={selectedPost.user.username}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-gray-500 dark:text-gray-300 text-xs">
-                          {selectedPost.user.username[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{selectedPost.user.username}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedPost(null)}
-                    className="text-2xl hover:opacity-70 text-gray-500 dark:text-gray-400"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Caption */}
-                <div className="p-4 flex-1 overflow-y-auto">
-                  <div className="flex items-start space-x-3 mb-4">
-                    <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {selectedPost.user.avatar ? (
-                        <img
-                          src={selectedPost.user.avatar}
-                          alt={selectedPost.user.username}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-gray-500 dark:text-gray-300 text-xs">
-                          {selectedPost.user.username[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-gray-900 dark:text-gray-100">
-                        <span className="font-semibold">{selectedPost.user.username}</span>{' '}
-                        {selectedPost.caption}
-                      </p>
-                      {selectedPost.hashtags && selectedPost.hashtags.length > 0 && (
-                        <div className="mt-2">
-                          {selectedPost.hashtags.map((postHashtag: any) => (
-                            <span
-                              key={postHashtag.hashtag.id}
-                              className="text-blue-600 dark:text-blue-400 mr-2"
-                            >
-                              #{postHashtag.hashtag.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">
-                        {new Date(selectedPost.createdAt).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center space-x-4 mb-2">
-                    <button className="text-2xl">
-                      {selectedPost.isLiked ? '❤️' : '🤍'}
-                    </button>
-                    <button className="text-2xl">💬</button>
-                    <button className="text-2xl">📤</button>
-                  </div>
-                  <p className="font-semibold mb-1 text-gray-900 dark:text-gray-100">
-                    {selectedPost._count.likes} {selectedPost._count.likes === 1 ? 'like' : 'likes'}
-                  </p>
-                  {selectedPost._count.comments > 0 && (
-                    <button className="text-gray-500 dark:text-gray-400 text-sm">
-                      View all {selectedPost._count.comments} comments
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {selectedPostId && (
+        <PostModal
+          postId={selectedPostId}
+          onClose={() => setSelectedPostId(null)}
+        />
       )}
     </>
   )

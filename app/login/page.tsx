@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Sun, Moon } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 
@@ -21,6 +22,38 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
   const [mode, setMode] = useState<'user' | 'corporate'>('user')
+  const [darkMode, setDarkMode] = useState(false)
+
+  // Sistem temasını algıla ve localStorage'dan oku
+  useEffect(() => {
+    // Önce localStorage'dan kontrol et
+    const savedTheme = localStorage.getItem('theme')
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    
+    const initialDarkMode = savedTheme 
+      ? savedTheme === 'dark' 
+      : prefersDark
+    
+    setDarkMode(initialDarkMode)
+    
+    // Dark class'ını ekle/çıkar
+    if (initialDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  // Dark mode değiştiğinde class'ı güncelle
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }, [darkMode])
 
   // Eğer zaten giriş yapılmışsa feed'e yönlendir
   useEffect(() => {
@@ -59,101 +92,214 @@ export default function LoginPage() {
   // Auth kontrolü yapılırken loading göster
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      <div
+        className={`fixed inset-0 flex items-center justify-center transition-all duration-500 overflow-hidden ${
+          darkMode
+            ? 'bg-[#0b0b0b] text-gray-100'
+            : 'bg-[#f9f9f9] text-gray-800'
+        }`}
+      >
+        {darkMode && (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,122,0,0.04),transparent_80%)] pointer-events-none" />
+        )}
+        <div className="relative z-10 animate-spin rounded-full h-10 w-10 border-b-2 border-[#ff7b00]"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow transition-colors">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
-            Sign in to your account
-          </h2>
-          {/* Mode Tabs */}
-          <div className="flex justify-center mt-4 mb-2 border-b border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => setMode('user')}
-              className={`px-6 py-2 text-sm font-medium ${
-                mode === 'user'
-                  ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              Kullanıcı Girişi
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('corporate')}
-              className={`px-6 py-2 text-sm font-medium ${
-                mode === 'corporate'
-                  ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              Kurumsal Giriş
-            </button>
-          </div>
+    <div
+      className={`fixed inset-0 flex items-center justify-center transition-all duration-500 overflow-hidden p-4 ${
+        darkMode
+          ? 'bg-[#0b0b0b] text-gray-100'
+          : 'bg-[#f9f9f9] text-gray-800'
+      }`}
+    >
+      {/* Background Glow sadece DARK modda */}
+      {darkMode && (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,122,0,0.04),transparent_80%)] pointer-events-none" />
+      )}
+
+      {/* Dark Mode Toggle */}
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        className={`absolute top-6 right-6 p-2.5 rounded-full shadow-md hover:scale-105 hover:shadow-xl transition-all duration-300 z-10 group ${
+          darkMode
+            ? 'bg-[#1e1e1e]'
+            : 'bg-white border border-gray-200'
+        }`}
+        title={darkMode ? 'Light Mode' : 'Dark Mode'}
+        aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {darkMode ? (
+          <Sun className="w-5 h-5 text-[#ff9500] transition-all duration-300 group-hover:rotate-90" />
+        ) : (
+          <Moon className="w-5 h-5 text-[#ff7a00] transition-all duration-300 group-hover:rotate-[-15deg]" />
+        )}
+      </button>
+
+      {/* Login Kartı */}
+      <div
+        className={`relative z-10 w-full max-w-md rounded-2xl p-10 transition-all duration-500 ${
+          darkMode
+            ? 'bg-[#111]/95 backdrop-blur-xl border border-[#1f1f1f] shadow-[0_0_40px_rgba(255,122,0,0.08)]'
+            : 'bg-white border border-gray-200 shadow-[0_0_25px_rgba(0,0,0,0.05)]'
+        }`}
+      >
+        {/* Logo veya Başlık */}
+        <div className="text-center mb-8">
+          <h1
+            className={`text-3xl font-bold tracking-tight ${
+              darkMode ? 'text-white' : 'text-gray-900'
+            }`}
+          >
+            <span className="text-[#ff7a00]">Feellink</span> Giriş
+          </h1>
+          <p
+            className={`text-sm mt-1 ${
+              darkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}
+          >
+            Duyguların teknolojiyle buluştuğu yere hoş geldin
+          </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+
+        {/* Sekmeler */}
+        <div
+          className={`flex justify-center mb-6 border-b ${
+            darkMode ? 'border-[#1f1f1f]' : 'border-gray-200'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setMode('user')}
+            className={`w-1/2 py-2.5 text-sm font-medium transition-all ${
+              mode === 'user'
+                ? 'text-[#ff7a00] border-b-2 border-[#ff7a00]'
+                : darkMode
+                  ? 'text-gray-400 hover:text-[#ff7a00]'
+                  : 'text-gray-500 hover:text-[#ff7a00]'
+            }`}
+          >
+            Kullanıcı Girişi
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('corporate')}
+            className={`w-1/2 py-2.5 text-sm font-medium transition-all ${
+              mode === 'corporate'
+                ? 'text-[#ff7a00] border-b-2 border-[#ff7a00]'
+                : darkMode
+                  ? 'text-gray-400 hover:text-[#ff7a00]'
+                  : 'text-gray-500 hover:text-[#ff7a00]'
+            }`}
+          >
+            Kurumsal Giriş
+          </button>
+        </div>
+
+        {/* Form */}
+        <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded">
+            <div
+              className={`px-4 py-3 rounded-lg text-sm ${
+                darkMode
+                  ? 'bg-red-900/20 border border-red-800 text-red-400'
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}
+            >
               {error}
             </div>
           )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="username" className="sr-only">
-                Username
-              </label>
-              <input
-                {...register('username')}
-                type="text"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Username or Email"
-              />
-              {errors.username && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.username.message}</p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                {...register('password')}
-                type="password"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
-              )}
-            </div>
+
+          <div>
+            <label
+              className={`block text-sm mb-1 ${
+                darkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
+            >
+              E-posta veya Kullanıcı Adı
+            </label>
+            <input
+              {...register('username')}
+              type="text"
+              placeholder="örnek@feellink.com"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#ff7a00] focus:outline-none transition-all ${
+                darkMode
+                  ? 'border-[#2b2b2b] bg-[#0d0d0d] text-gray-100 placeholder-gray-500'
+                  : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+              }`}
+            />
+            {errors.username && (
+              <p
+                className={`mt-1.5 text-sm ${
+                  darkMode ? 'text-red-400' : 'text-red-600'
+                }`}
+              >
+                {errors.username.message}
+              </p>
+            )}
           </div>
 
           <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#ff7b00] hover:bg-[#e36f00] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ff7b00] disabled:opacity-50"
+            <label
+              className={`block text-sm mb-1 ${
+                darkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
             >
-              {isSubmitting ? 'Signing in...' : mode === 'corporate' ? 'Kurumsal Giriş Yap' : 'Giriş Yap'}
-            </button>
+              Şifre
+            </label>
+            <input
+              {...register('password')}
+              type="password"
+              placeholder="********"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#ff7a00] focus:outline-none transition-all ${
+                darkMode
+                  ? 'border-[#2b2b2b] bg-[#0d0d0d] text-gray-100 placeholder-gray-500'
+                  : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
+              }`}
+            />
+            {errors.password && (
+              <p
+                className={`mt-1.5 text-sm ${
+                  darkMode ? 'text-red-400' : 'text-red-600'
+                }`}
+              >
+                {errors.password.message}
+              </p>
+            )}
           </div>
 
-          <div className="text-center">
-            <a
-              href="/register"
-              className="text-[#ff7b00] dark:text-[#ff7b00] hover:text-[#e36f00] dark:hover:text-[#e36f00] text-sm"
-            >
-              Don't have an account? Sign up
-            </a>
-          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-2 bg-[#ff7a00] hover:bg-[#ff9500] text-white font-semibold rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Giriş yapılıyor...</span>
+              </>
+            ) : (
+              mode === 'corporate' ? 'Kurumsal Giriş Yap' : 'Giriş Yap'
+            )}
+          </button>
         </form>
+
+        {/* Alt Kısım */}
+        <p
+          className={`text-center text-sm mt-6 ${
+            darkMode ? 'text-gray-400' : 'text-gray-500'
+          }`}
+        >
+          Hesabınız yok mu?{' '}
+          <a
+            href="/register"
+            className="text-[#ff7a00] hover:underline transition-colors"
+          >
+            Kayıt Ol
+          </a>
+        </p>
       </div>
     </div>
   )
