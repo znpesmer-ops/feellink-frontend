@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { initPostsSocket } from '@/lib/socket'
+import { ProRoleBadge } from './ProRoleBadge'
 
 interface PostCardProps {
   post: {
@@ -185,8 +186,9 @@ export default function PostCard({ post, onLike }: PostCardProps) {
             </div>
           )}
           <div>
-            <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
+            <p className="text-xs font-medium text-gray-900 dark:text-gray-100 flex items-center gap-1">
               {post.author}
+              <ProRoleBadge roles={(post as any).authorRoles} plan={(post as any).authorPlan} />
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {new Date(post.date || post.createdAt).toLocaleDateString('tr-TR', {

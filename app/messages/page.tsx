@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import api from '@/lib/api'
 import { initChatSocket } from '@/lib/socket'
 import { useAuthStore } from '@/lib/store'
+import { ProRoleBadge } from '@/components/ProRoleBadge'
 import { Send, Search, Image as ImageIcon, X, Edit, Trash2, MoreVertical, Paperclip, Download, FileText } from 'lucide-react'
 import { NewMessageModal } from '@/components/new-message-modal'
 
@@ -877,8 +878,9 @@ export default function MessagesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                        <h3 className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1">
                           {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
+                          <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                         </h3>
                         {lastMessage ? (
                           <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 whitespace-nowrap">
@@ -956,8 +958,9 @@ export default function MessagesPage() {
                       )}
                     </div>
                     <div className="flex-1">
-                      <h2 className="font-semibold text-gray-900 dark:text-white">
+                      <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1">
                         {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
+                        <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                       </h2>
                       {isTyping ? (
                         <p className="text-xs text-[#ff7b00]">Yazıyor...</p>

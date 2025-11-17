@@ -6,14 +6,30 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1f1f1f;
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --card: #f8f8f8;
+  --muted: #f8f8f8;
+  --text: #1f1f1f;
+  --sub: #4b4b4b;
+  --border: #e6e6e6;
+  --accent: #ff7a00;
+  --primary: #007aff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --bg: #0b0c0f;
+  --panel: #0f1115;
+  --card: #0f1115;
+  --muted: #0d1015;
+  --text: #e5e7eb;
+  --sub: #94a3b8;
+  --border: #1f2430;
+  --accent: #ff7a00;
+  --primary: #3b82f6;
 }
 
 html,
@@ -22,20 +38,30 @@ body {
   padding: 0;
   height: 100%;
   width: 100%;
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--text);
+  background: var(--bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  transition: background-color 0.3s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+* {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 /* Login sayfası için homojen arka plan */
 html.dark,
 html.dark body {
-  background-color: #0b0b0b;
+  background-color: var(--bg);
 }
 
 html:not(.dark),
 html:not(.dark) body {
-  background-color: #f9f9f9;
+  background-color: var(--bg);
+}
+
+#__next,
+#root {
+  min-height: 100%;
 }
 
 @layer utilities {
@@ -119,6 +145,164 @@ html:not(.dark) body {
 .scrollbar-hide::-webkit-scrollbar,
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease-in-out;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+button.primary {
+  background: var(--primary);
+  color: #ffffff;
+  padding: 0.7rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(0, 122, 255, 0.25);
+}
+
+button.primary:hover {
+  background: linear-gradient(90deg, #007aff 0%, #005fcc 100%);
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.3);
+}
+
+button.secondary {
+  background: #ffffff;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  padding: 0.7rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+button.secondary:hover {
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.2);
+}
+
+.sidebar {
+  background-color: #ffffff;
+  color: var(--text);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar .active {
+  background-color: rgba(0, 122, 255, 0.1);
+  color: var(--primary);
+  border-left: 4px solid var(--primary);
+  border-radius: 9999px 0 0 9999px;
+  padding-left: 1rem;
+}
+
+.card {
+  background: #f8f8f8;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease-in-out;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.logo-bar {
+  background: linear-gradient(90deg, #ff7a00 0%, #ffb700 100%);
+  color: #ffffff;
+}
+
+h1,
+h2,
+h3 {
+  color: #1f1f1f;
+}
+
+.price-tag {
+  background: var(--primary);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+header {
+  background-color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+header h1 {
+  color: var(--accent);
+}
+
+a {
+  color: var(--primary);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.plan-card {
+  position: relative;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2px solid transparent;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.plan-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.plan-card.active {
+  border-color: #007aff;
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.15);
+}
+
+.plan-card h3,
+.plan-card p,
+.plan-card li {
+  color: #1f1f1f !important;
+}
+
+.price-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background-color: #007aff;
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2;
+}
+
+.check-icon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background-color: #ff7a00;
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 4px;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
 }
 
 /* Line clamp utility */

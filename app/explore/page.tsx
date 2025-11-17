@@ -9,6 +9,7 @@ import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
+import { ProRoleBadge } from '@/components/ProRoleBadge'
 
 function ExploreContent() {
   const router = useRouter()
@@ -101,7 +102,7 @@ function ExploreContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: index * 0.05 }}
-              className="relative group bg-white dark:bg-[#111] rounded-2xl border border-transparent dark:border-gray-800 hover:border-[#ff7b00]/60 transition-all duration-300 shadow-md hover:shadow-[#ff7b00]/10 cursor-pointer overflow-hidden"
+              className="relative group bg-white dark:bg-[#111] rounded-2xl border border-transparent dark:border-gray-800 hover:border-[#ff7b00]/60 transition-all duration-300 shadow-md hover:shadow-[#ff7b00]/10 cursor-pointer overflow-hidden hover:scale-[1.02]"
               onClick={() => setSelectedPostId(post.id)}
               onMouseEnter={() => setHoveredPostId(post.id)}
               onMouseLeave={() => setHoveredPostId(null)}
@@ -123,42 +124,55 @@ function ExploreContent() {
                         className="w-full h-[380px] object-cover rounded-t-2xl"
                       />
                     )}
-                    {/* Gradient Overlay - Turuncu Glow */}
-                    <div className="absolute inset-0 rounded-t-2xl bg-gradient-to-t from-[#ff7b00]/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    
-                    {/* Hover Stats - Only show if no pinned comment */}
-                    {!post.pinnedComment && (
-                      <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="flex items-center gap-4 text-white">
-                          <div className="flex items-center gap-1.5">
-                            <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
-                            <span className="text-sm font-semibold">{post._count.likes}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MessageCircle className="w-4 h-4" />
-                            <span className="text-sm font-semibold">{post._count.comments}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Pinned Comment Preview - Hover */}
-                    {hoveredPostId === post.id && post.pinnedComment && (
-                      <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/60 backdrop-blur-md transition-opacity duration-300 ease-in-out text-white rounded-b-2xl z-10">
-                        <p className="text-sm text-gray-100 leading-snug">
-                          <span className="font-semibold text-[#ff7b00]">{post.pinnedComment.user}</span>
-                          {' '}
-                          <span className="text-gray-200">{post.pinnedComment.text}</span>
-                        </p>
-                      </div>
-                    )}
 
                     {/* Pinned Icon - Top Right */}
                     {post.pinnedComment && (
-                      <div className="absolute top-3 right-3 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                      <div className="absolute top-3 right-3 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center z-30">
                         <span className="text-[#ff7b00] text-xs">📌</span>
                       </div>
                     )}
+                  </>
+                )}
+              </div>
+
+              {/* 🔥 KRİTİK: Modern hover overlay - tüm kartı kaplayan blur + yorum gösterimi */}
+              {/* Pinned comment varsa onu göster, yoksa stats göster */}
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-center items-center text-white p-4 text-center rounded-2xl z-20 pointer-events-none">
+                {post.pinnedComment ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageCircle className="w-5 h-5 text-[#ff7b00]" />
+                      <span className="text-xs font-semibold text-[#ff7b00]">Sabitlenmiş Yorum</span>
+                    </div>
+                    <p className="text-sm italic mb-3 leading-relaxed max-w-[90%]">
+                      "{post.pinnedComment.text}"
+                    </p>
+                    <span className="text-xs opacity-80">@{post.pinnedComment.user}</span>
+                  </>
+                ) : post._count.comments > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <MessageCircle className="w-5 h-5 text-[#ff7b00]" />
+                      <span className="text-sm font-semibold">{post._count.comments} yorum</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
+                        <span>{post._count.likes}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{post._count.comments}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
+                      <span className="text-sm font-semibold">{post._count.likes} beğeni</span>
+                    </div>
+                    <p className="text-xs opacity-80">Henüz yorum yok</p>
                   </>
                 )}
               </div>
@@ -181,8 +195,9 @@ function ExploreContent() {
                         {post.user.username?.[0]?.toUpperCase() || 'U'}
                       </div>
                     )}
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">
                       {post.user.username}
+                      <ProRoleBadge roles={(post.user as any).roles} plan={(post.user as any).plan} />
                     </p>
                   </div>
                 )}

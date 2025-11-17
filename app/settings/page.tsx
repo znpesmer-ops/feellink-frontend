@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { AuthGuard } from '@/lib/auth-guard'
 import { useAuthStore } from '@/lib/store'
+import RoleChanger from '@/components/admin/RoleChanger'
 
 function SettingsContent() {
   const { user } = useAuthStore()
@@ -48,6 +49,24 @@ function SettingsContent() {
           >
             Bildirim Ayarları
           </Link>
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Roller</h2>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+            Hangi rollerde aktif olmak istediğinizi seçin. Birden fazla rol seçebilirsiniz.
+          </p>
+          {user && (
+            <RoleChanger
+              user={{
+                id: user.id,
+                username: user.username || '',
+                fullName: user.fullName || undefined,
+                roles: user.roles || [],
+              }}
+              isOwnProfile={true}
+            />
+          )}
         </div>
 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">

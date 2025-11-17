@@ -1,122 +1,166 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '@/lib/store'
 import api from '@/lib/api'
-import { Users, FileText, Heart, MessageCircle, Bell } from 'lucide-react'
+import { initAdminSocket } from '@/lib/socket'
+import { Users, FileText, MessageCircle, Calendar, Ticket, TrendingUp, Activity, Wifi, WifiOff } from 'lucide-react'
+import { Line, Bar } from 'react-chartjs-2'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js'
 
-interface Stats {
-  users: number
-  posts: number
-  follows: number
-  comments: number
-  likes: number
-  notifications: number
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
+
+interface Summary {
+  totalUsers: number
+  newUsers24h: number
+  onlineUsers: number
+  postsToday: number
+  commentsToday: number
+  ticketsToday: number
+  revenue: number
+  totalPosts: number
+  totalComments: number
+  totalEvents: number
+  totalTickets: number
+  traffic30d: Array<{ date: Date; count: number }>
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const { accessToken } = useAuthStore()
+  const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [socketStatus, setSocketStatus] = useState<'connected' | 'disconnected' | 'polling'>('polling')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchStats = async () => {
+    if (!accessToken) return
+
+    // Fetch initial summary
+    const fetchSummary = async () => {
       try {
-        setLoading(true)
-        
-        // Fetch stats from backend with individual error handling
-        const fetchSafely = async (apiCall: () => Promise<any>) => {
-          try {
-            return await apiCall()
-          } catch (err) {
-            return { data: [] }
-          }
-        }
-
-        const [usersRes, postsRes, notificationsRes] = await Promise.all([
-          fetchSafely(() => api.get('/users/search?q=')),
-          fetchSafely(() => api.get('/explore/recent')),
-          fetchSafely(() => api.get('/notifications')),
-        ])
-
-        // Calculate stats from responses
-        const userCount = usersRes.data?.length || 0
-        const postCount = postsRes.data?.length || 0
-        const notificationCount = notificationsRes.data?.length || 0
-
-        setStats({
-          users: userCount,
-          posts: postCount,
-          follows: 0, // Would need specific endpoint
-          comments: 0, // Would need specific endpoint
-          likes: 0, // Would need specific endpoint
-          notifications: notificationCount,
-        })
+        const response = await api.get('/admin/summary')
+        setSummary(response.data)
+        setLoading(false)
       } catch (err: any) {
-        console.error('Error fetching stats:', err)
-        setError('Veriler yüklenirken bir hata oluştu')
-      } finally {
+        setError(err.response?.data?.message || 'Veriler yüklenirken bir hata oluştu')
         setLoading(false)
       }
     }
 
-    fetchStats()
-  }, [])
+    fetchSummary()
 
-  const cardData = [
+    // Setup socket connection
+    const adminSocket = initAdminSocket(accessToken)
+
+    adminSocket.on('connect', () => {
+      setSocketStatus('connected')
+      console.log('Admin socket connected')
+    })
+
+    adminSocket.on('disconnect', () => {
+      setSocketStatus('disconnected')
+      console.log('Admin socket disconnected')
+    })
+
+    adminSocket.on('admin:metrics', (data: Summary) => {
+      setSummary(data)
+      setSocketStatus('connected')
+    })
+
+    adminSocket.on('admin:moderation', (event: any) => {
+      console.log('Moderation event:', event)
+      // You can show toast notifications here
+    })
+
+    adminSocket.on('admin:system', (event: any) => {
+      console.log('System event:', event)
+      // You can show system alerts here
+    })
+
+    // Fallback polling if socket fails
+    const pollInterval = setInterval(() => {
+      if (socketStatus === 'disconnected') {
+        fetchSummary()
+      }
+    }, 10000) // Poll every 10 seconds if socket is down
+
+    return () => {
+      adminSocket.disconnect()
+      clearInterval(pollInterval)
+    }
+  }, [accessToken, socketStatus])
+
+  const statCards = [
     {
-      title: 'Toplam Kullanıcı',
-      value: stats?.users || 0,
+      label: 'Online Kullanıcılar',
+      value: summary?.onlineUsers || 0,
       icon: Users,
-      color: 'bg-blue-500',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-600',
+      color: 'text-green-500',
+      bgColor: 'bg-green-50 dark:bg-green-900/20',
     },
     {
-      title: 'Toplam Gönderi',
-      value: stats?.posts || 0,
+      label: 'Yeni Kayıt (24s)',
+      value: summary?.newUsers24h || 0,
+      icon: Users,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    },
+    {
+      label: 'Post/Comment (bugün)',
+      value: `${summary?.postsToday || 0}/${summary?.commentsToday || 0}`,
       icon: FileText,
-      color: 'bg-green-500',
-      bgColor: 'bg-green-50',
-      textColor: 'text-green-600',
+      color: 'text-purple-500',
+      bgColor: 'bg-purple-50 dark:bg-purple-900/20',
     },
     {
-      title: 'Toplam Takipler',
-      value: stats?.follows || 0,
-      icon: Users,
-      color: 'bg-purple-500',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600',
-    },
-    {
-      title: 'Toplam Yorum',
-      value: stats?.comments || 0,
-      icon: MessageCircle,
-      color: 'bg-orange-500',
-      bgColor: 'bg-orange-50',
-      textColor: 'text-orange-600',
-    },
-    {
-      title: 'Toplam Beğeni',
-      value: stats?.likes || 0,
-      icon: Heart,
-      color: 'bg-red-500',
-      bgColor: 'bg-red-50',
-      textColor: 'text-red-600',
-    },
-    {
-      title: 'Toplam Bildirim',
-      value: stats?.notifications || 0,
-      icon: Bell,
-      color: 'bg-indigo-500',
-      bgColor: 'bg-indigo-50',
-      textColor: 'text-indigo-600',
+      label: 'Bilet/Gelir (bugün)',
+      value: `${summary?.ticketsToday || 0} / ₺${(summary?.revenue || 0).toFixed(2)}`,
+      icon: Ticket,
+      color: 'text-[#ff7b00]',
+      bgColor: 'bg-orange-50 dark:bg-orange-900/20',
     },
   ]
+
+  // Traffic chart data
+  const trafficData = {
+    labels: summary?.traffic30d.map((d) => new Date(d.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })) || [],
+    datasets: [
+      {
+        label: 'Yeni Kullanıcılar',
+        data: summary?.traffic30d.map((d) => d.count) || [],
+        borderColor: '#ff7b00',
+        backgroundColor: 'rgba(255, 123, 0, 0.1)',
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ff7b00]"></div>
       </div>
     )
   }
@@ -124,7 +168,7 @@ export default function AdminDashboard() {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-red-600 text-center">
+        <div className="text-red-600 dark:text-red-400 text-center">
           <p className="text-lg font-semibold mb-2">Hata</p>
           <p className="text-sm">{error}</p>
         </div>
@@ -133,28 +177,107 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div>
-      <h2 className="text-3xl font-bold text-gray-800 mb-8">Genel Bakış</h2>
-      <div className="grid md:grid-cols-3 gap-6">
-        {cardData.map((card) => {
+    <div className="space-y-6">
+      {/* Header with socket status */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold dark:text-white text-gray-900">Dashboard</h2>
+        <div className="flex items-center gap-2">
+          {socketStatus === 'connected' ? (
+            <>
+              <Wifi className="w-5 h-5 text-green-500" />
+              <span className="text-sm text-green-600 dark:text-green-400">Canlı</span>
+            </>
+          ) : socketStatus === 'polling' ? (
+            <>
+              <WifiOff className="w-5 h-5 text-yellow-500" />
+              <span className="text-sm text-yellow-600 dark:text-yellow-400">Polling</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-5 h-5 text-red-500" />
+              <span className="text-sm text-red-600 dark:text-red-400">Offline</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+        {statCards.map((card, idx) => {
           const Icon = card.icon
           return (
             <div
-              key={card.title}
-              className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 ease-in-out border border-gray-100"
+              key={idx}
+              className="rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm p-6 dark:bg-[#111] bg-white transition-all hover:shadow-md"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-3 rounded-xl ${card.bgColor}`}>
-                  <Icon className={`${card.textColor}`} size={24} />
+                  <Icon className={`w-6 h-6 ${card.color}`} />
                 </div>
               </div>
-              <h3 className="text-gray-500 text-sm font-medium mb-2">{card.title}</h3>
-              <p className={`text-4xl font-bold ${card.textColor}`}>{card.value.toLocaleString('tr-TR')}</p>
+              <h3 className="text-sm font-medium dark:text-gray-400 text-gray-600 mb-1">
+                {card.label}
+              </h3>
+              <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
             </div>
           )
         })}
       </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Traffic Chart */}
+        <div className="xl:col-span-2 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm p-6 dark:bg-[#111] bg-white">
+          <h3 className="text-lg font-semibold dark:text-white text-gray-900 mb-4">
+            30 Günlük Trafik
+          </h3>
+          {summary?.traffic30d && summary.traffic30d.length > 0 ? (
+            <Line data={trafficData} options={{
+              responsive: true,
+              plugins: {
+                legend: { display: false },
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  grid: { color: 'rgba(0,0,0,0.1)' },
+                },
+              },
+            }} />
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Veri yok</p>
+          )}
+        </div>
+
+        {/* Quick Stats */}
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm p-6 dark:bg-[#111] bg-white">
+          <h3 className="text-lg font-semibold dark:text-white text-gray-900 mb-4">
+            Genel İstatistikler
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Kullanıcı</span>
+              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalUsers || 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Gönderi</span>
+              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalPosts || 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Yorum</span>
+              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalComments || 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Etkinlik</span>
+              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalEvents || 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Bilet</span>
+              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalTickets || 0}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
-

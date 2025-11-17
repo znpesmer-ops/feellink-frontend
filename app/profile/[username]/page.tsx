@@ -13,13 +13,35 @@ import DraftArticles from '@/components/draft-articles'
 import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from '@/components/UserBadge'
+import { UserBadges } from '@/components/profile/UserBadges'
+import { ProRoleBadge } from '@/components/ProRoleBadge'
 
 function ProfileContent() {
   const params = useParams()
   const router = useRouter()
   const { accessToken, user: currentUser } = useAuthStore()
   const queryClient = useQueryClient()
-  const username = params.username as string
+  
+  // 🔥 KRİTİK: Parametreyi array olabilir kontrolü ile string'e zorla
+  const rawParam = params.username
+  const paramUsername = Array.isArray(rawParam) ? rawParam[0] : (rawParam || '')
+  
+  // 🔥 KRİTİK: "me" parametresini currentUser.username'e çevir - GARANTİLİ DÖNÜŞÜM
+  // Eğer "me" ise ve currentUser.username yoksa, /users/me endpoint'ini kullan
+  const isMe = paramUsername === 'me'
+  const username = isMe ? (currentUser?.username || '') : paramUsername
+  
+  // 🔥 KRİTİK: Parametre geçersizse erken return
+  if (!paramUsername && !isMe) {
+    return (
+      <div className="text-center py-12">
+        <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-semibold mb-2">Geçersiz profil adresi</p>
+          <p className="text-xs">Profil sayfası yüklenemedi. Lütfen tekrar deneyin.</p>
+        </div>
+      </div>
+    )
+  }
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -30,17 +52,75 @@ function ProfileContent() {
   const [profilePosts, setProfilePosts] = useState<any[]>([])
 
   // Get profile data
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['profile', username],
+  const { data: profile, isLoading, error: profileError } = useQuery({
+    queryKey: ['profile', username, paramUsername, currentUser?.id],
     queryFn: async () => {
-      const response = await api.get(`/users/profile/${username}`)
-      // Debug: Log profile data to check role value
-      if (response.data) {
-        console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
+      // 🔥 KRİTİK: "me" parametresi için önce /users/me endpoint'ini dene
+      if (paramUsername === 'me') {
+        try {
+          // Önce /users/me ile kullanıcı bilgisini al
+          const meResponse = await api.get('/users/me')
+          const meData = meResponse.data
+          
+          // 🔥 KRİTİK: Response kontrolü
+          if (!meData) {
+            throw new Error('Kullanıcı bilgisi alınamadı')
+          }
+          
+          if (meData?.username) {
+            // Username bulundu, profile endpoint'ini kullan
+            const profileResponse = await api.get(`/users/profile/${meData.username}`)
+            if (profileResponse.data) {
+              console.log('🔍 Profile Role:', profileResponse.data.role, 'Type:', typeof profileResponse.data.role)
+            }
+            return profileResponse.data
+          }
+          
+          throw new Error('Kullanıcı adı bulunamadı')
+        } catch (err: any) {
+          console.warn('Failed to fetch /users/me, falling back to username:', err)
+          
+          // Fallback: currentUser.username kullan
+          if (currentUser?.username) {
+            try {
+              const response = await api.get(`/users/profile/${currentUser.username}`)
+              if (response.data) {
+                console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
+              }
+              return response.data
+            } catch (fallbackErr) {
+              throw new Error('Profil yüklenemedi. Lütfen tekrar giriş yapın.')
+            }
+          }
+          
+          throw new Error(err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı. Lütfen tekrar giriş yapın.')
+        }
       }
-      return response.data
+      
+      // Normal username ile profil çek
+      if (!username || username === 'undefined' || username === 'null') {
+        throw new Error('Geçersiz kullanıcı adı')
+      }
+      
+      try {
+        const response = await api.get(`/users/profile/${username}`)
+        // Debug: Log profile data to check role value
+        if (response.data) {
+          console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
+        }
+        return response.data
+      } catch (err: any) {
+        throw new Error(err?.response?.data?.message || err?.message || 'Profil yüklenemedi')
+      }
     },
-    enabled: !!accessToken && !!username,
+    enabled: !!accessToken && (!!username || paramUsername === 'me'),
+    retry: (failureCount, error: any) => {
+      // Geçersiz parametreler için retry yapma
+      if (error?.message?.includes('Geçersiz') || error?.message?.includes('bulunamadı')) {
+        return false
+      }
+      return failureCount < 2
+    },
   })
 
   // Helper function to check if user is corporate
@@ -296,10 +376,44 @@ function ProfileContent() {
     )
   }
 
+  // 🔥 KRİTİK: Hata durumunu göster
+  if (profileError) {
+    const errorMessage = profileError instanceof Error ? profileError.message : 'Bilinmeyen bir hata oluştu'
+    return (
+      <div className="text-center py-12">
+        <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-semibold mb-2">Profil yüklenemedi</p>
+          <p className="text-xs mb-4">{errorMessage}</p>
+          <button
+            onClick={() => router.push('/profile/me')}
+            className="px-4 py-2 text-xs font-medium bg-[#ff7b00] text-white rounded-xl hover:bg-[#e96f00] transition"
+          >
+            Profilime Git
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!profile) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">User not found</p>
+        <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-semibold mb-2">Kullanıcı bulunamadı</p>
+          <p className="text-xs mb-4">
+            {paramUsername === 'me' 
+              ? 'Profil bilgileriniz yüklenemedi. Lütfen sayfayı yenileyin veya tekrar giriş yapın.'
+              : 'Aradığınız kullanıcı bulunamadı veya hesap silinmiş olabilir.'}
+          </p>
+          {paramUsername === 'me' && (
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 text-xs font-medium bg-[#ff7b00] text-white rounded-xl hover:bg-[#e96f00] transition"
+            >
+              Sayfayı Yenile
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -327,12 +441,16 @@ function ProfileContent() {
           {/* Profile Info */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-4">
-                <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  {profile.username}
-                  {profile.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
-                  <UserBadge role={profile.role} />
-                </h1>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    {profile.username}
+                    {profile.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
+                    <UserBadge role={profile.role} />
+                    <ProRoleBadge roles={profile.roles} plan={profile.plan} />
+                  </h1>
+                </div>
+                <UserBadges badges={profile.badges} />
               </div>
               {/* Sağ Buton Grubu - Profili Düzenle + Yeni Gönderi */}
               {profile.isOwnProfile && (

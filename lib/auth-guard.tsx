@@ -7,7 +7,7 @@ import api from './api'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { accessToken, user, setAuth } = useAuthStore()
+  const { accessToken, user, capabilities, setAuth, setUser, setCapabilities } = useAuthStore()
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -20,11 +20,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       // Verify token is valid by calling /auth/me
       try {
         const response = await api.get('/auth/me')
-        // Update user info in case role or other fields changed
-        const currentRefreshToken = useAuthStore.getState().refreshToken
-        if (accessToken && currentRefreshToken) {
-          setAuth(response.data, accessToken, currentRefreshToken)
-        }
+        const { user: currentUser, capabilities: caps, sidebar } = response.data
+        setUser(currentUser, caps, sidebar ?? null)
+        setCapabilities(caps, sidebar ?? null)
         // Token is valid, user is authenticated
       } catch (error: any) {
         // Token invalid, try to refresh
@@ -36,11 +34,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             const refreshResponse = await api.post('/auth/refresh', {
               refreshToken,
             })
-            setAuth(
-              refreshResponse.data.user,
-              refreshResponse.data.accessToken,
-              refreshResponse.data.refreshToken
-            )
+            const {
+              user: refreshedUser,
+              accessToken: newAccess,
+              refreshToken: newRefresh,
+              capabilities: caps,
+              sidebar,
+            } = refreshResponse.data
+            setAuth(refreshedUser, newAccess, newRefresh, caps ?? null, sidebar ?? null)
             // Retry the original request after refresh
             return
           } catch (refreshError) {
@@ -59,10 +60,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     checkAuth()
-  }, [accessToken, router, setAuth])
+  }, [accessToken, router, setAuth, setUser, setCapabilities])
 
   // Show loading while checking auth
-  if (!accessToken || !user) {
+  if (!accessToken || !user || !capabilities) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>

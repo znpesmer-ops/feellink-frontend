@@ -15,36 +15,30 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
   const { addNotification, setUnreadCount } = useNotificationStore()
 
   useEffect(() => {
-    // Zustand persist middleware'inin hydration'ını bekle
-    // persist API'si farklı olabilir, bu yüzden hem onFinishHydration hem de direkt kontrol yapıyoruz
-    const checkHydration = () => {
-      try {
-        // Zustand persist v4+ için
-        if (typeof useAuthStore.persist?.hasHydrated === 'function') {
-          if (useAuthStore.persist.hasHydrated()) {
-            setIsHydrated(true)
-            return
-          }
-          
-          const unsubscribe = useAuthStore.persist.onFinishHydration(() => {
-            setIsHydrated(true)
-          })
-          return unsubscribe
-        } else {
-          // Fallback: Basit timeout ile hydration'ın tamamlanmasını bekle
-          setTimeout(() => {
-            setIsHydrated(true)
-          }, 100)
-        }
-      } catch (error) {
-        // Hata durumunda direkt geç
-        setIsHydrated(true)
-      }
+    const hasHydrated = useAuthStore.persist?.hasHydrated
+    const onFinishHydration = useAuthStore.persist?.onFinishHydration
+
+    if (typeof hasHydrated === 'function' && hasHydrated()) {
+      setIsHydrated(true)
+      return
     }
 
-    const unsubscribe = checkHydration()
+    const timeout = window.setTimeout(() => {
+      setIsHydrated(true)
+    }, 0)
+
+    let unsubscribe: (() => void) | undefined
+
+    if (typeof onFinishHydration === 'function') {
+      unsubscribe = onFinishHydration(() => {
+        window.clearTimeout(timeout)
+        setIsHydrated(true)
+      })
+    }
+
     return () => {
-      if (unsubscribe && typeof unsubscribe === 'function') {
+      window.clearTimeout(timeout)
+      if (typeof unsubscribe === 'function') {
         unsubscribe()
       }
     }

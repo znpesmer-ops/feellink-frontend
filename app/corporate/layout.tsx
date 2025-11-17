@@ -11,23 +11,23 @@ export default function CorporateLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { user, accessToken } = useAuthStore()
+  const { user, capabilities, accessToken } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
     // Wait for store hydration
-    if (accessToken === undefined || user === undefined) {
+    if (accessToken === undefined || user === undefined || capabilities === undefined) {
       return // Still hydrating
     }
 
     // Not logged in
-    if (!accessToken || !user) {
+    if (!accessToken || !user || !capabilities) {
       router.push('/login')
       return
     }
 
     // Not corporate - redirect to feed
-    if (user.role !== 'CORPORATE') {
+    if (!capabilities.roles.includes('corporate')) {
       router.push('/feed')
       return
     }

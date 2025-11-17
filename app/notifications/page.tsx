@@ -10,6 +10,7 @@ import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { AuthGuard } from '@/lib/auth-guard'
 import { MessageCircle, Heart, CornerDownRight, BellOff, UserPlus, UserCheck, Bell } from 'lucide-react'
 import UserBadge from '@/components/UserBadge'
+import { ProRoleBadge } from '@/components/ProRoleBadge'
 
 function NotificationsContent() {
   const router = useRouter()
@@ -230,6 +231,9 @@ function NotificationsContent() {
         return <UserCheck className="w-5 h-5" />
       case 'follow_accept':
         return <UserCheck className="w-5 h-5" />
+      case 'job_application_received':
+      case 'job_application_status_changed':
+        return <Bell className="w-5 h-5" />
       default:
         return <Bell className="w-5 h-5" />
     }
@@ -323,6 +327,10 @@ function NotificationsContent() {
         return `takip isteği gönderdi`
       case 'follow_accept':
         return `takip isteğini kabul etti`
+      case 'job_application_received':
+        return notification.message || 'ilanına başvuru yapıldı'
+      case 'job_application_status_changed':
+        return notification.message || 'başvuru durumu güncellendi'
       default:
         return notification.message || 'yeni bildirim gönderdi'
     }
@@ -402,36 +410,50 @@ function NotificationsContent() {
                         await markAsRead(notification.id)
                       }
                       
-                      // Yönlendirme - fallback mantığı
-                      if (notification.targetUrl) {
-                        const urlPath = notification.targetUrl.split('#')[0]
-                        const hash = notification.targetUrl.split('#')[1]
-                        
-                        // Eğer zaten o sayfadaysa sadece scroll yap
-                        if (window.location.pathname === urlPath) {
-                          if (hash) {
-                            setTimeout(() => {
-                              // Hash zaten 'cmt-123' formatında, document.getElementById için ekstra 'cmt-' ekleme
-                              const element = document.getElementById(hash.startsWith('cmt-') ? hash : `cmt-${hash}`)
-                              if (element) {
-                                element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                              }
-                            }, 100)
-                          }
-                        } else {
-                          router.push(notification.targetUrl)
-                        }
-                      } else if (notification.articleId) {
-                        // targetUrl yoksa articleId üzerinden oluştur
-                        const url = `/articles/${notification.articleId}${notification.commentId ? `#cmt-${notification.commentId}` : ""}`;
-                        router.push(url)
-                      } else if (notification.postId) {
-                        // Gönderi için fallback
-                        router.push(`/posts/${notification.postId}`)
-                      } else if (notification.sender?.username) {
-                        // Hiçbiri yoksa gönderen profil
-                        router.push(`/profile/${notification.sender.username}`)
+                      // 🔥 KRİTİK: Yönlendirme - öncelik sırası: targetPath > targetUrl > type-based fallback
+                      // 1) Eğer bildirimde targetPath varsa → direkt oraya git (EN ÖNCELİKLİ)
+                      if (notification.targetPath) {
+                        router.push(notification.targetPath)
+                        return
                       }
+                      
+                      // 2) targetUrl varsa onu kullan (geriye uyumluluk)
+                      if (notification.targetUrl) {
+                        router.push(notification.targetUrl)
+                        return
+                      }
+                      
+                      // 3) Fallback - job application bildirimleri için
+                      if (notification.type === 'job_application_received') {
+                        // targetPath yoksa fallback: public sayfasına git (404 vermez)
+                        router.push('/fellink/public')
+                        return
+                      }
+                      
+                      if (notification.type === 'job_application_status_changed') {
+                        router.push('/fellink/my-applications')
+                        return
+                      }
+                      
+                      // 4) Diğer bildirim türleri için mevcut fallback mantığı
+                      if (notification.articleId) {
+                        const url = `/articles/${notification.articleId}${notification.commentId ? `#cmt-${notification.commentId}` : ""}`
+                        router.push(url)
+                        return
+                      }
+                      
+                      if (notification.postId) {
+                        router.push(`/posts/${notification.postId}`)
+                        return
+                      }
+                      
+                      if (notification.sender?.username) {
+                        router.push(`/profile/${notification.sender.username}`)
+                        return
+                      }
+                      
+                      // 5) En kötü fallback (404 asla vermez)
+                      router.push('/fellink/public')
                     }}
                   >
                     <div className="flex items-start gap-3">
@@ -495,6 +517,7 @@ function NotificationsContent() {
                             </span>
                           )}
                           <UserBadge role={notification.sender?.role} />
+                          <ProRoleBadge roles={(notification.sender as any)?.roles} plan={(notification.sender as any)?.plan} />
                           <span>{getNotificationText(notification)}</span>
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

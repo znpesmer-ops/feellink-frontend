@@ -7,10 +7,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
+import { getDashboardRouteFromUser } from '@/lib/role-utils'
+
+const unicodeEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
 
 const registerSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters'),
-  email: z.string().email('Invalid email address'),
+  email: z.string().regex(unicodeEmailRegex, 'Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   fullName: z.string().optional(),
 })
@@ -19,19 +22,28 @@ type RegisterForm = z.infer<typeof registerSchema>
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { setAuth, accessToken, user } = useAuthStore()
+  const { setAuth, accessToken, user, capabilities } = useAuthStore()
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
   const [mode, setMode] = useState<'user' | 'corporate'>('user')
 
   // Eğer zaten giriş yapılmışsa feed'e yönlendir
   useEffect(() => {
-    if (accessToken && user) {
-      router.push('/feed')
+    if (accessToken && user && capabilities) {
+      if (!capabilities.roles || capabilities.roles.length === 0) {
+        router.push('/select-role')
+      } else {
+        const route = getDashboardRouteFromUser({
+          roles: capabilities.roles,
+          isAdmin: user.isAdmin,
+          capabilities,
+        })
+        router.push(route)
+      }
     } else {
       setIsChecking(false)
     }
-  }, [accessToken, user, router])
+  }, [accessToken, user, capabilities, router])
 
   const {
     register,
@@ -46,13 +58,25 @@ export default function RegisterPage() {
       setError('')
       const endpoint = mode === 'corporate' ? '/auth/register-corporate' : '/auth/register'
       const response = await api.post(endpoint, data)
-      setAuth(
-        response.data.user,
-        response.data.accessToken,
-        response.data.refreshToken
-      )
-      // All users go to feed for now (collections page will be created later)
-      router.push('/feed')
+      const {
+        user: registeredUser,
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        capabilities: caps,
+        sidebar,
+      } = response.data
+      setAuth(registeredUser, newAccessToken, newRefreshToken, caps ?? null, sidebar ?? null)
+
+      if (!caps || !caps.roles || caps.roles.length === 0) {
+        router.push('/select-role')
+      } else {
+        const route = getDashboardRouteFromUser({
+          roles: caps.roles,
+          isAdmin: registeredUser.isAdmin,
+          capabilities: caps,
+        })
+        router.push(route)
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed')
     }
@@ -100,7 +124,7 @@ export default function RegisterPage() {
             </button>
           </div>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded">
               {error}
@@ -114,6 +138,8 @@ export default function RegisterPage() {
               <input
                 {...register('email')}
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 placeholder="Email"
               />

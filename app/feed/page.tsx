@@ -95,19 +95,20 @@ function FeedContent() {
   }
 
   return (
-    <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
+    <div className="grid grid-cols-[240px_minmax(0,1fr)_420px] gap-0 w-full">
+      <div />
+
       {/* 📰 Orta içerik - GENİŞLETİLMİŞ */}
-      <div className="flex-1 max-w-[1200px] space-y-10 mx-auto xl:mr-[420px]">
+      {/* 🔥 KRİTİK: Ana sayfa için minimal padding - header ile hizalama */}
+      <div className="col-start-2 col-end-3 px-8 space-y-10">
         {/* 🔸 Ayın Öne Çıkanları — gönderilerden ayrı blok */}
         <div className="w-full">
           <HighlightsRow />
         </div>
 
-        {/* 🔸 Takip Ettiğim Kişilerin Gönderileri */}
+        {/* 🔸 Keşfet */}
         <div className="w-full">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-            Takip Ettiğin Kişilerin Gönderileri
-          </h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">Keşfet</h2>
           
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
@@ -116,7 +117,7 @@ function FeedContent() {
           ) : feedPosts.length === 0 ? (
             <div className="text-center py-20 bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900">
               <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">
-                Henüz takip ettiğin kişilerin gönderisi yok
+                Henüz keşfedecek gönderi yok
               </p>
               <p className="text-sm text-gray-400 dark:text-gray-500 mb-6">
                 Yeni kişileri takip ederek gönderilerini burada görebilirsin
@@ -139,7 +140,10 @@ function FeedContent() {
       </div>
 
       {/* 🟠 Sağ sabit sidebar */}
-      <RightSidebar />
+      {/* 🔥 KRİTİK: Ana içerikle aynı hizada başlaması için padding kaldırıldı */}
+      <div className="col-start-3 col-end-4 px-4 sticky top-24 self-start">
+        <RightSidebar />
+      </div>
     </div>
   )
 }

@@ -17,7 +17,7 @@ import {
 } from "chart.js";
 import { Eye, MessageCircle, Users, Loader2, TrendingUp, Ticket, ChevronDown, ChevronUp } from "lucide-react";
 import api from "@/lib/api";
-import RightSidebar from "@/components/right-sidebar";
+// RightSidebar artık sadece ana sayfada görünüyor, burada gerek yok
 import { useAuthStore } from "@/lib/store";
 import toast from "react-hot-toast";
 import { initSocket, getSocket } from "@/lib/socket";
@@ -32,6 +32,9 @@ const TicketChart = dynamic(() => import("@/components/analytics/TicketChart"), 
 const TopEventsChart = dynamic(() => import("@/components/analytics/TopEventsChart"), {
   ssr: false,
 });
+
+const DEFAULT_ANALYTICS_AVATAR =
+  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=320&q=80";
 
 // Register Chart.js components
 ChartJS.register(
@@ -78,7 +81,7 @@ interface EventStat {
 }
 
 export default function AnalyticsPage() {
-  const { user, accessToken } = useAuthStore();
+  const { user, capabilities, accessToken } = useAuthStore();
   const [visits, setVisits] = useState<VisitData[]>([]);
   const [words, setWords] = useState<WordData[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
@@ -87,8 +90,20 @@ export default function AnalyticsPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [openEvent, setOpenEvent] = useState<string | null>(null);
 
-  // Helper function to check if user is corporate (case-insensitive)
-  const isCorporateUser = user?.role?.toUpperCase() === 'CORPORATE';
+  const resolveAvatarUrl = (avatar?: string | null) => {
+    if (!avatar || avatar.trim() === "") {
+      return DEFAULT_ANALYTICS_AVATAR;
+    }
+    if (avatar.startsWith("http")) {
+      if (avatar.includes("localhost:3000")) {
+        return DEFAULT_ANALYTICS_AVATAR;
+      }
+      return avatar;
+    }
+    return DEFAULT_ANALYTICS_AVATAR;
+  };
+
+  const canAccessAnalytics = Boolean(capabilities?.permissions.canAccessAnalytics);
 
   // Wait for Zustand hydration to complete
   useEffect(() => {
@@ -124,13 +139,13 @@ export default function AnalyticsPage() {
 
   // Debug: Log user role
   useEffect(() => {
-    if (isHydrated && user) {
-      console.log('🔍 Analytics Page - User Role:', user.role, 'Is Corporate:', isCorporateUser, 'AccessToken:', !!accessToken);
+    if (isHydrated && user && capabilities) {
+      console.log('🔍 Analytics Page - Roles:', capabilities.roles, 'Analytics Access:', canAccessAnalytics, 'AccessToken:', !!accessToken);
     }
-  }, [user, isCorporateUser, isHydrated, accessToken]);
+  }, [user, capabilities, canAccessAnalytics, isHydrated, accessToken]);
 
   useEffect(() => {
-    if (!isHydrated || !user || !isCorporateUser) {
+    if (!isHydrated || !user || !capabilities || !canAccessAnalytics) {
       return;
     }
 
@@ -161,7 +176,7 @@ export default function AnalyticsPage() {
     }
 
     fetchAnalytics();
-  }, [user, isHydrated]);
+  }, [user, capabilities, canAccessAnalytics, isHydrated]);
 
   // 🎟️ Gerçek zamanlı bilet güncellemeleri için socket bağlantısı
   useEffect(() => {
@@ -245,7 +260,7 @@ export default function AnalyticsPage() {
   }
 
   // Eğer user yoksa veya role corporate değilse (hydration tamamlandıktan sonra kontrol)
-  if (!user || !isCorporateUser) {
+  if (!user || !capabilities || !canAccessAnalytics) {
     return (
       <div className="flex justify-center items-center py-20">
         <div className="text-center">
@@ -253,11 +268,11 @@ export default function AnalyticsPage() {
             Yetkisiz Erişim
           </h1>
           <p className="text-gray-500 dark:text-gray-400">
-            Bu sayfaya sadece kurumsal kullanıcılar erişebilir.
+            Bu sayfaya yalnızca analiz yetkisine sahip kullanıcılar erişebilir.
           </p>
-          {user && (
+          {capabilities && (
             <p className="text-xs text-gray-400 mt-2">
-              Rolünüz: {user.role || 'belirtilmemiş'}
+              Aktif rolleriniz: {capabilities.roles.join(', ')}
             </p>
           )}
         </div>
@@ -385,9 +400,9 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
-      {/* 📰 Orta içerik */}
-      <div className="flex-1 max-w-[1300px] mx-auto xl:mr-[420px]">
+    <div className="w-full px-6 py-4">
+      {/* 🔥 KRİTİK: Geniş container - tam ekran genişliği */}
+      <div className="max-w-[1600px] mx-auto">
         {/* Başlık */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#ff7b00] flex items-center gap-3 mb-2">
@@ -400,111 +415,101 @@ export default function AnalyticsPage() {
         </div>
 
         {/* ---- ANALİZ KARTLARI GRID ---- */}
-        <div className="w-full max-w-[1280px] mx-auto mt-10 px-4 grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* SOL SÜTUN */}
-          <div className="flex flex-col gap-8">
-            {/* Etkileşim Trendi */}
-            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-              <h3 className="text-orange-400 font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
-              <div className="h-[300px]">
-                <Line data={visitsChartData} options={lineChartOptions} />
-              </div>
-            </div>
-
-            {/* En Çok Kullanılan Kelimeler */}
-            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-              <h3 className="text-orange-400 font-semibold mb-4">En Çok Kullanılan Kelimeler</h3>
-              <div className="h-[300px]">
-                <Bar data={wordsChartData} options={chartOptions} />
-              </div>
+        {/* 🔥 KRİTİK: Responsive 3 kolonlu grid - ferah görünüm */}
+        <div className="w-full mt-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {/* Etkileşim Trendi */}
+          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+            <h3 className="text-orange-400 font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
+            <div className="h-[300px]">
+              <Line data={visitsChartData} options={lineChartOptions} />
             </div>
           </div>
 
-          {/* SAĞ SÜTUN */}
-          <div className="flex flex-col gap-8">
-            {/* En Aktif Ziyaretçiler */}
-            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-              <h3 className="text-orange-400 font-semibold mb-4">En Aktif Ziyaretçiler</h3>
-              <div className="space-y-3">
-                {topUsers.length === 0 ? (
-                  <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-                    Henüz aktif ziyaretçi bulunmuyor
-                  </p>
-                ) : (
-                  topUsers.map((u, index) => (
-                    <Link
-                      key={u.username}
-                      href={`/profile/${u.username}`}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer hover:opacity-90"
-                    >
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 text-[#ff7b00] font-bold text-sm">
-                        {index + 1}
-                      </div>
-                      <img
-                        src={u.avatar || "/users/default.jpg"}
-                        alt={u.username}
-                        className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/users/default.jpg";
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">
-                          {u.fullName || u.username}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          @{u.username}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-[#ff7b00]">{u.activityCount}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          etkileşim
-                        </p>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
+          {/* En Çok Kullanılan Kelimeler */}
+          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+            <h3 className="text-orange-400 font-semibold mb-4">En Çok Kullanılan Kelimeler</h3>
+            <div className="h-[300px]">
+              <Bar data={wordsChartData} options={chartOptions} />
             </div>
+          </div>
 
-            {/* Etkinlik Katılım Analizi - Kısa Özet */}
-            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-              <h3 className="text-orange-400 font-semibold mb-4">Etkinlik Katılım Analizi</h3>
-              {eventStats.length > 0 ? (
-                <div className="space-y-4">
-                  {eventStats.slice(0, 3).map((event) => (
-                    <div
-                      key={event.id}
-                      className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40"
-                    >
-                      <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                        {event.title}
-                      </h4>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          <span className="font-bold text-[#ff7b00]">{event.ticketCount}</span> / {event.totalCapacity} bilet
-                        </span>
-                        <span className="text-gray-600 dark:text-gray-400">
-                          <span className="font-semibold">{event.commentCount}</span> yorum
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center py-8">
-                  Henüz etkinlik bulunmuyor.
+          {/* En Aktif Ziyaretçiler */}
+          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+            <h3 className="text-orange-400 font-semibold mb-4">En Aktif Ziyaretçiler</h3>
+            <div className="space-y-3">
+              {topUsers.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                  Henüz aktif ziyaretçi bulunmuyor
                 </p>
+              ) : (
+                topUsers.map((u, index) => (
+                  <Link
+                    key={u.username}
+                    href={`/profile/${u.username}`}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer hover:opacity-90"
+                  >
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 text-[#ff7b00] font-bold text-sm">
+                      {index + 1}
+                    </div>
+                    <img
+                      src={resolveAvatarUrl(u.avatar)}
+                      alt={u.username}
+                      className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = DEFAULT_ANALYTICS_AVATAR;
+                      }}
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                        {u.fullName || u.username}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        @{u.username}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-[#ff7b00]">{u.activityCount}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        etkileşim
+                      </p>
+                    </div>
+                  </Link>
+                ))
               )}
             </div>
           </div>
 
+          {/* Etkinlik Katılım Analizi - Kısa Özet */}
+          {eventStats.length > 0 && (
+            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+              <h3 className="text-orange-400 font-semibold mb-4">Etkinlik Katılım Analizi</h3>
+              <div className="space-y-4">
+                {eventStats.slice(0, 3).map((event) => (
+                  <div
+                    key={event.id}
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40"
+                  >
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                      {event.title}
+                    </h4>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">
+                        <span className="font-bold text-[#ff7b00]">{event.ticketCount}</span> / {event.totalCapacity} bilet
+                      </span>
+                      <span className="text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{event.commentCount}</span> yorum
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 🎟️ Etkinlik Katılım Analizi - Accordion Yapısı */}
-        <div className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl shadow-sm p-6 mt-6">
+        {/* 🔥 KRİTİK: Tam genişlik - grid dışında */}
+        <div className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl shadow-sm p-6 mt-6 w-full">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 rounded-lg">
               <Ticket className="w-5 h-5 text-[#ff7b00]" />
@@ -578,11 +583,11 @@ export default function AnalyticsPage() {
                                 <div className="flex items-center gap-3">
                                   {ticket.avatar ? (
                                     <img
-                                      src={ticket.avatar}
+                                      src={resolveAvatarUrl(ticket.avatar)}
                                       alt={ticket.username}
                                       className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
                                       onError={(e) => {
-                                        (e.target as HTMLImageElement).src = "/users/default.jpg";
+                                        (e.target as HTMLImageElement).src = DEFAULT_ANALYTICS_AVATAR;
                                       }}
                                     />
                                   ) : (
@@ -634,19 +639,19 @@ export default function AnalyticsPage() {
         </div>
 
         {/* 🎯 Top 5 En Çok Katılım Alan Etkinlikler Grafiği */}
+        {/* 🔥 KRİTİK: Tam genişlik - grid dışında */}
         {eventStats.length > 0 && (
-          <TopEventsChart
-            events={eventStats.map((e) => ({
-              id: e.id,
-              title: e.title,
-              ticketCount: e.ticketCount,
-            }))}
-          />
+          <div className="w-full mt-6">
+            <TopEventsChart
+              events={eventStats.map((e) => ({
+                id: e.id,
+                title: e.title,
+                ticketCount: e.ticketCount,
+              }))}
+            />
+          </div>
         )}
       </div>
-
-      {/* Sağ sidebar */}
-      <RightSidebar />
     </div>
   );
 }

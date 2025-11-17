@@ -8,7 +8,7 @@ import { AuthGuard } from '@/lib/auth-guard'
 
 function EditProfileContent() {
   const router = useRouter()
-  const { user, accessToken, setAuth, refreshToken } = useAuthStore()
+  const { user, accessToken, capabilities, setUser } = useAuthStore()
   const [bio, setBio] = useState('')
   const [avatar, setAvatar] = useState('')
   const [fullName, setFullName] = useState('')
@@ -106,8 +106,10 @@ function EditProfileContent() {
         }
       )
 
-      // Update store with new user data
-      setAuth(response.data, accessToken!, refreshToken!)
+      if (user) {
+        const updatedUser = { ...user, ...response.data }
+        setUser(updatedUser, capabilities ?? null)
+      }
       setMessage('Profil başarıyla güncellendi! 🎉')
 
       // Redirect after a short delay

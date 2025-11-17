@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
+import { getDashboardRouteFromUser } from '@/lib/role-utils'
 
 export default function Home() {
   const router = useRouter()
-  const { user, accessToken } = useAuthStore()
+  const { user, accessToken, capabilities } = useAuthStore()
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Zustand persist hydration'ını bekle
@@ -45,12 +46,21 @@ export default function Home() {
   useEffect(() => {
     if (!isHydrated) return
 
-    if (!accessToken || !user) {
+    if (!accessToken || !user || !capabilities) {
       router.replace('/login')
     } else {
-      router.replace('/feed')
+      if (!capabilities.roles || capabilities.roles.length === 0) {
+        router.replace('/select-role')
+      } else {
+        const route = getDashboardRouteFromUser({
+          roles: capabilities.roles,
+          isAdmin: user.isAdmin,
+          capabilities,
+        })
+        router.replace(route)
+      }
     }
-  }, [accessToken, user, router, isHydrated])
+  }, [accessToken, user, capabilities, router, isHydrated])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">

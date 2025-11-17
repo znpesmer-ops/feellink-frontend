@@ -101,58 +101,57 @@ export function Header() {
   }
 
   return (
-    <header className="fixed top-0 left-60 right-0 h-16 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-900 shadow-sm flex items-center justify-between px-6 z-50 transition-colors">
-      {/* Sol taraf - Hoş geldin mesajı */}
-      <div className="text-base font-medium text-[#1f1f1f] dark:text-gray-100">
-        Hoş geldin, <span className="text-[#ff7b00] font-semibold">{user?.username}</span>
-      </div>
-
-      {/* Orta - Search Box */}
-      <div ref={searchRef} className="relative flex-1 max-w-xl mx-8">
-        <div className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Kullanıcı ara..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            onFocus={() => searchQuery && setIsSearchOpen(true)}
-            className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/20 focus:border-[#ff7b00]/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
-          />
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <svg
-              className="w-5 h-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-          {isLoading && (
-            <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-              <div className="w-4 h-4 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
+    <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 shadow-sm z-50 transition-colors">
+      <div className="flex items-center justify-between w-full h-full px-8">
+        <div className="text-sm font-medium text-[#1f1f1f] dark:text-gray-100">
+          Hoş geldin, <span className="text-[#ff7b00] font-semibold">{user?.username}</span>
         </div>
 
-        {/* Search Results Dropdown */}
-        {isSearchOpen && (
-          <SearchResults
-            results={searchResults}
-            onSelect={handleUserSelect}
-            isLoading={isLoading}
-          />
-        )}
+        <div className="flex-1 flex justify-center">
+          <div ref={searchRef} className="relative w-full max-w-[480px]">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Kullanıcı ara..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                onFocus={() => searchQuery && setIsSearchOpen(true)}
+                className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/20 focus:border-[#ff7b00]/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
+              />
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg
+                  className="w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </div>
+              {isLoading && (
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <div className="w-4 h-4 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+
+              {/* Search Results Dropdown */}
+              {isSearchOpen && (
+                <SearchResults
+                  results={searchResults}
+                  onSelect={handleUserSelect}
+                  isLoading={isLoading}
+                />
+              )}
+        </div>
       </div>
 
-      {/* Sağ taraf - Theme Toggle + Profil */}
-      <div className="flex items-center gap-4">
+        {/* Sağ taraf - Theme Toggle + Profil */}
+        <div className="flex items-center justify-end gap-4 pl-6">
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
@@ -269,6 +268,7 @@ export function Header() {
               </div>
             )}
           </div>
+      </div>
       </div>
     </header>
   )

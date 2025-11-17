@@ -11,6 +11,7 @@ import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from './UserBadge'
+import { ProRoleBadge } from './ProRoleBadge'
 
 const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
   ssr: false,
@@ -369,6 +370,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                     <span className="ml-1 text-blue-500">✓</span>
                   )}
                   <UserBadge role={post.user.role} />
+                  <ProRoleBadge roles={(post.user as any).roles} plan={(post.user as any).plan} />
                 </div>
                 <button
                   onClick={onClose}
@@ -480,6 +482,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                 {comment.user.username}
                               </Link>
                               <UserBadge role={comment.user.role} />
+                              <ProRoleBadge roles={(comment.user as any).roles} plan={(comment.user as any).plan} />
                               {comment.isPinned && (
                                 <Pin size={12} className="text-[#ff7b00] fill-[#ff7b00]" />
                               )}
@@ -585,6 +588,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                     {reply.user.username}
                                   </Link>
                                   <UserBadge role={reply.user.role} />
+                                  <ProRoleBadge roles={(reply.user as any).roles} plan={(reply.user as any).plan} />
                                   <span>{reply.content}</span>
                                 </p>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">

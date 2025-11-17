@@ -79,7 +79,17 @@ function EventForm() {
       }, 2000)
     } catch (err: any) {
       console.error('Etkinlik oluşturulamadı:', err)
-      toast.error(err.response?.data?.message || 'Bir hata oluştu. Lütfen tekrar deneyin.')
+      const responseData = err?.response?.data
+      const nested = typeof responseData?.message === 'object' ? responseData.message : null
+      const errorCode = nested?.code ?? responseData?.code
+      const errorMessage =
+        nested?.message ?? (typeof responseData?.message === 'string' ? responseData.message : responseData?.error)
+
+      if (errorCode === 'LIMIT_REACHED') {
+        toast.error(errorMessage ?? 'Etkinlik oluşturma limitinize ulaştınız.')
+      } else {
+        toast.error(errorMessage ?? 'Bir hata oluştu. Lütfen tekrar deneyin.')
+      }
     } finally {
       setLoading(false)
     }

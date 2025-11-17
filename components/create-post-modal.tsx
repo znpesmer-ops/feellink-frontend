@@ -62,7 +62,17 @@ export function CreatePostModal({ isOpen, onClose, username }: CreatePostModalPr
     },
     onError: (error: any) => {
       console.error('Error creating post:', error)
-      setError(error.response?.data?.message || 'Gönderi oluşturulurken bir hata oluştu')
+      const responseData = error?.response?.data
+      const nested = typeof responseData?.message === 'object' ? responseData.message : null
+      const errorCode = nested?.code ?? responseData?.code
+      const errorMessage =
+        nested?.message ?? (typeof responseData?.message === 'string' ? responseData.message : responseData?.error)
+
+      if (errorCode === 'LIMIT_REACHED') {
+        setError(errorMessage ?? 'Bu ayki eser limitinize ulaştınız.')
+      } else {
+        setError(errorMessage || 'Gönderi oluşturulurken bir hata oluştu')
+      }
     },
     onSettled: () => {
       setUploading(false)

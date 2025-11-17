@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from './store'
+import { CapabilitySummary, SidebarVisibility } from '@/types/capabilities'
 
 let isRefreshing = false
 let failedQueue: Array<{
@@ -18,8 +19,14 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = []
 }
 
+const apiBaseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+
+if (typeof window === 'undefined') {
+  console.info('[api] base URL:', apiBaseURL)
+}
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  baseURL: apiBaseURL,
   withCredentials: true,
 })
 
@@ -71,14 +78,20 @@ api.interceptors.response.use(
 
       try {
         const response = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/auth/refresh`,
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/auth/refresh`,
           { refreshToken }
         )
 
-        const { accessToken, refreshToken: newRefreshToken, user } = response.data
+        const { accessToken, refreshToken: newRefreshToken, user, capabilities, sidebar } = response.data as {
+          accessToken: string
+          refreshToken: string
+          user: any
+          capabilities?: CapabilitySummary
+          sidebar?: SidebarVisibility
+        }
 
         // Update tokens and user in store
-        useAuthStore.getState().setAuth(user, accessToken, newRefreshToken)
+        useAuthStore.getState().setAuth(user, accessToken, newRefreshToken, capabilities ?? null, sidebar ?? null)
 
         // Update authorization header
         if (originalRequest.headers) {

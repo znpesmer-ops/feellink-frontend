@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { Sparkles, PenTool, X, BookOpen, Heart } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -21,21 +22,98 @@ type Author = {
   }
 }
 
+const MUSEUM_PLACEHOLDERS: Record<number, string> = {
+  1: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=80',
+  2: 'https://images.unsplash.com/photo-1503389152951-9f343605f61e?auto=format&fit=crop&w=800&q=80',
+  3: 'https://images.unsplash.com/photo-1522780209446-8a0e1a942334?auto=format&fit=crop&w=800&q=80',
+  4: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=80',
+}
+
+const DEFAULT_MUSEUM_IMAGE =
+  'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=800&q=80'
+
+const DEFAULT_AUTHOR_AVATAR =
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=320&q=80'
+
+const DEFAULT_ARTICLE_IMAGE =
+  'https://images.unsplash.com/photo-1526481280695-3c469b8c66b4?auto=format&fit=crop&w=960&q=80'
+
 export default function RightSidebar() {
+  const pathname = usePathname()
+  
+  // 🔥 KRİTİK: Sağ sidebar sadece ana sayfada görünsün
+  // Ana sayfa: /feed veya / (root)
+  // Koleksiyonlar sayfasında görünmesin
+  const isHomePage = pathname === '/feed' || pathname === '/'
+  const isFeed = pathname === '/feed'
+  const isCollections = pathname === '/collections'
+  
+  // Ana sayfa değilse veya koleksiyonlar sayfasındaysa hiçbir şey render etme
+  if (!isHomePage || isCollections) {
+    return null
+  }
+  
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({})
   const [selectedWriter, setSelectedWriter] = useState<Author | null>(null)
   const [topLikedArticles, setTopLikedArticles] = useState<any[]>([])
   const [museums, setMuseums] = useState<any[]>([])
   const [authors, setAuthors] = useState<Author[]>([])
 
-  // 📊 Global sidebar verilerini yükle
+  // 📊 Global sidebar verilerini yükle - sadece ana sayfada
   useEffect(() => {
+    // Ana sayfa değilse hiçbir şey yapma
+    if (!isHomePage) return
+    
+    const ensureAbsoluteUrl = (url?: string | null, fallback?: string) => {
+      if (!url || url.trim() === '') return fallback ?? DEFAULT_ARTICLE_IMAGE
+      if (url.startsWith('http')) {
+        if (url.includes('localhost:3000')) {
+          return fallback ?? DEFAULT_ARTICLE_IMAGE
+        }
+        return url
+      }
+      if (fallback) return fallback
+      return DEFAULT_ARTICLE_IMAGE
+    }
+
+    const transformMuseums = (items: any[]) =>
+      items.map((museum) => ({
+        ...museum,
+        image: ensureAbsoluteUrl(
+          museum.image,
+          MUSEUM_PLACEHOLDERS[museum.id] ?? DEFAULT_MUSEUM_IMAGE
+        ),
+      }))
+
+    const transformAuthors = (items: any[]) =>
+      items.map((author, index) => ({
+        ...author,
+        avatar: ensureAbsoluteUrl(author.avatar, DEFAULT_AUTHOR_AVATAR),
+        preview:
+          author.preview ||
+          (index === 0
+            ? 'Duyguların izi her eserde saklıdır.'
+            : 'Bellek, malzeme ve zamanın sessiz diyaloğu.'),
+      }))
+
+    const transformArticles = (items: any[]) =>
+      items.map((article) => ({
+        ...article,
+        coverImage: ensureAbsoluteUrl(article.coverImage, DEFAULT_ARTICLE_IMAGE),
+        author: article.author
+          ? {
+              ...article.author,
+              avatar: ensureAbsoluteUrl(article.author.avatar, DEFAULT_AUTHOR_AVATAR),
+            }
+          : article.author,
+      }))
+
     const fetchGlobalData = async () => {
       try {
         const res = await api.get('/sidebar/global')
-        setMuseums(res.data.museums || [])
-        setAuthors(res.data.authors || [])
-        setTopLikedArticles(res.data.topLikedArticles || [])
+        setMuseums(transformMuseums(res.data.museums || []))
+        setAuthors(transformAuthors(res.data.authors || []))
+        setTopLikedArticles(transformArticles(res.data.topLikedArticles || []))
       } catch (err) {
         console.error('Sidebar verisi alınamadı', err)
         // Fallback: Eğer API çalışmazsa eski sabit verileri kullan
@@ -43,25 +121,25 @@ export default function RightSidebar() {
           { 
             id: 1, 
             name: 'İstanbul Modern', 
-            image: '/museums/modern.jpg',
+            image: MUSEUM_PLACEHOLDERS[1],
             color: 'from-[#f97316]/80 to-[#fbbf24]/60'
           },
           { 
             id: 2, 
             name: 'Pera Müzesi', 
-            image: '/museums/pera.jpg',
+            image: MUSEUM_PLACEHOLDERS[2],
             color: 'from-[#fb923c]/80 to-[#fed7aa]/60'
           },
           { 
             id: 3, 
             name: 'Odunpazarı Müzesi', 
-            image: '/museums/odunpazari.jpg',
+            image: MUSEUM_PLACEHOLDERS[3],
             color: 'from-[#fcd34d]/80 to-[#fde68a]/60'
           },
           { 
             id: 4, 
             name: 'Sabancı Müzesi', 
-            image: '/museums/sabanci.jpg',
+            image: MUSEUM_PLACEHOLDERS[4],
             color: 'from-[#f59e0b]/80 to-[#fcd34d]/60'
           },
         ])
@@ -70,7 +148,7 @@ export default function RightSidebar() {
             id: 1,
             slug: 'zeynep',
             name: 'Zeynep Esmer',
-            avatar: '/users/zeynep.jpg',
+            avatar: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=320&q=80',
             preview: 'Duyguların izi her eserde saklıdır.',
             bio: 'Çağdaş sanat pratiklerinde hafıza, duygu ve materyal ilişkisini araştıran bir sanatçı ve yazar. Feellink\'in kurucu üyelerindendir.',
             lastPost: {
@@ -83,7 +161,7 @@ export default function RightSidebar() {
             id: 2,
             slug: 'sude',
             name: 'Sude Esmer',
-            avatar: '/users/sude.jpg',
+            avatar: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=320&q=80',
             preview: 'Bellek, malzeme ve zamanın sessiz diyaloğu.',
             bio: 'Atık malzeme ve kültürel bellek temalı üretim yapan bir sanatçı. Yazılarında sürdürülebilirlik, çevre etiği ve toplumsal hafıza üzerine odaklanır.',
             lastPost: {
@@ -93,52 +171,59 @@ export default function RightSidebar() {
             },
           },
         ])
+        setTopLikedArticles([])
       }
     }
 
     fetchGlobalData()
 
-    // 🔥 Socket.IO bağlantısı - gerçek zamanlı güncelleme
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-    const socket: Socket = io(baseURL, {
-      transports: ['websocket'],
-    })
+    // 🔥 Socket.IO bağlantısı - gerçek zamanlı güncelleme (sadece ana sayfada)
+    let socket: Socket | null = null
+    
+    if (isHomePage) {
+      const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      socket = io(baseURL, {
+        transports: ['websocket'],
+      })
 
-    socket.on('connect', () => {
-      console.log('Sidebar socket bağlı')
-    })
+      socket.on('connect', () => {
+        console.log('Sidebar socket bağlı')
+      })
 
-    socket.on('sidebarUpdate', (newData: any) => {
-      console.log('Sidebar güncellendi:', newData)
-      setMuseums(newData.museums || [])
-      setAuthors(newData.authors || [])
-      setTopLikedArticles(newData.topLikedArticles || [])
-    })
+      socket.on('sidebarUpdate', (newData: any) => {
+        console.log('Sidebar güncellendi:', newData)
+        setMuseums(transformMuseums(newData.museums || []))
+        setAuthors(transformAuthors(newData.authors || []))
+        setTopLikedArticles(transformArticles(newData.topLikedArticles || []))
+      })
 
-    socket.on('connect_error', (error) => {
-      console.error('Sidebar socket bağlantı hatası:', error)
-    })
+      socket.on('connect_error', (error) => {
+        console.error('Sidebar socket bağlantı hatası:', error)
+      })
+    }
 
     return () => {
-      socket.disconnect()
+      if (socket) {
+        socket.disconnect()
+      }
     }
-  }, [])
+  }, [isHomePage])
 
   return (
     <>
     <aside
-      className="hidden xl:flex flex-col fixed right-6 top-16 
-                 w-[380px] h-[calc(100vh-4rem)] overflow-y-auto 
-                 pl-6 pr-3 pt-6 pb-8
+      className={`hidden xl:flex flex-col sticky top-24 self-start
+                 w-full max-w-[420px] overflow-y-auto
+                 pl-4 pr-2 ${isFeed ? 'pt-0' : 'pt-4'} pb-8
                  border-l border-gray-200 dark:border-white/10
                  bg-white/40 dark:bg-[#0f0f0f]/40
                  backdrop-blur-md
-                 shadow-sm z-40
-                 text-[#111] dark:text-gray-100"
+                 shadow-sm text-[#111] dark:text-gray-100`}
     >
       {/* 🏛️ Ayın Müzeleri */}
       <div>
-        <h3 className="text-lg font-semibold mb-5 mt-0 text-[#ff7b00] tracking-wide">
+        {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
+        <h3 className="text-xl font-semibold mb-5 mt-0 text-[#ff7b00] tracking-wide">
           Ayın Müzeleri
         </h3>
         <div className="grid grid-cols-2 gap-4">
@@ -176,7 +261,8 @@ export default function RightSidebar() {
       {/* 🔥 En Çok Beğenilenler */}
       {topLikedArticles.length > 0 && (
         <div className="mt-10">
-          <h3 className="text-lg font-semibold mb-4 text-[#ff7b00] tracking-wide">
+          {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
+          <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
             En Çok Beğenilenler
           </h3>
           <div className="space-y-3">
@@ -221,7 +307,8 @@ export default function RightSidebar() {
 
       {/* ✍️ Ayın Yazarları */}
       <div className="mt-10">
-        <h3 className="text-lg font-semibold mb-4 text-[#ff7b00] tracking-wide">
+        {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
+        <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
           Ayın Yazarları
         </h3>
         <div className="space-y-4">
