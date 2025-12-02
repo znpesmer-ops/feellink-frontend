@@ -10,6 +10,7 @@ import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
 function ExploreContent() {
   const router = useRouter()
@@ -85,8 +86,8 @@ function ExploreContent() {
               onClick={() => setActiveFilter(filter)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
                 activeFilter === filter
-                  ? 'border-[#ff7b00] text-[#ff7b00] bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20'
-                  : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-[#ff7b00] hover:border-[#ff7b00]'
+                  ? 'border-brand-orange text-brand-orange bg-brand-orange/10 dark:bg-brand-orange/20'
+                  : 'border-brand-blue/30 text-gray-500 dark:text-gray-400 hover:text-brand-orange hover:border-brand-orange'
               }`}
             >
               {filter}
@@ -95,14 +96,14 @@ function ExploreContent() {
         </div>
 
         {/* Düzenli Grid View */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 p-3 md:p-6">
           {posts.map((post: any, index: number) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: index * 0.05 }}
-              className="relative group bg-white dark:bg-[#111] rounded-2xl border border-transparent dark:border-gray-800 hover:border-[#ff7b00]/60 transition-all duration-300 shadow-md hover:shadow-[#ff7b00]/10 cursor-pointer overflow-hidden hover:scale-[1.02]"
+              className="relative group bg-white/50 dark:bg-black/20 rounded-xl border border-brand-blue/30 hover:border-brand-orange transition-all duration-200 shadow-sm backdrop-blur-md cursor-pointer overflow-hidden hover:scale-[1.02] hover:shadow-brand-orange/30"
               onClick={() => setSelectedPostId(post.id)}
               onMouseEnter={() => setHoveredPostId(post.id)}
               onMouseLeave={() => setHoveredPostId(null)}
@@ -113,22 +114,32 @@ function ExploreContent() {
                   <>
                     {post.media[0].type === 'video' ? (
                       <video
-                        src={post.media[0].url}
+                        src={resolveImageUrl(post.media[0].url)}
                         className="w-full h-[380px] object-cover rounded-t-2xl"
                         muted
                       />
                     ) : (
-                      <img
-                        src={post.media[0].url}
-                        alt={post.caption || 'Post'}
-                        className="w-full h-[380px] object-cover rounded-t-2xl"
-                      />
+                      (() => {
+                        const imageUrl = resolveImageUrl(post.media[0].url)
+                        console.log('Explore IMAGE URL:', imageUrl, 'Original:', post.media[0].url)
+                        return (
+                          <img
+                            src={imageUrl}
+                            alt={post.caption || 'Post'}
+                            className="w-full h-[380px] object-cover rounded-t-2xl"
+                            onError={(e) => {
+                              console.error('Explore Image Error:', imageUrl)
+                              ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                            }}
+                          />
+                        )
+                      })()
                     )}
 
                     {/* Pinned Icon - Top Right */}
                     {post.pinnedComment && (
                       <div className="absolute top-3 right-3 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center z-30">
-                        <span className="text-[#ff7b00] text-xs">📌</span>
+                        <span className="text-brand-orange text-xs">📌</span>
                       </div>
                     )}
                   </>
@@ -137,12 +148,13 @@ function ExploreContent() {
 
               {/* 🔥 KRİTİK: Modern hover overlay - tüm kartı kaplayan blur + yorum gösterimi */}
               {/* Pinned comment varsa onu göster, yoksa stats göster */}
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-center items-center text-white p-4 text-center rounded-2xl z-20 pointer-events-none">
+              {/* Mobilde hover yok, sadece desktop'ta göster */}
+              <div className="hidden md:flex absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex-col justify-center items-center text-white p-4 text-center rounded-2xl z-20 pointer-events-none">
                 {post.pinnedComment ? (
                   <>
                     <div className="flex items-center gap-2 mb-2">
-                      <MessageCircle className="w-5 h-5 text-[#ff7b00]" />
-                      <span className="text-xs font-semibold text-[#ff7b00]">Sabitlenmiş Yorum</span>
+                      <MessageCircle className="w-5 h-5 text-brand-orange" />
+                      <span className="text-xs font-semibold text-brand-orange">Sabitlenmiş Yorum</span>
                     </div>
                     <p className="text-sm italic mb-3 leading-relaxed max-w-[90%]">
                       "{post.pinnedComment.text}"
@@ -152,12 +164,12 @@ function ExploreContent() {
                 ) : post._count.comments > 0 ? (
                   <>
                     <div className="flex items-center gap-2 mb-3">
-                      <MessageCircle className="w-5 h-5 text-[#ff7b00]" />
+                      <MessageCircle className="w-5 h-5 text-brand-orange" />
                       <span className="text-sm font-semibold">{post._count.comments} yorum</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-1.5">
-                        <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
+                        <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-brand-orange' : ''}`} />
                         <span>{post._count.likes}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -169,7 +181,7 @@ function ExploreContent() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-3">
-                      <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current text-[#ff7b00]' : ''}`} />
+                      <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current text-brand-orange' : ''}`} />
                       <span className="text-sm font-semibold">{post._count.likes} beğeni</span>
                     </div>
                     <p className="text-xs opacity-80">Henüz yorum yok</p>
@@ -178,20 +190,20 @@ function ExploreContent() {
               </div>
 
               {/* Card Content */}
-              <div className="p-4">
+              <div className="p-3 md:p-4">
                 {post.user && (
                   <div className="flex items-center gap-2 mb-2">
                     {post.user.avatar ? (
                       <img
-                        src={post.user.avatar}
+                        src={resolveImageUrl(post.user.avatar)}
                         alt={post.user.username}
                         className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-700"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/users/default.jpg'
+                          (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
                         }}
                       />
                     ) : (
-                      <div className="w-6 h-6 rounded-full bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 flex items-center justify-center text-[#ff7b00] font-bold text-xs">
+                      <div className="w-6 h-6 rounded-full bg-brand-orange/10 dark:bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-xs">
                         {post.user.username?.[0]?.toUpperCase() || 'U'}
                       </div>
                     )}
@@ -206,7 +218,7 @@ function ExploreContent() {
                     {post.caption}
                   </p>
                 )}
-                <button className="text-[#ff7b00] text-xs font-medium hover:underline">
+                <button className="text-brand-orange text-xs font-medium hover:text-brand-blue transition">
                   Gönderiyi Gör
                 </button>
               </div>
@@ -217,7 +229,7 @@ function ExploreContent() {
         {/* Load More */}
         {isFetchingNextPage && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#ff7b00]"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-orange"></div>
           </div>
         )}
 

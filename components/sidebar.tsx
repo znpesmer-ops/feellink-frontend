@@ -32,7 +32,12 @@ interface NavItem {
   highlight?: boolean
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  forceVisible?: boolean
+  onLinkClick?: () => void
+}
+
+export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}) {
   const pathname = usePathname()
   const { user, capabilities, accessToken, sidebar } = useAuthStore()
   const [unreadCount, setUnreadCount] = useState(0)
@@ -132,9 +137,9 @@ export function Sidebar() {
         highlight: hasUnreadMessages,
       },
       { key: 'profile', label: 'Profil', href: profileHref, icon: User, flag: 'showProfile' },
-      { key: 'analytics', label: 'Analizler', href: '/analytics', icon: BarChart3, flag: 'showAnalytics' },
+      { key: 'analytics', label: 'Analizler', href: '/analytics', icon: BarChart3 },
       { key: 'collections', label: 'Koleksiyonlar', href: '/collections', icon: Layers, flag: 'showCollections' },
-      { key: 'my-events', label: 'Etkinliklerim', href: '/my-events', icon: Calendar, flag: 'showEvents' },
+      { key: 'events', label: 'Etkinlikler', href: '/events', icon: Calendar }, // Her zaman görünür - flag yok
       { key: 'tickets', label: 'Biletlerim', href: '/my-tickets', icon: Ticket, flag: 'showTickets' },
       { key: 'notifications', label: 'Bildirimler', href: '/notifications', icon: Bell, badgeCount: unreadCount },
       { key: 'settings', label: 'Ayarlar', href: '/settings', icon: Settings },
@@ -170,11 +175,13 @@ export function Sidebar() {
     .filter(Boolean) as string[]
   const primaryRoleLabel = roleLabels[0] ?? ROLE_METADATA.art_lover.label
   return (
-    <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm">
+    <aside className={`${forceVisible ? 'flex' : 'hidden lg:flex'} ${forceVisible ? '' : 'fixed'} inset-y-0 left-0 w-64 bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm`}>
       <div className="flex flex-col h-full w-full">
-        <div className="flex items-center h-16 border-b border-gray-100 dark:border-gray-800 px-6">
-          <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">Feellink</p>
-        </div>
+        {!forceVisible && (
+          <div className="flex items-center h-16 border-b border-gray-100 dark:border-gray-800 px-6">
+            <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">Feellink</p>
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto px-4 py-6">
           <ul className="space-y-1">
@@ -193,21 +200,26 @@ export function Sidebar() {
                 <li key={item.key}>
                   <Link
                     href={item.href}
+                    onClick={onLinkClick}
                     className={`${baseClasses} ${
                       isActive
-                        ? 'bg-orange-500/10 text-orange-600 dark:text-orange-200'
+                        ? 'bg-brand-blue/10 text-brand-orange'
                         : inactiveClasses
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon 
+                      className={`h-4 w-4 ${
+                        item.key === 'notifications' && 
+                        item.badgeCount !== undefined && 
+                        item.badgeCount > 0 && 
+                        !isActive
+                          ? 'text-brand-orange animate-pulse'
+                          : ''
+                      }`}
+                    />
                     <span className="flex-1">{item.label}</span>
-                    {item.badgeCount !== undefined && item.badgeCount > 0 && (
-                      <span className="inline-flex items-center justify-center rounded-full bg-orange-500 text-white text-xs px-2 py-0.5">
-                        {item.badgeCount}
-                      </span>
-                    )}
                     {item.highlight && (
-                      <span className="inline-flex h-2 w-2 rounded-full bg-orange-500"></span>
+                      <span className="inline-flex h-2 w-2 rounded-full bg-brand-orange"></span>
                     )}
                   </Link>
                 </li>

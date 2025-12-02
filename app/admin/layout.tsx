@@ -23,13 +23,14 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { clearAuth, user, accessToken, refreshToken } = useAuthStore()
+  const { clearAuth, user, accessToken, refreshToken, refreshUser } = useAuthStore()
   const router = useRouter()
   const pathname = usePathname()
   const [isChecking, setIsChecking] = useState(true)
+  const [hasRefreshed, setHasRefreshed] = useState(false)
 
   useEffect(() => {
-    const checkAdmin = () => {
+    const checkAdmin = async () => {
       // Wait for store to hydrate from localStorage
       if (accessToken === undefined || user === undefined) {
         return // Still hydrating
@@ -41,8 +42,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return
       }
 
+      // If user is not admin, try refreshing user data once
+      if (user.isAdmin !== true && !hasRefreshed) {
+        try {
+          setHasRefreshed(true)
+          await refreshUser()
+          // Effect will re-run with updated user from store
+          return
+        } catch (error) {
+          console.error('Failed to refresh user:', error)
+        }
+      }
+
       if (user.isAdmin !== true) {
-        alert('Bu sayfaya erişim yetkiniz yok!')
+        alert('Bu sayfaya erişim yetkiniz yok! Lütfen çıkış yapıp tekrar giriş yapın.')
         router.push('/feed')
         return
       }
@@ -52,7 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
 
     checkAdmin()
-  }, [accessToken, user, router])
+  }, [accessToken, user, router, refreshUser, hasRefreshed])
 
   const handleLogout = async () => {
     try {

@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sun, Moon } from 'lucide-react'
-import api from '@/lib/api'
+import api, { getErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { getDashboardRouteFromUser } from '@/lib/role-utils'
 
@@ -116,6 +116,9 @@ export default function LoginPage() {
   const onLogin = async (data: LoginForm) => {
     try {
       setError('')
+      // Debug: API URL'ini console'a yazdır
+      console.log('API Base URL:', api.defaults.baseURL)
+      console.log('LOGIN URL:', api.defaults.baseURL + '/auth/login')
       const response = await api.post('/auth/login', {
         emailOrUsername: data.emailOrUsername.trim(),
         password: data.password,
@@ -133,8 +136,8 @@ export default function LoginPage() {
 
       handlePostAuthNavigation(loggedUser, caps ?? undefined, needsRoleSelection)
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Giriş başarısız'
-      setError(message)
+      console.error('Login error:', err)
+      setError(getErrorMessage(err))
     }
   }
 
@@ -155,7 +158,8 @@ export default function LoginPage() {
       setAuth(registeredUser, newAccessToken, newRefreshToken, caps ?? null, sidebar ?? null)
       handlePostAuthNavigation(registeredUser, caps ?? undefined, needsRoleSelection)
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Kayıt başarısız oldu')
+      console.error('Register error:', err)
+      setError(getErrorMessage(err))
     }
   }
 
@@ -356,6 +360,18 @@ export default function LoginPage() {
                     {loginForm.formState.errors.password.message}
                   </p>
                 )}
+                <div className="flex justify-end mt-2">
+                  <a
+                    href="/forgot-password"
+                    className={`text-xs transition-colors ${
+                      darkMode
+                        ? 'text-amber-400 hover:text-amber-300'
+                        : 'text-[#ff7a00] hover:text-[#ff9500]'
+                    }`}
+                  >
+                    Şifremi Unuttum?
+                  </a>
+                </div>
               </div>
 
               <button

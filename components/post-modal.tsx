@@ -1,17 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin } from 'lucide-react'
+import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon } from 'lucide-react'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from './UserBadge'
 import { ProRoleBadge } from './ProRoleBadge'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import Slider from 'react-slick'
 
 const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
   ssr: false,
@@ -79,6 +81,22 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   const [pingAnimating, setPingAnimating] = useState(false)
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ commentId: string; x: number; y: number } | null>(null)
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const sliderRef = useRef<Slider | null>(null)
+
+  // Modal açıkken body'ye class ekle (arka plan UI elementlerini gizlemek için)
+  useEffect(() => {
+    if (postId) {
+      document.body.classList.add('modal-open')
+    } else {
+      document.body.classList.remove('modal-open')
+    }
+
+    // Cleanup: Modal kapandığında class'ı kaldır
+    return () => {
+      document.body.classList.remove('modal-open')
+    }
+  }, [postId])
 
   // Fetch post details
   const { data: post, isLoading } = useQuery<Post>({
@@ -289,7 +307,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   if (isLoading || !post) {
     return (
       <div
-        className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 p-4"
+        className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-[200] p-4"
         onClick={onClose}
       >
         <div
@@ -297,18 +315,33 @@ export function PostModal({ postId, onClose }: PostModalProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-center w-full h-96">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ff7b00]"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange"></div>
           </div>
         </div>
       </div>
     )
   }
 
-  const firstMedia = post.media && post.media.length > 0 ? post.media[0] : null
+  const mediaArray = post.media && post.media.length > 0 ? post.media : []
+  const hasMultipleMedia = mediaArray.length > 1
+
+  // Slider settings
+  const sliderSettings = {
+    dots: hasMultipleMedia,
+    infinite: false,
+    speed: 300,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    arrows: hasMultipleMedia,
+    swipe: hasMultipleMedia,
+    touchMove: hasMultipleMedia,
+    beforeChange: (current: number, next: number) => setCurrentSlide(next),
+    className: 'slick-custom',
+  }
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-[200] p-4"
       onClick={onClose}
     >
       <div
@@ -316,24 +349,99 @@ export function PostModal({ postId, onClose }: PostModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left side - Media */}
-        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center aspect-square md:aspect-auto md:min-h-[600px]">
-          {firstMedia ? (
-            firstMedia.type === 'video' ? (
-              <video
-                src={firstMedia.url}
-                className="w-full h-full object-contain"
-                controls
-                autoPlay
-              />
+        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center aspect-square md:aspect-auto md:min-h-[600px] relative w-full overflow-hidden [&_.slick-slider]:pointer-events-auto">
+          {mediaArray.length > 0 ? (
+            hasMultipleMedia ? (
+              /* Çoklu görsel - Slider */
+              <Slider ref={sliderRef} {...sliderSettings} className="w-full h-full">
+                {mediaArray.map((media, index) => (
+                  <div key={media.id || index} className="relative w-full h-full flex items-center justify-center pointer-events-auto">
+                    {media.type === 'video' ? (
+                      <video
+                        src={resolveImageUrl(media.url)}
+                        className="w-full h-full max-h-[90vh] object-contain"
+                        controls
+                        autoPlay={index === 0}
+                        onError={(e) => {
+                          console.error('PostModal Video Error:', resolveImageUrl(media.url))
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={resolveImageUrl(media.url)}
+                        alt={post.caption || `Post ${index + 1}`}
+                        className="w-full h-full max-h-[90vh] object-contain"
+                        onError={(e) => {
+                          console.error('PostModal Media Error:', resolveImageUrl(media.url))
+                          ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </Slider>
             ) : (
-              <img
-                src={firstMedia.url}
-                alt={post.caption || 'Post'}
-                className="w-full h-full object-contain"
-              />
+              /* Tek görsel - Slider yok */
+              mediaArray[0].type === 'video' ? (
+                <video
+                  src={resolveImageUrl(mediaArray[0].url)}
+                  className="w-full h-full object-contain"
+                  controls
+                  autoPlay
+                  onError={(e) => {
+                    console.error('PostModal Video Error:', resolveImageUrl(mediaArray[0].url))
+                  }}
+                />
+              ) : (
+                <img
+                  src={resolveImageUrl(mediaArray[0].url)}
+                  alt={post.caption || 'Post'}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    console.error('PostModal Media Error:', resolveImageUrl(mediaArray[0].url))
+                    ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                  }}
+                />
+              )
             )
           ) : (
             <div className="text-gray-400">No media available</div>
+          )}
+          
+          {/* Thumbnail önizlemeleri - Çoklu görsel varsa göster */}
+          {hasMultipleMedia && (
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 justify-center overflow-x-auto pb-2 z-20">
+              {mediaArray.map((media, index) => (
+                <button
+                  key={media.id || index}
+                  type="button"
+                  onClick={() => {
+                    if (sliderRef.current) {
+                      sliderRef.current.slickGoTo(index)
+                    }
+                  }}
+                  className={`flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition-colors pointer-events-auto ${
+                    currentSlide === index
+                      ? 'border-white ring-2 ring-brand-orange/50'
+                      : 'border-white/50 hover:border-white/80 opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  {media.type === 'video' ? (
+                    <video
+                      src={resolveImageUrl(media.url)}
+                      className="w-full h-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <img
+                      src={resolveImageUrl(media.url)}
+                      alt={`Thumbnail ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -350,9 +458,13 @@ export function PostModal({ postId, onClose }: PostModalProps) {
             >
               {post.user.avatar ? (
                 <img
-                  src={post.user.avatar}
+                  src={resolveImageUrl(post.user.avatar)}
                   alt={post.user.username}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error('PostModal Post User Avatar Error:', resolveImageUrl(post.user.avatar))
+                    ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                  }}
                 />
               ) : (
                 <span className="text-gray-500 dark:text-gray-300 text-sm">
@@ -393,7 +505,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
               <button
                 onClick={handleLike}
                 disabled={likeMutation.isPending}
-                className={`relative flex items-center gap-1 hover:text-[#ff7b00] transition-colors ${
+                className={`relative flex items-center gap-1 hover:text-brand-orange transition-colors ${
                   animateLike ? 'scale-125' : 'scale-100'
                 }`}
               >
@@ -401,31 +513,31 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                   size={24}
                   className={`transition-all duration-300 ${
                     post.isLiked
-                      ? 'fill-[#ff7b00] text-[#ff7b00]'
+                      ? 'fill-brand-orange text-brand-orange'
                       : 'text-gray-700 dark:text-gray-300'
                   }`}
                 />
                 {(animateLike || pingAnimating) && (
-                  <span className="absolute inset-0 animate-ping bg-[#ff7b00]/40 rounded-full"></span>
+                  <span className="absolute inset-0 animate-ping bg-brand-orange/40 rounded-full"></span>
                 )}
                 {post._count.likes > 0 && (
                   <span className="text-sm font-medium">{post._count.likes}</span>
                 )}
               </button>
-              <button className="hover:text-[#ff7b00] transition-colors">
+              <button className="hover:text-brand-orange transition-colors">
                 <MessageCircle size={24} className="text-gray-700 dark:text-gray-300" />
               </button>
             </div>
             <button
               onClick={handleSave}
               disabled={saveMutation.isPending}
-              className="hover:text-[#ff7b00] transition-colors"
+              className="hover:text-brand-orange transition-colors"
             >
               <Bookmark
                 size={24}
                 className={`transition-all duration-300 ${
                   post.isSaved
-                    ? 'fill-[#ff7b00] text-[#ff7b00]'
+                    ? 'fill-brand-orange text-brand-orange'
                     : 'text-gray-700 dark:text-gray-300'
                 }`}
               />
@@ -438,88 +550,137 @@ export function PostModal({ postId, onClose }: PostModalProps) {
             {/* Comments */}
             {post.comments && post.comments.length > 0 ? (
               <>
-                {post.comments.map((comment: any) => (
-                  <div key={comment.id}>
-                    {/* Ana yorum */}
-                    <div
-                      className="flex gap-2 items-start group relative"
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        // Sadece gönderi sahibi pin yapabilir
-                        if (user?.id === post.user.id) {
-                          setContextMenu({
-                            commentId: comment.id,
-                            x: e.pageX,
-                            y: e.pageY,
-                          })
-                        }
-                      }}
-                    >
-                      <Link
-                        href={`/profile/${comment.user.username}`}
-                        className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                {(() => {
+                  // Sabitlenen yorumlar önce, sonra diğerleri
+                  const sortedComments = [
+                    ...post.comments.filter((c: any) => c.isPinned),
+                    ...post.comments.filter((c: any) => !c.isPinned)
+                  ];
+                  
+                  return sortedComments.map((comment: any) => {
+                    const isPinned = !!comment.isPinned;
+                    
+                    return (
+                    <div key={comment.id}>
+                      {/* Ana yorum */}
+                      <div
+                        className="flex gap-2 items-start group relative"
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          // Sadece gönderi sahibi pin yapabilir
+                          if (user?.id === post.user.id) {
+                            setContextMenu({
+                              commentId: comment.id,
+                              x: e.pageX,
+                              y: e.pageY,
+                            })
+                          }
+                        }}
                       >
-                        {comment.user.avatar ? (
-                          <img
-                            src={comment.user.avatar}
-                            alt={comment.user.username}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-300 text-xs">
-                            {comment.user.username[0].toUpperCase()}
-                          </span>
+                        {/* Sol taraf avatar - sadece normal yorumlarda */}
+                        {!isPinned && (
+                          <Link
+                            href={`/profile/${comment.user.username}`}
+                            className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                          >
+                            {comment.user.avatar ? (
+                              <img
+                                src={resolveImageUrl(comment.user.avatar)}
+                                alt={comment.user.username}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  console.error('PostModal Comment Avatar Error:', resolveImageUrl(comment.user.avatar))
+                                  ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                                }}
+                              />
+                            ) : (
+                              <span className="text-gray-500 dark:text-gray-300 text-xs">
+                                {comment.user.username[0].toUpperCase()}
+                              </span>
+                            )}
+                          </Link>
                         )}
-                      </Link>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1">
+                        
+                        <div className="flex-1 min-w-0">
+                          {/* Sabitlenen Yorum Banner'ı */}
+                          {isPinned && (
+                            <div className="flex items-center gap-2 mb-2 text-amber-500 dark:text-amber-400 font-medium">
+                              <Pin size={16} className="fill-amber-500 dark:fill-amber-400" />
+                              <span className="text-xs md:text-sm">Sabitlenen Yorum</span>
+                            </div>
+                          )}
+                          
+                          {/* Kullanıcı Bilgisi - Sabitlenen yorumlarda banner altında, normal yorumlarda üstte */}
+                          <div className="flex items-center gap-2 mb-2">
+                            {isPinned && (
                               <Link
                                 href={`/profile/${comment.user.username}`}
-                                className="text-sm text-gray-200 dark:text-gray-100 font-medium hover:opacity-80 transition cursor-pointer inline-block"
+                                className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
                               >
-                                {comment.user.username}
+                                {comment.user.avatar ? (
+                                  <img
+                                    src={resolveImageUrl(comment.user.avatar)}
+                                    alt={comment.user.username}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-gray-500 dark:text-gray-300 text-xs">
+                                    {comment.user.username[0].toUpperCase()}
+                                  </span>
+                                )}
                               </Link>
-                              <UserBadge role={comment.user.role} />
-                              <ProRoleBadge roles={(comment.user as any).roles} plan={(comment.user as any).plan} />
-                              {comment.isPinned && (
-                                <Pin size={12} className="text-[#ff7b00] fill-[#ff7b00]" />
-                              )}
+                            )}
+                            <Link
+                              href={`/profile/${comment.user.username}`}
+                              className={`${isPinned ? 'text-sm text-gray-300 dark:text-gray-200' : 'text-sm text-gray-200 dark:text-gray-100'} font-medium hover:opacity-80 transition cursor-pointer inline-block`}
+                            >
+                              {isPinned ? `@${comment.user.username}` : comment.user.username}
+                            </Link>
+                            <UserBadge role={comment.user.role} />
+                            <ProRoleBadge roles={(comment.user as any).roles} plan={(comment.user as any).plan} />
+                          </div>
+                          
+                          {/* Yorum metni */}
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <span className="text-sm text-gray-400 dark:text-gray-400 block">
+                                {comment.content}
+                              </span>
                             </div>
-                            <span className="text-sm text-gray-400 dark:text-gray-400 ml-2">
-                              {comment.content}
-                            </span>
+                            {/* Beğeni butonu - her zaman görünür */}
+                            <div className="flex-shrink-0">
+                              <CommentLikeButton
+                                commentId={comment.id}
+                                initialLiked={comment.isLikedByCurrentUser || false}
+                                initialCount={comment.likesCount || 0}
+                                type="post"
+                              />
+                            </div>
                           </div>
-                          {/* Beğeni butonu - her zaman görünür */}
-                          <div className="flex-shrink-0">
-                            <CommentLikeButton
-                              commentId={comment.id}
-                              initialLiked={comment.isLikedByCurrentUser || false}
-                              initialCount={comment.likesCount || 0}
-                              type="post"
-                            />
+                          
+                          {/* Alt satır - tarih ve yanıtla */}
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <button
+                              onClick={() => {
+                                setReplyingTo(comment.id)
+                                // Input'a focus
+                                setTimeout(() => {
+                                  const input = document.querySelector('input[placeholder*="Yorum"]') as HTMLInputElement
+                                  input?.focus()
+                                }, 100)
+                              }}
+                              className="text-xs text-brand-orange hover:underline font-medium transition-colors"
+                            >
+                              Yanıtla
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 mt-1">
-                          <p className="text-xs text-gray-400 dark:text-gray-500">
-                            {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          <button
-                            onClick={() => {
-                              setReplyingTo(comment.id)
-                              // Input'a focus
-                              setTimeout(() => {
-                                const input = document.querySelector('input[placeholder*="Yorum"]') as HTMLInputElement
-                                input?.focus()
-                              }, 100)
-                            }}
-                            className="text-xs text-[#ff7b00] hover:underline font-medium transition-colors"
-                          >
-                            Yanıtla
-                          </button>
-                        </div>
-                      </div>
                       
                       {/* Context Menu - Sadece gönderi sahibine göster */}
                       {contextMenu?.commentId === comment.id && user?.id === post.user.id && (
@@ -536,8 +697,8 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                             onClick={() => handlePinComment(comment.id, comment.isPinned || false)}
                             className="w-full text-left px-4 py-2.5 hover:bg-gray-800 dark:hover:bg-gray-700 rounded-t-lg flex items-center gap-2 transition-colors"
                           >
-                            <Pin size={14} className={comment.isPinned ? 'text-[#ff7b00] fill-[#ff7b00]' : 'text-gray-400'} />
-                            <span className={comment.isPinned ? 'text-[#ff7b00]' : ''}>
+                            <Pin size={14} className={comment.isPinned ? 'text-brand-orange fill-brand-orange' : 'text-gray-400'} />
+                            <span className={comment.isPinned ? 'text-brand-orange' : ''}>
                               {comment.isPinned ? 'Sabitlemeyi Kaldır' : 'Yorumu Sabitle'}
                             </span>
                           </button>
@@ -569,9 +730,13 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                               >
                                 {reply.user.avatar ? (
                                   <img
-                                    src={reply.user.avatar}
+                                    src={resolveImageUrl(reply.user.avatar)}
                                     alt={reply.user.username}
                                     className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      console.error('PostModal Reply Avatar Error:', resolveImageUrl(reply.user.avatar))
+                                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                                    }}
                                   />
                                 ) : (
                                   <span className="text-gray-500 dark:text-gray-300 text-xs">
@@ -615,7 +780,9 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                       </div>
                     )}
                   </div>
-                ))}
+                    )
+                  })
+                })()}
               </>
             ) : (
               <p className="text-center text-gray-500 dark:text-gray-400 text-sm mt-10">Henüz yorum yok.</p>
@@ -627,7 +794,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
             {/* Yanıt veriliyor etiketi */}
             {replyingTo && (
               <div className="px-4 pt-3 pb-2 flex items-center gap-2">
-                <span className="text-xs text-[#ff7b00] bg-orange-50 dark:bg-orange-500/10 px-2 py-1 rounded-lg font-medium">
+                <span className="text-xs text-brand-orange bg-brand-blue/10 dark:bg-brand-blue/20 px-2 py-1 rounded-lg font-medium">
                   Yanıt veriliyor...
                 </span>
                 <button
@@ -650,7 +817,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
               <button
                 type="submit"
                 disabled={!commentText.trim() || isPostingComment}
-                className="ml-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white rounded-full p-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-full p-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPostingComment ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

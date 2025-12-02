@@ -48,6 +48,90 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
+/* React Slick Carousel Özelleştirmeleri - Instagram benzeri */
+/* KRİTİK: Slider'ın tüm ekranı kaplamasını ve tıklamaları engellemesini önle */
+.slick-slider {
+  position: relative !important;
+  max-width: 100% !important;
+  overflow: visible !important;
+  z-index: 10 !important;
+}
+
+.slick-list,
+.slick-track {
+  pointer-events: auto !important;
+}
+
+.slick-slide {
+  pointer-events: none; /* slide container pointer block */
+}
+
+.slick-slide > div {
+  pointer-events: auto !important;
+}
+
+/* Carousel özelleştirmeleri */
+.slick-custom .slick-prev,
+.slick-custom .slick-next {
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.5) !important;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  pointer-events: auto !important;
+}
+
+.slick-custom .slick-prev:hover,
+.slick-custom .slick-next:hover {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.slick-custom .slick-prev {
+  left: 15px;
+}
+
+.slick-custom .slick-next {
+  right: 15px;
+}
+
+.slick-custom .slick-prev:before,
+.slick-custom .slick-next:before {
+  font-size: 20px;
+  color: white;
+  opacity: 1;
+}
+
+.slick-custom .slick-dots {
+  bottom: 15px;
+  pointer-events: auto !important;
+}
+
+.slick-custom .slick-dots li {
+  pointer-events: auto !important;
+}
+
+.slick-custom .slick-dots li button:before {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  opacity: 1;
+}
+
+.slick-custom .slick-dots li.slick-active button:before {
+  color: white;
+  opacity: 1;
+}
+
+.dark .slick-custom .slick-prev,
+.dark .slick-custom .slick-next {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.dark .slick-custom .slick-prev:hover,
+.dark .slick-custom .slick-next:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
 /* Login sayfası için homojen arka plan */
 html.dark,
 html.dark body {
@@ -90,8 +174,19 @@ html:not(.dark) body {
   animation: fade-in 0.2s ease-out;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .animate-fadeIn {
-  animation: fade-in 0.2s ease-out;
+  animation: fadeIn 0.25s ease-out;
 }
 
 .slide-in-from-bottom-4 {
@@ -311,5 +406,37 @@ a:hover {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Modal açıkken arka plan UI elementlerini gizle (z-index çakışmasını önle) */
+/* Sadece floating butonlar, menüler ve yüksek z-index'li action elementler gizlenir */
+/* Modal'ın z-index'i z-[200] olduğu için daha düşük z-index'li elementleri hedef alıyoruz */
+
+/* z-index 50-120 arası absolute/fixed elementler (QR butonlar, menüler vb.) - Modal hariç */
+.modal-open [class*="z-[50]"]:not([class*="z-[200]"]),
+.modal-open [class*="z-[60]"]:not([class*="z-[200]"]),
+.modal-open [class*="z-[80]"]:not([class*="z-[200]"]),
+.modal-open [class*="z-[85]"]:not([class*="z-[200]"]),
+.modal-open [class*="z-[100]"]:not([class*="z-[200]"]),
+.modal-open [class*="z-[120]"]:not([class*="z-[200]"]) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Header ve navbar gibi ana UI elementleri görünür kalmalı (onlar da z-50 ama header/nav tag'i olduğu için özel) */
+.modal-open header[class*="z-50"],
+.modal-open nav[class*="z-50"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
+/* Modal'ın kendisi (z-[200]) ve içindeki tüm elementler görünür kalmalı */
+.modal-open [class*="z-[200]"],
+.modal-open [class*="z-[200]"] * {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
 }
 

@@ -6,7 +6,8 @@ import { Sparkles, PenTool, X, BookOpen, Heart } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { io, Socket } from 'socket.io-client'
-import api from '@/lib/api'
+import api, { getApiBaseURL } from '@/lib/api'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
 type Author = {
   id: number
@@ -181,7 +182,7 @@ export default function RightSidebar() {
     let socket: Socket | null = null
     
     if (isHomePage) {
-      const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      const baseURL = getApiBaseURL()
       socket = io(baseURL, {
         transports: ['websocket'],
       })
@@ -212,18 +213,20 @@ export default function RightSidebar() {
   return (
     <>
     <aside
-      className={`hidden xl:flex flex-col sticky top-24 self-start
+      className={`hidden lg:flex flex-col ${isFeed ? 'sticky top-0' : 'sticky top-24'} self-start
                  w-full max-w-[420px] overflow-y-auto
-                 pl-4 pr-2 ${isFeed ? 'pt-0' : 'pt-4'} pb-8
+                 pl-4 pr-0 pb-8
                  border-l border-gray-200 dark:border-white/10
                  bg-white/40 dark:bg-[#0f0f0f]/40
                  backdrop-blur-md
                  shadow-sm text-[#111] dark:text-gray-100`}
     >
-      {/* 🏛️ Ayın Müzeleri */}
-      <div>
-        {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-        <h3 className="text-xl font-semibold mb-5 mt-0 text-[#ff7b00] tracking-wide">
+      {/* İçerik wrapper - feed için üstten boşluk (header border'dan sonra güzel görünen boşluk) */}
+      <div className={`w-full flex flex-col ${isFeed ? 'mt-5' : 'pt-4'}`}>
+        {/* 🏛️ Ayın Müzeleri - En üstte, en sağda */}
+        <div className="w-full">
+          {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
+          <h3 className="text-xl font-semibold mb-5 mt-0 text-[#ff7b00] tracking-wide">
           Ayın Müzeleri
         </h3>
         <div className="grid grid-cols-2 gap-4">
@@ -237,7 +240,7 @@ export default function RightSidebar() {
               <div className="relative w-full h-[110px] overflow-hidden z-10">
                 {!imageErrors[`museum-${m.id}`] ? (
                   <img
-                    src={m.image}
+                    src={resolveImageUrl(m.image)}
                     alt={m.name}
                     className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200 relative z-10"
                     onError={() => {
@@ -258,9 +261,9 @@ export default function RightSidebar() {
         </div>
       </div>
 
-      {/* 🔥 En Çok Beğenilenler */}
-      {topLikedArticles.length > 0 && (
-        <div className="mt-10">
+        {/* 🔥 En Çok Beğenilenler */}
+        {topLikedArticles.length > 0 && (
+          <div className="mt-10">
           {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
           <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
             En Çok Beğenilenler
@@ -301,12 +304,12 @@ export default function RightSidebar() {
                 </div>
               </Link>
             ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ✍️ Ayın Yazarları */}
-      <div className="mt-10">
+        {/* ✍️ Ayın Yazarları */}
+        <div className="mt-10">
         {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
         <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
           Ayın Yazarları
@@ -326,7 +329,7 @@ export default function RightSidebar() {
               <div className="relative w-[42px] h-[42px] rounded-full overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
                 {!imageErrors[`author-${a.id}`] ? (
                   <img
-                    src={a.avatar}
+                    src={resolveImageUrl(a.avatar)}
                     alt={a.name}
                     className="object-cover w-full h-full"
                     onError={() => {
@@ -354,23 +357,24 @@ export default function RightSidebar() {
             </div>
           ))}
         </div>
-      </div>
+        </div>
 
-      {/* 📚 Tüm Yayınlanan Yazıları Gör Butonu - Modern Tasarım */}
-      <div className="mt-10 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-center">
-        <Link
-          href="/articles/published"
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 
-                     bg-[#ff7b00] text-white font-medium text-sm rounded-xl 
-                     shadow-sm hover:bg-[#e36f00] hover:shadow-md 
-                     transition-all duration-300 ease-out
-                     dark:bg-[#ff7b00]/90 dark:hover:bg-[#ff7b00] 
-                     focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50
-                     group"
-        >
-          <span>Tüm Yayınlanan Yazıları Gör</span>
-          <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-        </Link>
+        {/* 📚 Tüm Yayınlanan Yazıları Gör Butonu - Modern Tasarım */}
+        <div className="mt-10 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-center">
+          <Link
+            href="/articles/published"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 
+                       bg-[#ff7b00] text-white font-medium text-sm rounded-xl 
+                       shadow-sm hover:bg-[#e36f00] hover:shadow-md 
+                       transition-all duration-300 ease-out
+                       dark:bg-[#ff7b00]/90 dark:hover:bg-[#ff7b00] 
+                       focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50
+                       group"
+          >
+            <span>Tüm Yayınlanan Yazıları Gör</span>
+            <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+          </Link>
+        </div>
       </div>
     </aside>
 
@@ -410,7 +414,7 @@ export default function RightSidebar() {
                         border-2 border-orange-400/60 dark:border-orange-500/60">
             {!imageErrors[`author-modal-${selectedWriter.id}`] ? (
               <Image
-                src={selectedWriter.avatar}
+                src={resolveImageUrl(selectedWriter.avatar) || DEFAULT_AUTHOR_AVATAR}
                 alt={selectedWriter.name}
                 fill
                 className="object-cover"

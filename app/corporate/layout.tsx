@@ -21,9 +21,14 @@ export default function CorporateLayout({
     }
 
     // Not logged in
-    if (!accessToken || !user || !capabilities) {
+    if (!accessToken || !user) {
       router.push('/login')
       return
+    }
+
+    // Capabilities not loaded yet - wait
+    if (!capabilities) {
+      return // Still loading capabilities
     }
 
     // Not corporate - redirect to feed
@@ -34,7 +39,7 @@ export default function CorporateLayout({
 
     // Is corporate, can proceed
     setIsChecking(false)
-  }, [accessToken, user, router])
+  }, [accessToken, user, capabilities, router])
 
   // Show loading while checking
   if (isChecking) {

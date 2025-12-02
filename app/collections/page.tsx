@@ -113,9 +113,9 @@ export default function CollectionsPage() {
         {/* Üst başlık */}
         {/* 🔥 KRİTİK: Profesyonel header layout - başlık ve buton aynı satırda */}
         <div className="mb-6">
-          {/* Başlık ve buton aynı satırda */}
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold text-[#ff7b00]">
+          {/* Başlık ve buton aynı satırda - mobilde alt alta */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-[#ff7b00]">
               Koleksiyonlar
             </h1>
             {canCreateCollection && (
@@ -180,7 +180,7 @@ export default function CollectionsPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
             {filteredCollections.map((col) => (
               <Link
                 key={col.id}
@@ -224,7 +224,7 @@ export default function CollectionsPage() {
                     )}
                     <span className="truncate flex items-center gap-1">
                       @{col.owner?.username || "bilinmeyen"}
-                      <ProRoleBadge roles={col.owner?.roles as string[]} plan={col.owner?.plan as string} />
+                      <ProRoleBadge roles={col.owner?.roles as string[]} plan={undefined} />
                     </span>
                     <span>•</span>
                     <span className="text-xs">
@@ -236,8 +236,8 @@ export default function CollectionsPage() {
                   </div>
                 </div>
 
-                {/* Hover Overlay */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-300 flex justify-center items-center text-white text-sm backdrop-blur-sm rounded-xl">
+                {/* Hover Overlay - sadece desktop'ta */}
+                <div className="hidden md:flex absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-300 justify-center items-center text-white text-sm backdrop-blur-sm rounded-xl">
                   <span className="font-semibold">Koleksiyonu Gör</span>
                 </div>
               </Link>

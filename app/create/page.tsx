@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
-import api from '@/lib/api'
+import api, { getErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 
@@ -59,6 +59,9 @@ function CreateContent() {
         formData.append('location', location)
       }
 
+      // Post type ekle - normal gönderi (artwork değil)
+      formData.append('type', 'post')
+
       // Axios automatically sets Content-Type for FormData
       const response = await api.post('/posts/create', formData)
       
@@ -72,13 +75,12 @@ function CreateContent() {
       const responseData = error?.response?.data
       const nested = typeof responseData?.message === 'object' ? responseData.message : null
       const errorCode = nested?.code ?? responseData?.code
-      const errorMessage =
-        nested?.message ?? (typeof responseData?.message === 'string' ? responseData.message : responseData?.error)
 
       if (errorCode === 'LIMIT_REACHED') {
+        const errorMessage = nested?.message ?? (typeof responseData?.message === 'string' ? responseData.message : responseData?.error)
         setError(errorMessage ?? 'Bu ayki eser limitinize ulaştınız.')
       } else {
-        setError(errorMessage || 'Gönderi oluşturulurken bir hata oluştu')
+        setError(getErrorMessage(error))
       }
     },
     onSettled: () => {

@@ -15,7 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr" suppressHydrationWarning>
-      <body className="font-sans antialiased bg-white dark:bg-gray-900 text-[#1f1f1f] dark:text-gray-100 transition-colors">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
+      <body className="font-sans antialiased bg-white dark:bg-gray-950 text-[#1f1f1f] dark:text-gray-100 transition-colors min-h-screen">
         <Providers>
           <LayoutConditional>{children}</LayoutConditional>
         </Providers>

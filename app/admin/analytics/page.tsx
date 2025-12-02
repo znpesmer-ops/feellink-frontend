@@ -243,7 +243,6 @@ export default function AdminAnalyticsPage() {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                 }}
-                className="dark:bg-gray-800 dark:border-gray-700"
               />
               <Legend />
               <Area
@@ -287,7 +286,6 @@ export default function AdminAnalyticsPage() {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                 }}
-                className="dark:bg-gray-800 dark:border-gray-700"
               />
               <Legend />
               <Line

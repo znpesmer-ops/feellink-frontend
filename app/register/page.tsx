@@ -5,16 +5,19 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import api from '@/lib/api'
+import api, { getErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { getDashboardRouteFromUser } from '@/lib/role-utils'
 
 const unicodeEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
 
 const registerSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  email: z.string().regex(unicodeEmailRegex, 'Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  username: z.string().min(3, 'Kullanıcı adı en az 3 karakter olmalıdır'),
+  email: z.string().regex(unicodeEmailRegex, 'Lütfen geçerli bir e-posta adresi girin'),
+  password: z
+    .string()
+    .min(8, 'Şifre en az 8 karakter olmalıdır')
+    .regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, 'Şifre en az bir harf ve bir rakam içermelidir'),
   fullName: z.string().optional(),
 })
 
@@ -78,7 +81,7 @@ export default function RegisterPage() {
         router.push(route)
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed')
+      setError(getErrorMessage(err))
     }
   }
 
@@ -126,7 +129,7 @@ export default function RegisterPage() {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded">
+            <div className="mb-4 rounded-xl bg-red-900/60 dark:bg-red-900/40 border border-red-500/60 dark:border-red-500/40 px-4 py-3 text-sm text-red-100 dark:text-red-200">
               {error}
             </div>
           )}

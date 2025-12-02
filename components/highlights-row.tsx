@@ -31,14 +31,14 @@ export default function HighlightsRow() {
   ]
 
   return (
-    <section className="w-full">
-      <h2 className="text-xl font-semibold text-[#111] dark:text-white mb-6 tracking-wide">Ayın Öne Çıkanları</h2>
+    <section className="w-full mt-4 md:mt-6 lg:mt-10">
+      <h2 className="text-lg md:text-xl font-semibold text-[#111] dark:text-white mb-4 md:mb-6 tracking-wide">Ayın Öne Çıkanları</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {highlights.map((item) => (
           <div
             key={item.id}
-            className="rounded-2xl bg-white/70 dark:bg-[#141414]/60 border border-gray-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 backdrop-blur-lg p-5 min-h-[160px] flex flex-col gap-3"
+            className="w-full rounded-2xl bg-white/70 dark:bg-[#141414]/60 border border-gray-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 backdrop-blur-lg p-4 md:p-5 min-h-[140px] md:min-h-[160px] flex flex-col gap-3"
           >
             <div className="text-orange-500 dark:text-orange-300">{item.icon}</div>
             <div className="flex flex-col min-w-0">

@@ -1,11 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { Calendar, Ticket, Users, TrendingUp, Plus } from 'lucide-react'
 import Link from 'next/link'
+import CreateEventModal from '@/components/events/CreateEventModal'
 
 export default function CorporateDashboard() {
   const { user } = useAuthStore()
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const stats = [
     { label: 'Toplam Etkinlik', value: '0', icon: Calendar, color: 'text-blue-500' },
@@ -27,13 +30,13 @@ export default function CorporateDashboard() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Link
-            href="/corporate/events/new"
+          <button
+            onClick={() => setShowCreateModal(true)}
             className="px-4 py-2 bg-[#ff7b00] hover:bg-[#ff9500] text-white rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Yeni Etkinlik
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -62,9 +65,9 @@ export default function CorporateDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link
-          href="/corporate/events/new"
-          className="p-6 rounded-xl dark:bg-[#111] bg-white border dark:border-[#1f1f1f] border-gray-200 hover:border-[#ff7b00] transition-colors"
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="p-6 rounded-xl dark:bg-[#111] bg-white border dark:border-[#1f1f1f] border-gray-200 hover:border-[#ff7b00] transition-colors text-left w-full"
         >
           <Calendar className="w-8 h-8 text-[#ff7b00] mb-3" />
           <h3 className="text-lg font-semibold dark:text-white text-gray-900 mb-1">
@@ -73,7 +76,7 @@ export default function CorporateDashboard() {
           <p className="text-sm dark:text-gray-400 text-gray-600">
             Yeni bir etkinlik oluştur ve bilet satışına başla
           </p>
-        </Link>
+        </button>
 
         <Link
           href="/corporate/tickets/new"
@@ -98,9 +101,27 @@ export default function CorporateDashboard() {
           Henüz etkinlik oluşturmadınız. İlk etkinliğinizi oluşturmak için yukarıdaki butona tıklayın.
         </p>
       </div>
+
+      {/* Etkinlik Oluşturma Modal */}
+      <CreateEventModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={() => {
+          // Sayfayı yenile veya etkinlik listesini güncelle
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
 
 

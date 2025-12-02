@@ -103,7 +103,7 @@ export function ApplyModal({ jobListingId, open, onClose, onSuccess }: ApplyModa
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-semibold rounded-xl bg-[#ff7b00] text-white hover:bg-[#e96f00] transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-[#FF8A00] text-white shadow-sm hover:bg-[#e67a00] transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
               disabled={loading}
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -115,4 +115,14 @@ export function ApplyModal({ jobListingId, open, onClose, onSuccess }: ApplyModa
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
 

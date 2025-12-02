@@ -401,14 +401,6 @@ export default function ArticleDetailPage() {
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white leading-tight flex-1">
           {article.title}
         </h1>
-        {user && article.author.id === user.id && (
-          <button
-            onClick={() => router.push(`/articles/edit/${article.id}`)}
-            className="text-sm text-[#ff7b00] hover:text-[#e36f00] font-medium px-4 py-2 border border-[#ff7b00] rounded-xl hover:bg-[#ff7b00]/10 dark:hover:bg-[#ff7b00]/20 transition-all whitespace-nowrap flex-shrink-0"
-          >
-            ✏️ Yazıyı Düzenle
-          </button>
-        )}
       </div>
 
       {/* Yazar Bilgisi */}

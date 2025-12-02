@@ -115,7 +115,7 @@ export default function FellinkJobCreatorPage() {
   if (!hydrated || !user || !capabilities) {
     return (
       <div className="flex h-full min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[#ff7b00]" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-orange" />
       </div>
     )
   }
@@ -127,7 +127,7 @@ export default function FellinkJobCreatorPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10">
       <header className="mb-10 flex flex-col gap-2">
-        <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1 text-sm font-medium text-[#ff7b00] dark:bg-orange-500/10 dark:text-orange-200">
+        <div className="inline-flex items-center gap-2 rounded-full bg-brand-blue/10 px-3 py-1 text-sm font-medium text-brand-orange dark:bg-brand-blue/20">
           <Sparkles className="h-4 w-4" />
           Feellink İlan Oluştur
         </div>
@@ -149,7 +149,7 @@ export default function FellinkJobCreatorPage() {
                 onChange={handleChange('title')}
                 required
                 placeholder="Örn. Galeri Operasyon Yöneticisi"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
             </div>
 
@@ -159,7 +159,7 @@ export default function FellinkJobCreatorPage() {
                 value={form.company}
                 onChange={handleChange('company')}
                 placeholder="Örn. Feellink Art House"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
             </div>
 
@@ -169,7 +169,7 @@ export default function FellinkJobCreatorPage() {
                 value={form.location}
                 onChange={handleChange('location')}
                 placeholder="Örn. İstanbul / Hibrit"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
             </div>
 
@@ -179,7 +179,7 @@ export default function FellinkJobCreatorPage() {
                 value={form.salary}
                 onChange={handleChange('salary')}
                 placeholder="Opsiyonel"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
             </div>
 
@@ -189,7 +189,7 @@ export default function FellinkJobCreatorPage() {
                 value={form.tagsInput}
                 onChange={handleChange('tagsInput')}
                 placeholder="Örn. galerist, organizasyon, tam zamanlı"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               />
               <p className="mt-1 text-xs text-gray-400">Etiketleri virgül ile ayırabilirsiniz.</p>
             </div>
@@ -205,7 +205,7 @@ export default function FellinkJobCreatorPage() {
               required
               rows={6}
               placeholder="Görev tanımı, aranan nitelikler, başvuru süreçleri..."
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-[#ff7b00] focus:ring-2 focus:ring-[#ff7b00]/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />
           </div>
 
@@ -226,7 +226,7 @@ export default function FellinkJobCreatorPage() {
             <button
               type="button"
               onClick={() => router.push('/fellink/public')}
-              className="text-sm font-medium text-gray-500 underline-offset-4 transition hover:text-[#ff7b00] hover:underline dark:text-gray-400"
+              className="text-sm font-medium text-gray-500 underline-offset-4 transition hover:text-brand-orange hover:underline dark:text-gray-400"
             >
               Yayında olan ilanları gör
             </button>
@@ -234,7 +234,7 @@ export default function FellinkJobCreatorPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#ff7b00] px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-[#e96f00] focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50 disabled:cursor-not-allowed disabled:opacity-80"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-orange px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-brand-orange/90 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 disabled:cursor-not-allowed disabled:opacity-80"
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               İlanı Yayınla

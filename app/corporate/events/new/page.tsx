@@ -75,7 +75,7 @@ function EventForm() {
 
       toast.success('🎉 Etkinlik başarıyla oluşturuldu!')
       setTimeout(() => {
-        router.push('/my-events')
+        router.push('/events?tab=mine')
       }, 2000)
     } catch (err: any) {
       console.error('Etkinlik oluşturulamadı:', err)

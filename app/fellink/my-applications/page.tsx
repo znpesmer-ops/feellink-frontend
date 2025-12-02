@@ -91,7 +91,7 @@ export default function MyApplicationsPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[#ff7b00]" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-orange" />
       </div>
     )
   }
@@ -114,7 +114,7 @@ export default function MyApplicationsPage() {
           <p className="text-lg font-medium">Henüz hiçbir ilana başvurmadınız.</p>
           <Link
             href="/fellink/public"
-            className="mt-4 inline-block rounded-xl bg-[#ff7b00] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e96f00]"
+            className="mt-4 inline-block rounded-xl bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-orange/90"
           >
             İlanları Görüntüle
           </Link>
@@ -129,7 +129,7 @@ export default function MyApplicationsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
-                    <Building2 className="h-5 w-5 text-[#ff7b00]" />
+                    <Building2 className="h-5 w-5 text-brand-orange" />
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {application.jobListing.title}
@@ -160,7 +160,7 @@ export default function MyApplicationsPage() {
                         href={application.portfolioUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#ff7b00] hover:underline"
+                        className="text-brand-orange hover:underline"
                       >
                         Portfolyo
                       </a>
@@ -177,4 +177,14 @@ export default function MyApplicationsPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
 

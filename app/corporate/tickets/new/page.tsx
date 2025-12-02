@@ -77,7 +77,7 @@ export default function NewTicketPage() {
                 setShowTicketForm(false)
                 setSelectedEventId(null)
               }}
-              onSuccess={() => router.push('/my-events')}
+              onSuccess={() => router.push('/events?tab=mine')}
             />
           ) : null}
         </div>

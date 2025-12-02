@@ -202,9 +202,10 @@ export default function MessagesPage() {
       }))
       
       if (!data.isOnline && data.lastSeen) {
+        const lastSeenString = typeof data.lastSeen === 'string' ? data.lastSeen : data.lastSeen.toISOString()
         setUserLastSeen((prev) => ({
           ...prev,
-          [data.userId]: typeof data.lastSeen === 'string' ? data.lastSeen : data.lastSeen.toISOString(),
+          [data.userId]: lastSeenString,
         }))
       } else if (data.isOnline) {
         // Çevrim içi olduğunda lastSeen'i temizle
@@ -403,7 +404,7 @@ export default function MessagesPage() {
         const otherUser = getOtherParticipant(conv)
         if (otherUser?.user?.id) {
           // Backend'den gelen isOnline bilgisini kullan
-          if (otherUser.user.isOnline !== undefined) {
+          if ('isOnline' in otherUser.user && otherUser.user.isOnline !== undefined) {
             const isOnline = Boolean(otherUser.user.isOnline)
             setOnlineUsers((prev) => ({
               ...prev,
@@ -412,10 +413,12 @@ export default function MessagesPage() {
             console.log(`📊 Set initial online status for ${otherUser.user.id}:`, isOnline)
           }
           // lastSeen bilgisini de set et
-          if (otherUser.user.lastSeen) {
+          if ('lastSeen' in otherUser.user && otherUser.user.lastSeen) {
+            const lastSeenValue = otherUser.user.lastSeen
+            const lastSeenString = typeof lastSeenValue === 'string' ? lastSeenValue : (lastSeenValue instanceof Date ? lastSeenValue.toISOString() : String(lastSeenValue))
             setUserLastSeen((prev) => ({
               ...prev,
-              [otherUser.user.id]: otherUser.user.lastSeen,
+              [otherUser.user.id]: lastSeenString,
             }))
           }
         }
@@ -792,8 +795,8 @@ export default function MessagesPage() {
     const otherUser = getOtherParticipant(conv)
     const searchLower = searchQuery.toLowerCase()
     return (
-      otherUser?.username.toLowerCase().includes(searchLower) ||
-      otherUser?.fullName?.toLowerCase().includes(searchLower)
+      otherUser?.user?.username?.toLowerCase().includes(searchLower) ||
+      otherUser?.user?.fullName?.toLowerCase().includes(searchLower)
     )
   })
 
@@ -815,7 +818,7 @@ export default function MessagesPage() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Mesajlar</h1>
             <button
               onClick={() => setShowNewMessageModal(true)}
-              className="text-[#ff7b00] hover:text-[#e26d00] font-semibold text-sm transition-colors"
+              className="text-brand-orange hover:text-[#e26d00] font-semibold text-sm transition-colors"
             >
               + Yeni Mesaj
             </button>
@@ -827,7 +830,7 @@ export default function MessagesPage() {
               placeholder="Ara..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:text-white"
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
             />
           </div>
         </div>
@@ -855,7 +858,7 @@ export default function MessagesPage() {
                   key={conversation.id}
                   onClick={() => openConversation(conversation)}
                   className={`p-4 cursor-pointer border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                    isActive ? 'bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20' : ''
+                    isActive ? 'bg-brand-orange/10 dark:bg-brand-orange/20' : ''
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -871,7 +874,7 @@ export default function MessagesPage() {
                       ) : null}
                       {/* Okunmamış mesaj sayısı */}
                       {conversation.unreadCount && conversation.unreadCount > 0 ? (
-                        <span className="absolute -top-1 -right-1 bg-[#ff7b00] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                        <span className="absolute -top-1 -right-1 bg-brand-orange text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                           {conversation.unreadCount > 9 ? '9+' : conversation.unreadCount}
                         </span>
                       ) : null}
@@ -916,9 +919,9 @@ export default function MessagesPage() {
                           <span className="text-xs text-green-500 dark:text-green-400 whitespace-nowrap">
                             Aktif şimdi
                           </span>
-                        ) : otherUser?.user?.lastSeen ? (
+                        ) : userLastSeen[otherUser?.user?.id || ''] ? (
                           <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                            {formatLastSeen(otherUser.user.lastSeen)}
+                            {formatLastSeen(userLastSeen[otherUser.user.id])}
                           </span>
                         ) : null}
                       </div>
@@ -942,8 +945,9 @@ export default function MessagesPage() {
                 if (!otherUser?.user) return null
                 
                 // Online durumunu kontrol et - önce state'ten, sonra backend'den gelen veriden
-                const isOnline = onlineUsers[otherUser?.user?.id] ?? otherUser?.user?.isOnline ?? false
-                const lastSeenDate = userLastSeen[otherUser?.user?.id] || otherUser?.user?.lastSeen
+                const userWithExtras = otherUser?.user as typeof otherUser.user & { isOnline?: boolean; lastSeen?: string | Date }
+                const isOnline = onlineUsers[otherUser?.user?.id] ?? userWithExtras?.isOnline ?? false
+                const lastSeenDate = userLastSeen[otherUser?.user?.id] || userWithExtras?.lastSeen
                 
                 return (
                   <div className="flex items-center gap-3">
@@ -963,7 +967,7 @@ export default function MessagesPage() {
                         <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                       </h2>
                       {isTyping ? (
-                        <p className="text-xs text-[#ff7b00]">Yazıyor...</p>
+                        <p className="text-xs text-brand-orange">Yazıyor...</p>
                       ) : isOnline ? (
                         <p className="text-xs text-green-500 dark:text-green-400">Aktif şimdi</p>
                       ) : lastSeenDate ? (
@@ -1002,7 +1006,7 @@ export default function MessagesPage() {
                         <div
                           className={`px-3 py-2 rounded-2xl max-w-[400px] relative group ${
                             isOwn
-                              ? 'bg-[#ff7b00] text-white'
+                              ? 'bg-brand-orange text-white'
                               : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
                           }`}
                         >
@@ -1036,9 +1040,9 @@ export default function MessagesPage() {
                                   }`}
                                 >
                                   <div className={`p-1.5 rounded-lg ${
-                                    isOwn ? 'bg-white/20' : 'bg-[#ff7b00]/10'
+                                    isOwn ? 'bg-white/20' : 'bg-brand-orange/10'
                                   }`}>
-                                    <FileText size={16} className={isOwn ? 'text-white' : 'text-[#ff7b00]'} />
+                                    <FileText size={16} className={isOwn ? 'text-white' : 'text-brand-orange'} />
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className={`text-xs font-medium truncate ${
@@ -1153,8 +1157,8 @@ export default function MessagesPage() {
             {filePreview && (
               <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
                 <div className="relative inline-flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-                  <div className="p-1.5 rounded-lg bg-[#ff7b00]/10">
-                    <FileText size={18} className="text-[#ff7b00]" />
+                  <div className="p-1.5 rounded-lg bg-brand-orange/10">
+                    <FileText size={18} className="text-brand-orange" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1216,12 +1220,12 @@ export default function MessagesPage() {
                     }
                   }}
                   placeholder="Mesaj yaz..."
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:text-white"
+                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
                 />
                 <button
                   type="submit"
                   disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
-                  className="bg-[#ff7b00] text-white p-2 rounded-full hover:bg-[#e26d00] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploading ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1262,8 +1266,9 @@ export default function MessagesPage() {
                 if (!otherUser?.user) return null
                 
                 // Online durumunu kontrol et - önce state'ten, sonra backend'den gelen veriden
-                const isOnline = onlineUsers[otherUser?.user?.id] ?? otherUser?.user?.isOnline ?? false
-                const lastSeenDate = userLastSeen[otherUser?.user?.id] || otherUser?.user?.lastSeen
+                const userWithExtras = otherUser?.user as typeof otherUser.user & { isOnline?: boolean; lastSeen?: string | Date }
+                const isOnline = onlineUsers[otherUser?.user?.id] ?? userWithExtras?.isOnline ?? false
+                const lastSeenDate = userLastSeen[otherUser?.user?.id] || userWithExtras?.lastSeen
                 
                 return (
                   <>
@@ -1289,7 +1294,7 @@ export default function MessagesPage() {
                           {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                         </h2>
                         {isTyping ? (
-                          <p className="text-xs text-[#ff7b00]">Yazıyor...</p>
+                          <p className="text-xs text-brand-orange">Yazıyor...</p>
                         ) : isOnline ? (
                           <p className="text-xs text-green-500 dark:text-green-400">Aktif şimdi</p>
                         ) : lastSeenDate ? (
@@ -1309,7 +1314,7 @@ export default function MessagesPage() {
               <button
                 className={`py-3 w-1/3 transition-colors ${
                   activeTab === 'chat'
-                    ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
+                    ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
                 onClick={() => setActiveTab('chat')}
@@ -1319,7 +1324,7 @@ export default function MessagesPage() {
               <button
                 className={`py-3 w-1/3 transition-colors ${
                   activeTab === 'media'
-                    ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
+                    ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
                 onClick={() => setActiveTab('media')}
@@ -1329,7 +1334,7 @@ export default function MessagesPage() {
               <button
                 className={`py-3 w-1/3 transition-colors ${
                   activeTab === 'files'
-                    ? 'text-[#ff7b00] border-b-2 border-[#ff7b00]'
+                    ? 'text-brand-orange border-b-2 border-brand-orange'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
                 onClick={() => setActiveTab('files')}
@@ -1343,7 +1348,7 @@ export default function MessagesPage() {
               <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 p-4">
                 {loadingMedia ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="w-8 h-8 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : media.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
@@ -1379,7 +1384,7 @@ export default function MessagesPage() {
               <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 p-4">
                 {loadingFiles ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="w-8 h-8 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : files.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
@@ -1395,11 +1400,11 @@ export default function MessagesPage() {
                         href={f.fileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between border border-gray-200 dark:border-gray-800 rounded-xl p-3 bg-white dark:bg-[#1a1a1a] hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                        className="flex items-center justify-between border border-gray-200 dark:border-gray-800 rounded-xl p-3 bg-white dark:bg-[#1a1a1a] hover:bg-brand-blue/10 dark:hover:bg-brand-blue/20 transition-colors"
                       >
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="p-2 rounded-lg bg-[#ff7b00]/10 flex-shrink-0">
-                            <FileText className="text-[#ff7b00]" size={18} />
+                          <div className="p-2 rounded-lg bg-brand-orange/10 flex-shrink-0">
+                            <FileText className="text-brand-orange" size={18} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-800 dark:text-gray-200 truncate">
@@ -1443,7 +1448,7 @@ export default function MessagesPage() {
                         <div
                           className={`px-3 py-2 rounded-2xl max-w-[80%] relative group ${
                             isOwn
-                              ? 'bg-[#ff7b00] text-white'
+                              ? 'bg-brand-orange text-white'
                               : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
                           }`}
                         >
@@ -1477,9 +1482,9 @@ export default function MessagesPage() {
                                   }`}
                                 >
                                   <div className={`p-1.5 rounded-lg ${
-                                    isOwn ? 'bg-white/20' : 'bg-[#ff7b00]/10'
+                                    isOwn ? 'bg-white/20' : 'bg-brand-orange/10'
                                   }`}>
-                                    <FileText size={16} className={isOwn ? 'text-white' : 'text-[#ff7b00]'} />
+                                    <FileText size={16} className={isOwn ? 'text-white' : 'text-brand-orange'} />
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className={`text-xs font-medium truncate ${
@@ -1588,8 +1593,8 @@ export default function MessagesPage() {
             {filePreview && (
               <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
                 <div className="relative inline-flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-                  <div className="p-1.5 rounded-lg bg-[#ff7b00]/10">
-                    <FileText size={18} className="text-[#ff7b00]" />
+                  <div className="p-1.5 rounded-lg bg-brand-orange/10">
+                    <FileText size={18} className="text-brand-orange" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1645,12 +1650,12 @@ export default function MessagesPage() {
                   value={messageText}
                   onChange={handleChange}
                   placeholder="Mesaj yaz..."
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:text-white"
+                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
                 />
                 <button
                   type="submit"
                   disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
-                  className="bg-[#ff7b00] text-white p-2 rounded-full hover:bg-[#e26d00] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploading ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -45,7 +45,7 @@ export default function MyTicketsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff7b00]" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-orange" />
       </div>
     );
   }
@@ -55,7 +55,7 @@ export default function MyTicketsPage() {
       {/* Orta içerik */}
       <div className="flex-1 max-w-[1200px] space-y-10 mx-auto xl:mr-[420px]">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-[#ff7b00]">
+          <h1 className="text-3xl font-bold text-brand-orange">
             Biletlerim
           </h1>
         </div>
@@ -100,10 +100,10 @@ export default function MyTicketsPage() {
                       Tür: <span className="font-medium">{t.ticket.type}</span>
                     </p>
                     <p className="text-sm text-gray-400 mb-2">
-                      Kod: <span className="font-mono text-[#ff7b00] font-semibold">{t.code}</span>
+                      Kod: <span className="font-mono text-brand-orange font-semibold">{t.code}</span>
                     </p>
                     <p className="text-sm mb-4">
-                      Fiyat: <span className="font-bold text-[#ff7b00]">{t.ticket.price} ₺</span>
+                      Fiyat: <span className="font-bold text-brand-orange">{t.ticket.price} ₺</span>
                     </p>
                     <p className="text-sm mb-4">
                       Durum:{" "}
@@ -159,7 +159,7 @@ export default function MyTicketsPage() {
                         toast.error(error.response?.data?.message || 'PDF indirme sırasında bir hata oluştu.');
                       }
                     }}
-                    className="text-center mt-4 py-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white px-4 rounded-xl font-medium transition flex items-center justify-center gap-2 w-full"
+                    className="text-center mt-4 py-2 bg-brand-orange hover:bg-brand-orange/90 text-white px-4 rounded-xl font-medium transition flex items-center justify-center gap-2 w-full"
                   >
                     <span>PDF İndir</span>
                   </button>

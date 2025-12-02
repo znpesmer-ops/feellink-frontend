@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import UserBadge from './UserBadge'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
 interface SearchUser {
   id: string
@@ -35,7 +36,7 @@ function Avatar({ src, alt }: { src?: string | null; alt: string }) {
   return (
     <div className="relative w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/5 dark:ring-white/10 flex-shrink-0">
       <Image
-        src={src}
+        src={resolveImageUrl(src) || '/images/avatar-placeholder.png'}
         alt={alt}
         fill
         sizes="36px"

@@ -8,7 +8,7 @@ import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { initSocket, getSocket, disconnectSocket } from '@/lib/socket'
 import { AuthGuard } from '@/lib/auth-guard'
-import { MessageCircle, Heart, CornerDownRight, BellOff, UserPlus, UserCheck, Bell } from 'lucide-react'
+import { MessageCircle, Heart, CornerDownRight, BellOff, UserPlus, UserCheck, Bell, Calendar, MessageSquare } from 'lucide-react'
 import UserBadge from '@/components/UserBadge'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
 
@@ -231,6 +231,10 @@ function NotificationsContent() {
         return <UserCheck className="w-5 h-5" />
       case 'follow_accept':
         return <UserCheck className="w-5 h-5" />
+      case 'event_join':
+        return <Calendar className="w-5 h-5" />
+      case 'event_comment':
+        return <MessageSquare className="w-5 h-5" />
       case 'job_application_received':
       case 'job_application_status_changed':
         return <Bell className="w-5 h-5" />
@@ -243,7 +247,7 @@ function NotificationsContent() {
     switch (type) {
       case 'like':
       case 'comment_like':
-        return 'text-orange-500'
+        return 'text-brand-orange'
       case 'comment':
         return 'text-blue-500'
       case 'reply':
@@ -252,6 +256,9 @@ function NotificationsContent() {
       case 'follow_request':
       case 'follow_accept':
         return 'text-green-500'
+      case 'event_join':
+      case 'event_comment':
+        return 'text-brand-orange'
       default:
         return 'text-gray-500'
     }
@@ -261,7 +268,7 @@ function NotificationsContent() {
     switch (type) {
       case 'like':
       case 'comment_like':
-        return 'bg-orange-50 dark:bg-orange-500/20'
+        return 'bg-brand-blue/10 dark:bg-brand-blue/20'
       case 'comment':
         return 'bg-blue-50 dark:bg-blue-500/20'
       case 'reply':
@@ -270,6 +277,9 @@ function NotificationsContent() {
       case 'follow_request':
       case 'follow_accept':
         return 'bg-green-50 dark:bg-green-500/20'
+      case 'event_join':
+      case 'event_comment':
+        return 'bg-brand-blue/10 dark:bg-brand-blue/20'
       default:
         return 'bg-gray-50 dark:bg-gray-700'
     }
@@ -279,7 +289,7 @@ function NotificationsContent() {
     switch (type) {
       case 'like':
       case 'comment_like':
-        return 'ring-orange-500/20 border-orange-500/30 dark:border-orange-500/40'
+        return 'ring-brand-blue/20 border-brand-blue/30 dark:border-brand-blue/40'
       case 'comment':
         return 'ring-blue-500/20 border-blue-500/30 dark:border-blue-500/40'
       case 'reply':
@@ -297,7 +307,7 @@ function NotificationsContent() {
     switch (type) {
       case 'like':
       case 'comment_like':
-        return 'hover:bg-orange-50/80 dark:hover:bg-orange-500/15'
+        return 'hover:bg-brand-blue/10 dark:hover:bg-brand-blue/20'
       case 'comment':
         return 'hover:bg-blue-50/80 dark:hover:bg-blue-500/15'
       case 'reply':
@@ -327,6 +337,10 @@ function NotificationsContent() {
         return `takip isteği gönderdi`
       case 'follow_accept':
         return `takip isteğini kabul etti`
+      case 'event_join':
+        return notification.message || 'etkinliğinize katıldı'
+      case 'event_comment':
+        return notification.message || 'etkinliğinize yorum yaptı'
       case 'job_application_received':
         return notification.message || 'ilanına başvuru yapıldı'
       case 'job_application_status_changed':
@@ -358,7 +372,7 @@ function NotificationsContent() {
             onClick={markAllAsRead}
             className={`text-sm font-medium px-3 py-1.5 rounded-full transition-all ${
               unreadCount > 0
-                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                ? 'bg-brand-orange text-white hover:bg-brand-orange/90'
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
             }`}
             disabled={unreadCount === 0}
@@ -381,7 +395,7 @@ function NotificationsContent() {
             onClick={() => setFilter(tab.key as any)}
             className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all ${
               filter === tab.key
-                ? 'bg-orange-500 text-white shadow-md'
+                ? 'bg-brand-orange text-white shadow-md'
                 : 'bg-gray-100 dark:bg-[#1b1b1b] text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#222]'
             }`}
           >
@@ -507,12 +521,12 @@ function NotificationsContent() {
                             <Link
                               href={`/profile/${notification.sender.username}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="font-semibold text-orange-600 dark:text-orange-400 hover:opacity-80 transition cursor-pointer"
+                              className="font-semibold text-brand-orange dark:text-brand-orange hover:opacity-80 transition cursor-pointer"
                             >
                               {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
                             </Link>
                           ) : (
-                            <span className="font-semibold text-orange-600 dark:text-orange-400">
+                            <span className="font-semibold text-brand-orange dark:text-brand-orange">
                               {notification.sender?.fullName || notification.sender?.username || 'Sistem'}
                             </span>
                           )}
@@ -533,7 +547,7 @@ function NotificationsContent() {
                               e.stopPropagation()
                               handleAcceptFollowRequest(notification.fromUserId)
                             }}
-                            className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-lg transition font-medium"
+                            className="text-xs bg-brand-orange hover:bg-brand-orange/90 text-white px-4 py-1.5 rounded-lg transition font-medium"
                           >
                             Kabul Et
                           </button>
@@ -551,7 +565,7 @@ function NotificationsContent() {
 
                       {/* Okunmamış göstergesi - Turuncu nokta */}
                       {notification.type !== 'follow_request' && !notification.isRead && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#ff7b00] flex-shrink-0 mt-2 animate-pulse shadow-sm"></div>
+                        <div className="w-2.5 h-2.5 rounded-full bg-brand-orange flex-shrink-0 mt-2 animate-pulse shadow-sm"></div>
                       )}
                     </div>
                   </div>

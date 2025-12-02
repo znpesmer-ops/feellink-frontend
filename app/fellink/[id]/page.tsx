@@ -135,7 +135,7 @@ export default function JobListingDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[#ff7b00]" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-orange" />
       </div>
     )
   }
@@ -154,7 +154,7 @@ export default function JobListingDetailPage() {
     <div className="mx-auto w-full max-w-4xl px-6 py-12">
       {/* Header */}
       <header className="mb-10">
-        <div className="inline-flex items-center gap-2 rounded-full bg-orange-50/80 px-3 py-1 text-sm font-medium text-[#ff7b00] dark:bg-orange-500/15 dark:text-orange-200 mb-4">
+        <div className="inline-flex items-center gap-2 rounded-full bg-brand-blue/10 px-3 py-1 text-sm font-medium text-brand-orange dark:bg-brand-blue/20 mb-4">
           <Sparkles className="h-4 w-4" />
           Feellink İlan Detayı
         </div>
@@ -180,7 +180,7 @@ export default function JobListingDetailPage() {
             onClick={() => router.push(`/fellink/${jobListingId}?tab=details`)}
             className={`px-4 py-2 text-sm font-medium transition ${
               activeTab === 'details'
-                ? 'border-b-2 border-[#ff7b00] text-[#ff7b00]'
+                ? 'border-b-2 border-brand-orange text-brand-orange'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
             }`}
           >
@@ -190,7 +190,7 @@ export default function JobListingDetailPage() {
             onClick={() => router.push(`/fellink/${jobListingId}?tab=applications`)}
             className={`px-4 py-2 text-sm font-medium transition ${
               activeTab === 'applications'
-                ? 'border-b-2 border-[#ff7b00] text-[#ff7b00]'
+                ? 'border-b-2 border-brand-orange text-brand-orange'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
             }`}
           >
@@ -217,7 +217,7 @@ export default function JobListingDetailPage() {
                   {jobListing.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-[#ff7b00] dark:bg-orange-500/10 dark:text-orange-200"
+                      className="rounded-full bg-brand-blue/10 px-3 py-1 text-xs font-medium text-brand-orange dark:bg-brand-blue/20 dark:text-brand-orange"
                     >
                       #{tag}
                     </span>
@@ -234,7 +234,7 @@ export default function JobListingDetailPage() {
                   year: 'numeric',
                 })}
               </span>
-              {jobListing.salary && <span className="font-medium text-[#ff7b00]">{jobListing.salary}</span>}
+              {jobListing.salary && <span className="font-medium text-brand-orange">{jobListing.salary}</span>}
             </div>
           </div>
         </div>
@@ -279,7 +279,7 @@ export default function JobListingDetailPage() {
                         href={app.portfolioUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs text-[#ff7b00] hover:underline"
+                        className="mt-2 inline-block text-xs text-brand-orange hover:underline"
                       >
                         Portfolyo Linki →
                       </a>
@@ -304,4 +304,14 @@ export default function JobListingDetailPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
 

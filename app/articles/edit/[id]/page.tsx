@@ -6,43 +6,73 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { Upload, X } from 'lucide-react'
+import ArticleImageCropper from '@/components/articles/ArticleImageCropper'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 
 function EditArticleContent() {
   const router = useRouter()
   const params = useParams()
-  const { accessToken } = useAuthStore()
+  const { accessToken, user } = useAuthStore()
+  const queryClient = useQueryClient()
   const articleId = params.id as string
 
+  const [article, setArticle] = useState<any>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [excerpt, setExcerpt] = useState('')
   const [coverImage, setCoverImage] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [existingCoverImage, setExistingCoverImage] = useState<string | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [tempImage, setTempImage] = useState<string | null>(null)
   const [isPublished, setIsPublished] = useState(false)
   const [scheduledAt, setScheduledAt] = useState<string>('')
   const [existingScheduledAt, setExistingScheduledAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+  const [openDeleteModal, setOpenDeleteModal] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/articles/${articleId}`)
+    },
+    onSuccess: () => {
+      toast.success('Yazı başarıyla silindi')
+      queryClient.invalidateQueries({ queryKey: ['articles'] })
+      router.push('/articles/published')
+    },
+    onError: (error: any) => {
+      console.error('Delete error:', error)
+      toast.error(error.response?.data?.message || 'Yazı silinirken bir hata oluştu')
+      setOpenDeleteModal(false)
+    },
+  })
+
+  const handleDelete = async () => {
+    deleteMutation.mutate()
+  }
 
   // Yazıyı yükle
   useEffect(() => {
     const loadArticle = async () => {
       try {
         const response = await api.get(`/articles/${articleId}`)
-        const article = response.data
+        const articleData = response.data
+        setArticle(articleData)
 
-        setTitle(article.title || '')
-        setContent(article.content || '')
-        setExcerpt(article.excerpt || '')
-        setExistingCoverImage(article.coverImage)
-        setIsPublished(article.isPublished || false)
-        if (article.scheduledAt) {
-          const scheduledDate = new Date(article.scheduledAt)
+        setTitle(articleData.title || '')
+        setContent(articleData.content || '')
+        setExcerpt(articleData.excerpt || '')
+        setExistingCoverImage(articleData.coverImage)
+        setIsPublished(articleData.isPublished || false)
+        if (articleData.scheduledAt) {
+          const scheduledDate = new Date(articleData.scheduledAt)
           setScheduledAt(scheduledDate.toISOString().slice(0, 16))
-          setExistingScheduledAt(article.scheduledAt)
+          setExistingScheduledAt(articleData.scheduledAt)
         }
       } catch (error: any) {
         console.error('Failed to load article:', error)
@@ -60,12 +90,43 @@ function EditArticleContent() {
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      setCoverImage(file)
+      // Önce geçici görsel oluştur ve crop modalını aç
       const reader = new FileReader()
       reader.onload = (e) => {
-        setCoverPreview(e.target?.result as string)
+        const imageUrl = e.target?.result as string
+        setTempImage(imageUrl)
+        setShowCropper(true)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCropDone = (croppedBlob: Blob) => {
+    // Cropped blob'u File'a çevir
+    const file = new File([croppedBlob], 'cover-image.jpg', { type: 'image/jpeg' })
+    setCoverImage(file)
+    
+    // Preview oluştur
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setCoverPreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(croppedBlob)
+    
+    setShowCropper(false)
+    setTempImage(null)
+    
+    // File input'u temizle
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setTempImage(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -150,8 +211,7 @@ function EditArticleContent() {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-900 p-6 md:p-8 transition-colors">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-          <span>✏️</span>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Yazıyı Düzenle
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
@@ -293,48 +353,95 @@ function EditArticleContent() {
             </div>
           )}
 
-          {/* Butonlar */}
-          <div className="flex items-center gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => handleSave(false)}
-              disabled={uploading}
-              className="px-6 py-3 border-2 border-[#ff7b00] text-[#ff7b00] rounded-xl font-medium hover:bg-[#ff7b00]/10 dark:hover:bg-[#ff7b00]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {uploading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
-                  <span>Kaydediliyor...</span>
-                </div>
-              ) : (
-                '💾 Kaydet'
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSave(true)}
-              disabled={uploading}
-              className="flex-1 bg-[#ff7b00] text-white px-6 py-3 rounded-xl font-medium hover:bg-[#e36f00] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-            >
-              {uploading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Kaydediliyor...</span>
-                </div>
-              ) : (
-                `📤 ${isPublished ? 'Güncelle' : 'Kaydet & Yayınla'}`
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
-            >
-              İptal
-            </button>
+          {/* Modern Butonlar */}
+          <div className="flex items-center justify-between mt-8 gap-3">
+            {/* Yazıyı Sil - Sadece yazı sahibi görür */}
+            {article?.id && user?.id === article?.author?.id && (
+              <button
+                type="button"
+                onClick={() => setOpenDeleteModal(true)}
+                className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 font-medium hover:bg-red-500/20 transition border border-red-500/20"
+              >
+                Yazıyı Sil
+              </button>
+            )}
+
+            <div className="flex gap-3 ml-auto">
+              {/* İptal */}
+              <button
+                type="button"
+                onClick={() => router.back()}
+                disabled={uploading}
+                className="px-4 py-2 rounded-lg bg-gray-600/20 text-gray-300 hover:bg-gray-600/40 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                İptal
+              </button>
+
+              {/* Kaydet / Güncelle */}
+              <button
+                type="button"
+                onClick={() => handleSave(isPublished || false)}
+                disabled={uploading}
+                className="px-6 py-2 rounded-lg bg-brand-orange text-black font-semibold hover:bg-orange-400 transition shadow-[0_0_15px_rgba(255,140,0,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>Kaydediliyor...</span>
+                  </div>
+                ) : (
+                  article?.id ? 'Güncelle' : 'Kaydet'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Crop Modal */}
+      {showCropper && tempImage && (
+        <ArticleImageCropper
+          image={tempImage}
+          onCropDone={handleCropDone}
+          onCancel={handleCropCancel}
+        />
+      )}
+
+      {/* Silme Onay Modalı */}
+      {openDeleteModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200]"
+          onClick={() => setOpenDeleteModal(false)}
+        >
+          <div
+            className="bg-[#0d0d10] dark:bg-gray-900 p-6 rounded-xl w-[380px] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-semibold text-white mb-3">Yazıyı Sil</h2>
+            <p className="text-gray-400 mb-6">
+              Bu işlem geri alınamaz. Yazıyı silmek istediğinizden emin misiniz?
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setOpenDeleteModal(false)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-gray-600/20 text-gray-300 rounded-lg hover:bg-gray-600/40 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                İptal
+              </button>
+
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleteMutation.isPending ? 'Siliniyor...' : 'Sil'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

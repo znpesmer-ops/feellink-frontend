@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { Upload, X } from 'lucide-react'
+import ArticleImageCropper from '@/components/articles/ArticleImageCropper'
 
 function NewArticleContent() {
   const router = useRouter()
@@ -19,16 +20,49 @@ function NewArticleContent() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [tempImage, setTempImage] = useState<string | null>(null)
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      setCoverImage(file)
+      // Önce geçici görsel oluştur ve crop modalını aç
       const reader = new FileReader()
       reader.onload = (e) => {
-        setCoverPreview(e.target?.result as string)
+        const imageUrl = e.target?.result as string
+        setTempImage(imageUrl)
+        setShowCropper(true)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCropDone = (croppedBlob: Blob) => {
+    // Cropped blob'u File'a çevir
+    const file = new File([croppedBlob], 'cover-image.jpg', { type: 'image/jpeg' })
+    setCoverImage(file)
+    
+    // Preview oluştur
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setCoverPreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(croppedBlob)
+    
+    setShowCropper(false)
+    setTempImage(null)
+    
+    // File input'u temizle
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setTempImage(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -377,6 +411,15 @@ function NewArticleContent() {
           </div>
         </form>
       </div>
+
+      {/* Crop Modal */}
+      {showCropper && tempImage && (
+        <ArticleImageCropper
+          image={tempImage}
+          onCropDone={handleCropDone}
+          onCancel={handleCropCancel}
+        />
+      )}
     </div>
   )
 }

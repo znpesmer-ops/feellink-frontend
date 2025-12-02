@@ -31,10 +31,10 @@ export function ProRoleBadge({
 
   return (
     <span
-      className={`inline-flex items-center justify-center ml-1 w-5 h-5 rounded-full ${badgeConfig.gradient} text-white shadow-md ${className}`}
+      className={`inline-flex items-center justify-center ml-1 w-4 h-4 md:w-5 md:h-5 rounded-full ${badgeConfig.gradient} text-white shadow-md ${className}`}
       title={tooltip || undefined}
     >
-      <Icon size={12} className="text-white" />
+      <Icon size={10} className="text-white" style={{ width: '10px', height: '10px' }} />
     </span>
   )
 }

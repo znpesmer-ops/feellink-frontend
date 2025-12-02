@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -22,6 +23,9 @@ import { useAuthStore } from "@/lib/store";
 import toast from "react-hot-toast";
 import { initSocket, getSocket } from "@/lib/socket";
 import dynamic from "next/dynamic";
+import { ColorMatchesCard } from "@/components/analytics/ColorMatchesCard";
+import { useQuery } from "@tanstack/react-query";
+import { SubscriptionPlanCode, UserRoleCode } from "@/types/capabilities";
 
 // Dynamic import for TicketChart (SSR disabled for Chart.js)
 const TicketChart = dynamic(() => import("@/components/analytics/TicketChart"), {
@@ -30,6 +34,11 @@ const TicketChart = dynamic(() => import("@/components/analytics/TicketChart"), 
 
 // Dynamic import for TopEventsChart
 const TopEventsChart = dynamic(() => import("@/components/analytics/TopEventsChart"), {
+  ssr: false,
+});
+
+// Dynamic import for KeywordsChart (SSR disabled for Recharts)
+const KeywordsChart = dynamic(() => import("@/components/analytics/KeywordsChart"), {
   ssr: false,
 });
 
@@ -80,12 +89,106 @@ interface EventStat {
   }>;
 }
 
+interface ColorPaletteItem {
+  hex: string;
+  frequency?: number;
+}
+
+// Pro plan kontrolü için yardımcı fonksiyon
+function isProPlan(
+  user?: { plan?: SubscriptionPlanCode; roles?: UserRoleCode[] } | null,
+  capabilities?: { plan?: SubscriptionPlanCode; roles?: UserRoleCode[] } | null
+) {
+  if (!user && !capabilities) return false;
+
+  // Önce capabilities'den plan kontrolü yap
+  const plan = capabilities?.plan?.toLowerCase() ?? user?.plan?.toLowerCase() ?? '';
+  const roles = capabilities?.roles ?? user?.roles ?? [];
+
+  // 1) Plan isminde "pro" geçiyorsa direkt pro kabul et
+  if (plan === 'pro') return true;
+
+  // 2) Rol bazlı kontrol (pro rolleri)
+  const proRoles: UserRoleCode[] = ['artist', 'corporate', 'collector'];
+  const hasProRole = roles.some((role) => proRoles.includes(role));
+
+  // 3) ORI planı da pro sayılabilir (isteğe bağlı)
+  if (plan === 'ori') return true;
+
+  return hasProRole;
+}
+
+// Blur / Overlay için koruma komponenti
+type BlurGuardProps = {
+  isPro: boolean;
+  children: React.ReactNode;
+};
+
+function BlurGuard({ isPro, children }: BlurGuardProps) {
+  const router = useRouter();
+
+  if (isPro) {
+    // Pro ise hiç dokunma, olduğu gibi göster
+    return <>{children}</>;
+  }
+
+  // Dark mode kontrolü
+  const isDarkMode = typeof window !== 'undefined' && document.documentElement.classList.contains('dark');
+
+  return (
+    <div className="relative">
+      {/* Mode'a göre farklı blur değerleri */}
+      <div
+        className={`pointer-events-none select-none transition-all duration-300 ${
+          isDarkMode
+            ? 'blur-[4px] opacity-75' // Dark mode: daha hafif blur, içerik daha belirgin
+            : 'blur-[6px] opacity-65' // Light mode: hafif bulanık, içerik seçilebilir
+        }`}
+      >
+        {children}
+      </div>
+
+      {/* Premium glass overlay with vignette */}
+      <div
+        className={`pointer-events-auto absolute inset-0 flex flex-col items-center justify-center rounded-2xl px-6 transition-all duration-300 ${
+          isDarkMode
+            ? 'backdrop-blur-[4px] bg-black/25' // Dark mode: daha hafif overlay
+            : 'backdrop-blur-[6px] bg-white/35' // Light mode: hafif overlay
+        }`}
+      >
+        {/* Vignette efekti (çok hafif kararma – profesyonel görünüm) */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent to-black/10 dark:from-transparent dark:to-black/30 rounded-2xl" />
+
+        {/* Blur üzerine yazılar */}
+        <div className="relative z-10 flex flex-col items-center justify-center gap-3">
+          <p className="text-center text-sm text-gray-600 dark:text-gray-300 max-w-xs leading-relaxed">
+            Bu özellik <span className="font-semibold">Pro Plan</span> kullanıcılarına özeldir.
+            <br />
+            Gelişmiş analizleri görüntülemek için Pro plana geçebilirsiniz.
+          </p>
+
+          {/* Premium button */}
+          <button
+            type="button"
+            onClick={() => router.push('/settings')}
+            className="mt-1 rounded-xl bg-gradient-to-r from-[#FF8A00] to-[#1E88E5] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#FF8A00]/20 hover:shadow-[#1E88E5]/30 hover:scale-[1.02] transition-all"
+          >
+            Pro Plana Geç
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const { user, capabilities, accessToken } = useAuthStore();
+  const pro = isProPlan(user, capabilities);
   const [visits, setVisits] = useState<VisitData[]>([]);
   const [words, setWords] = useState<WordData[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [eventStats, setEventStats] = useState<EventStat[]>([]);
+  const [colorPalette, setColorPalette] = useState<ColorPaletteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isHydrated, setIsHydrated] = useState(false);
   const [openEvent, setOpenEvent] = useState<string | null>(null);
@@ -103,7 +206,41 @@ export default function AnalyticsPage() {
     return DEFAULT_ANALYTICS_AVATAR;
   };
 
-  const canAccessAnalytics = Boolean(capabilities?.permissions.canAccessAnalytics);
+  // Get user posts with colorPalette data
+  const { data: posts } = useQuery({
+    queryKey: ["userPosts", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      try {
+        const response = await api.get(`/posts/user/${user.id}`);
+        return response.data || [];
+      } catch (error) {
+        console.error("Gönderiler alınamadı:", error);
+        return [];
+      }
+    },
+    enabled: !!user?.id && !!accessToken,
+  });
+
+  // Get top 5 color matches
+  const { data: colorMatches, isLoading: isLoadingColorMatches, error: colorMatchesError } = useQuery({
+    queryKey: ["color-match", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      try {
+        const response = await api.get("/analytics/color-match/top5");
+        return response.data || [];
+      } catch (error: any) {
+        console.error("Renk eşleşmeleri alınamadı:", error);
+        // Hata durumunda boş array döndür (kullanıcı deneyimini bozmamak için)
+        // Backend zaten hata durumunda boş array döndürüyor
+        return [];
+      }
+    },
+    enabled: !!user?.id && !!accessToken,
+    retry: 1, // Sadece 1 kez tekrar dene
+    retryDelay: 1000, // 1 saniye bekle
+  });
 
   // Wait for Zustand hydration to complete
   useEffect(() => {
@@ -140,23 +277,24 @@ export default function AnalyticsPage() {
   // Debug: Log user role
   useEffect(() => {
     if (isHydrated && user && capabilities) {
-      console.log('🔍 Analytics Page - Roles:', capabilities.roles, 'Analytics Access:', canAccessAnalytics, 'AccessToken:', !!accessToken);
+      console.log('🔍 Analytics Page - Roles:', capabilities.roles, 'Pro Plan:', pro, 'AccessToken:', !!accessToken);
     }
-  }, [user, capabilities, canAccessAnalytics, isHydrated, accessToken]);
+  }, [user, capabilities, pro, isHydrated, accessToken]);
 
   useEffect(() => {
-    if (!isHydrated || !user || !capabilities || !canAccessAnalytics) {
+    if (!isHydrated || !user || !capabilities) {
       return;
     }
 
     async function fetchAnalytics() {
       try {
         setLoading(true);
-        const [visitsRes, wordsRes, usersRes, eventsRes] = await Promise.all([
+        const [visitsRes, wordsRes, usersRes, eventsRes, colorPaletteRes] = await Promise.all([
           api.get("/analytics/visits"),
           api.get("/analytics/words"),
           api.get("/analytics/top-users"),
           api.get("/analytics/event-stats"),
+          api.get("/analytics/color-palette").catch(() => ({ data: [] })), // Renk paleti yoksa boş array
         ]);
 
         setVisits(visitsRes.data);
@@ -167,6 +305,7 @@ export default function AnalyticsPage() {
         );
         setTopUsers(filteredUsers);
         setEventStats(eventsRes.data);
+        setColorPalette(colorPaletteRes.data || []);
       } catch (err: any) {
         console.error("Analiz verileri alınamadı:", err);
         toast.error(err.response?.data?.message || "Analiz verileri yüklenemedi");
@@ -176,7 +315,7 @@ export default function AnalyticsPage() {
     }
 
     fetchAnalytics();
-  }, [user, capabilities, canAccessAnalytics, isHydrated]);
+  }, [user, capabilities, pro, isHydrated]);
 
   // 🎟️ Gerçek zamanlı bilet güncellemeleri için socket bağlantısı
   useEffect(() => {
@@ -254,27 +393,22 @@ export default function AnalyticsPage() {
   if (!isHydrated) {
     return (
       <div className="flex justify-center items-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff7b00]" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#FF8A00]" />
       </div>
     );
   }
 
-  // Eğer user yoksa veya role corporate değilse (hydration tamamlandıktan sonra kontrol)
-  if (!user || !capabilities || !canAccessAnalytics) {
+  // Eğer user yoksa veya capabilities yoksa (hydration tamamlandıktan sonra kontrol)
+  if (!user || !capabilities) {
     return (
       <div className="flex justify-center items-center py-20">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            Yetkisiz Erişim
+            Giriş Gerekli
           </h1>
           <p className="text-gray-500 dark:text-gray-400">
-            Bu sayfaya yalnızca analiz yetkisine sahip kullanıcılar erişebilir.
+            Bu sayfaya erişmek için lütfen giriş yapın.
           </p>
-          {capabilities && (
-            <p className="text-xs text-gray-400 mt-2">
-              Aktif rolleriniz: {capabilities.roles.join(', ')}
-            </p>
-          )}
         </div>
       </div>
     );
@@ -283,13 +417,17 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-[#ff7b00]" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#FF8A00]" />
       </div>
     );
   }
 
   // Dark mode detection
   const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+
+  // Chart color constants - Feellink corporate colors
+  const chartColorPrimary = "#1E88E5"; // Mavi - ana renk
+  const chartAccent = "#FF8A00"; // Turuncu - vurgu rengi
 
   // Chart configurations
   const visitsChartData = {
@@ -301,13 +439,13 @@ export default function AnalyticsPage() {
       {
         label: "Etkileşim Sayısı",
         data: visits.map((v) => v.count),
-        borderColor: "#ff7b00",
+        borderColor: chartColorPrimary, // Mavi ana çizgi
         backgroundColor: isDark 
-          ? "rgba(255, 123, 0, 0.15)" 
-          : "rgba(255, 123, 0, 0.1)",
+          ? "rgba(30, 136, 229, 0.15)" 
+          : "rgba(30, 136, 229, 0.1)",
         tension: 0.4,
         fill: true,
-        pointBackgroundColor: "#ff7b00",
+        pointBackgroundColor: chartAccent, // Turuncu noktalar
         pointBorderColor: isDark ? "#1a1a1a" : "#fff",
         pointBorderWidth: 2,
         pointRadius: 4,
@@ -322,7 +460,7 @@ export default function AnalyticsPage() {
       {
         label: "Kullanım Sayısı",
         data: words.slice(0, 15).map((w) => w.count),
-        backgroundColor: "#ff7b00",
+        backgroundColor: chartColorPrimary, // Mavi bar
         borderRadius: 8,
         borderSkipped: false,
       },
@@ -343,7 +481,7 @@ export default function AnalyticsPage() {
         padding: 12,
         titleColor: isDark ? "#fff" : "#fff",
         bodyColor: isDark ? "#fff" : "#fff",
-        borderColor: "#ff7b00",
+        borderColor: chartAccent, // Turuncu border
         borderWidth: 1,
         titleFont: {
           size: 14,
@@ -392,8 +530,8 @@ export default function AnalyticsPage() {
         ...chartOptions.scales.y,
         grid: {
           color: isDark 
-            ? "rgba(255, 123, 0, 0.15)" 
-            : "rgba(255, 123, 0, 0.1)",
+            ? "rgba(30, 136, 229, 0.15)" 
+            : "rgba(30, 136, 229, 0.1)", // Mavi grid
         },
       },
     },
@@ -405,21 +543,28 @@ export default function AnalyticsPage() {
       <div className="max-w-[1600px] mx-auto">
         {/* Başlık */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#ff7b00] flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-[#FF8A00] flex items-center gap-3 mb-2">
             <TrendingUp className="w-8 h-8" />
             Analizlerim
           </h1>
           <p className="text-gray-500 dark:text-gray-400">
             İçeriğinizin performansını ve etkileşimlerini takip edin
           </p>
+          {!pro && (
+            <p className="mt-2 text-xs text-amber-300">
+              Pro Plan ile: ayrıntılı grafikler, renk analizi, etkinlik katılım istatistikleri ve en
+              çok etkileşim aldığınız içerikler açılır.
+            </p>
+          )}
         </div>
 
         {/* ---- ANALİZ KARTLARI GRID ---- */}
         {/* 🔥 KRİTİK: Responsive 3 kolonlu grid - ferah görünüm */}
-        <div className="w-full mt-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <BlurGuard isPro={pro}>
+          <div className="w-full mt-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Etkileşim Trendi */}
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-            <h3 className="text-orange-400 font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
+            <h3 className="text-[#FF8A00] font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
             <div className="h-[300px]">
               <Line data={visitsChartData} options={lineChartOptions} />
             </div>
@@ -427,15 +572,13 @@ export default function AnalyticsPage() {
 
           {/* En Çok Kullanılan Kelimeler */}
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-            <h3 className="text-orange-400 font-semibold mb-4">En Çok Kullanılan Kelimeler</h3>
-            <div className="h-[300px]">
-              <Bar data={wordsChartData} options={chartOptions} />
-            </div>
+            <h3 className="text-[#FF8A00] font-semibold mb-4">En Çok Kullanılan Kelimeler</h3>
+            <KeywordsChart data={words} />
           </div>
 
           {/* En Aktif Ziyaretçiler */}
-          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-            <h3 className="text-orange-400 font-semibold mb-4">En Aktif Ziyaretçiler</h3>
+          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-[#1E88E5] shadow-sm">
+            <h3 className="text-[#FF8A00] font-semibold mb-4">En Aktif Ziyaretçiler</h3>
             <div className="space-y-3">
               {topUsers.length === 0 ? (
                 <p className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -446,9 +589,9 @@ export default function AnalyticsPage() {
                   <Link
                     key={u.username}
                     href={`/profile/${u.username}`}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer hover:opacity-90"
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-[#1E88E5] hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer hover:opacity-90"
                   >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 text-[#ff7b00] font-bold text-sm">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[#FF8A00]/10 dark:bg-[#FF8A00]/20 text-[#FF8A00] font-bold text-sm">
                       {index + 1}
                     </div>
                     <img
@@ -468,7 +611,7 @@ export default function AnalyticsPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-[#ff7b00]">{u.activityCount}</p>
+                      <p className="font-bold text-[#1E88E5]">{u.activityCount}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         etkileşim
                       </p>
@@ -482,19 +625,19 @@ export default function AnalyticsPage() {
           {/* Etkinlik Katılım Analizi - Kısa Özet */}
           {eventStats.length > 0 && (
             <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-              <h3 className="text-orange-400 font-semibold mb-4">Etkinlik Katılım Analizi</h3>
+              <h3 className="text-[#FF8A00] font-semibold mb-4">Etkinlik Katılım Analizi</h3>
               <div className="space-y-4">
                 {eventStats.slice(0, 3).map((event) => (
                   <div
                     key={event.id}
-                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40"
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border-t-4 border-[#1E88E5] border-l border-r border-b border-gray-200 dark:border-gray-700/40"
                   >
                     <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {event.title}
                     </h4>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 dark:text-gray-400">
-                        <span className="font-bold text-[#ff7b00]">{event.ticketCount}</span> / {event.totalCapacity} bilet
+                        <span className="font-bold text-[#1E88E5]">{event.ticketCount}</span> / {event.totalCapacity} bilet
                       </span>
                       <span className="text-gray-600 dark:text-gray-400">
                         <span className="font-semibold">{event.commentCount}</span> yorum
@@ -505,20 +648,148 @@ export default function AnalyticsPage() {
               </div>
             </div>
           )}
-        </div>
 
-        {/* 🎟️ Etkinlik Katılım Analizi - Accordion Yapısı */}
-        {/* 🔥 KRİTİK: Tam genişlik - grid dışında */}
-        <div className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl shadow-sm p-6 mt-6 w-full">
+          {/* Renk Eşleşmeleri - Sadece artwork'e sahip kullanıcılar için */}
+          {user?.id && (
+            <ColorMatchesCard userId={user.id} />
+          )}
+
+          {/* Sana En Yakın 5 Renk Eşleşmesi */}
+          <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+            <h3 className="text-[#FF8A00] font-semibold mb-4">Sana En Yakın 5 Renk Eşleşmesi</h3>
+
+            {isLoadingColorMatches ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-[#FF8A00]" />
+              </div>
+            ) : colorMatchesError ? (
+              <p className="text-sm opacity-60 text-gray-400 dark:text-gray-500">
+                Renk eşleşmeleri yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.
+              </p>
+            ) : !colorMatches || colorMatches.length === 0 ? (
+              <p className="text-sm opacity-60 text-gray-400 dark:text-gray-500">
+                Yeterli renk verisi bulunamadı.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {colorMatches.map((match: any) => (
+                  <div
+                    key={match.userId}
+                    className="flex items-center justify-between bg-gray-50 dark:bg-[#161616] p-3 rounded-lg border border-gray-200 dark:border-[#222] hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={resolveAvatarUrl(match.avatar)}
+                        alt={match.username}
+                        className="w-10 h-10 rounded-full border border-gray-300 dark:border-[#333] object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = DEFAULT_ANALYTICS_AVATAR;
+                        }}
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                          @{match.username}
+                        </div>
+                        {match.commonColors && match.commonColors.length > 0 && (
+                          <div className="flex gap-1 mt-1">
+                            {match.commonColors.slice(0, 3).map((color: string, idx: number) => (
+                              <div
+                                key={idx}
+                                className="w-4 h-4 rounded border border-gray-300 dark:border-gray-600"
+                                style={{ backgroundColor: color }}
+                                title={color}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-[#1E88E5] font-semibold text-sm">
+                      %{match.similarity}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 🎨 Renk Analizi Kartı — TOP COLORS CLOUD */}
+          {(() => {
+            // Tüm gönderilerden renkleri topla ve say
+            const colorCount: Record<string, number> = {};
+            const postsWithColors = (posts || []).filter((p: any) => p.colorPalette && Array.isArray(p.colorPalette) && p.colorPalette.length > 0);
+            
+            postsWithColors.forEach((p: any) => {
+              if (p.colorPalette && Array.isArray(p.colorPalette)) {
+                p.colorPalette.forEach((hex: string) => {
+                  if (hex && typeof hex === 'string') {
+                    colorCount[hex] = (colorCount[hex] || 0) + 1;
+                  }
+                });
+              }
+            });
+
+            // En çok kullanılan renkleri sırala
+            const totalColorUsages = Object.values(colorCount).reduce((sum, count) => sum + count, 0);
+            const topColors = Object.entries(colorCount)
+              .map(([color, count]) => ({
+                color,
+                count,
+                percent: totalColorUsages > 0 ? (count / totalColorUsages) * 100 : 0,
+              }))
+              .sort((a, b) => b.count - a.count)
+              .slice(0, 12); // En çok kullanılan 12 renk
+
+            return (
+              <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-[#1E88E5]/40 shadow-sm">
+                <h3 className="text-[#FF8A00] font-semibold mb-4">Renk Analizi</h3>
+
+                {topColors.length > 0 ? (
+                  <div className="flex flex-wrap gap-4">
+                    {topColors.map((c, i) => (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        <div
+                          style={{
+                            backgroundColor: c.color,
+                            width: 50,
+                            height: 50,
+                            borderRadius: 8,
+                            border: "2px solid rgba(255,255,255,0.2)",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                          }}
+                          title={c.color}
+                          className="transition-transform hover:scale-110 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 mt-1">
+                          {Math.round(c.percent)}%
+                        </span>
+                        <span className="text-xs opacity-60 text-gray-500 dark:text-gray-400 font-mono">
+                          {c.color}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 dark:text-gray-500 text-sm">Henüz renk analizi yapılmış eser bulunmuyor.</p>
+                )}
+              </div>
+            );
+          })()}
+          </div>
+
+          {/* 🎟️ Etkinlik Katılım Analizi - Accordion Yapısı */}
+          {/* 🔥 KRİTİK: Tam genişlik - grid dışında */}
+          <div className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl shadow-sm p-6 mt-6 w-full">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-[#ff7b00]/10 dark:bg-[#ff7b00]/20 rounded-lg">
-              <Ticket className="w-5 h-5 text-[#ff7b00]" />
+            <div className="p-2 bg-[#FF8A00]/10 dark:bg-[#FF8A00]/20 rounded-lg">
+              <Ticket className="w-5 h-5 text-[#FF8A00]" />
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
                 Etkinlik Katılım Analizi
               </h2>
-              <div className="h-[2px] w-20 bg-[#ff7b00] rounded-full mb-2" />
+              <div className="h-[2px] w-20 bg-[#1E88E5] rounded-full mb-2" />
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Etkinliklerinizin bilet satışları ve yorum istatistikleri
               </p>
@@ -530,7 +801,7 @@ export default function AnalyticsPage() {
               {eventStats.map((event) => (
                 <div
                   key={event.id}
-                  className="border border-gray-200 dark:border-gray-700/40 rounded-xl overflow-hidden transition-all hover:border-[#ff7b00]/30"
+                  className="border-t-4 border-[#1E88E5] border-l border-r border-b border-gray-200 dark:border-gray-700/40 rounded-xl overflow-hidden transition-all hover:border-[#FF8A00]/30"
                 >
                   {/* Accordion Header - Tıklanabilir */}
                   <div
@@ -543,7 +814,7 @@ export default function AnalyticsPage() {
                       </h3>
                       <div className="flex items-center gap-4 text-sm">
                         <span className="text-gray-600 dark:text-gray-400">
-                          <span className="font-bold text-[#ff7b00]">{event.ticketCount}</span> / {event.totalCapacity} bilet satıldı
+                          <span className="font-bold text-[#1E88E5]">{event.ticketCount}</span> / {event.totalCapacity} bilet satıldı
                         </span>
                         <span className="text-gray-600 dark:text-gray-400">
                           <span className="font-semibold">{event.commentCount}</span> yorum
@@ -552,7 +823,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="ml-4">
                       {openEvent === event.id ? (
-                        <ChevronUp className="w-5 h-5 text-[#ff7b00] transition-transform" />
+                        <ChevronUp className="w-5 h-5 text-[#FF8A00] transition-transform" />
                       ) : (
                         <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform" />
                       )}
@@ -651,6 +922,7 @@ export default function AnalyticsPage() {
             />
           </div>
         )}
+        </BlurGuard>
       </div>
     </div>
   );

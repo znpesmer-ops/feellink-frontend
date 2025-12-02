@@ -256,11 +256,12 @@ export default function SelectRolePage() {
         extras: extrasPayload,
       })
 
-      const { user: updatedUser, capabilities, sidebar } = response.data as {
+      const responseData = response.data as {
         user?: ReturnType<typeof useAuthStore>['user']
         capabilities?: CapabilitySummary
         sidebar?: SidebarVisibility
       }
+      const { user: updatedUser, capabilities, sidebar } = responseData
 
       if (updatedUser) {
         setUser(updatedUser, capabilities ?? null, sidebar ?? null)

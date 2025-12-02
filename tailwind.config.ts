@@ -19,6 +19,12 @@ const config: Config = {
           light: '#F8F8F8',
           white: '#FFFFFF',
         },
+        brand: {
+          orange: '#FF8A00',
+          blue: '#1E88E5',
+          white: '#FFFFFF',
+          dark: '#0A0F1F',
+        },
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'sans-serif'],

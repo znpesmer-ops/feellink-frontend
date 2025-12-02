@@ -162,7 +162,7 @@ export default function AdminUsersPage() {
                           key={role}
                           className="px-2 py-1 text-xs font-medium rounded-full bg-[var(--accent)]/10 text-[var(--accent)]"
                         >
-                          {ROLE_METADATA[role]?.label ?? role}
+                          {ROLE_METADATA[role as UserRoleCode]?.label ?? role}
                         </span>
                       ))}
                     </div>
@@ -174,12 +174,12 @@ export default function AdminUsersPage() {
                           {user.plan === 'PRO' ? 'Pro Plan' : 'Free Plan'}
                         </span>
                       )}
-                      {user.badges?.some((badge: string) => badge.endsWith('-pro')) && (
+                      {user.badges?.pro && (
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-yellow-500/20 dark:text-yellow-200">
                           🟤 Pro Rozeti
                         </span>
                       )}
-                      {user.badges?.includes('kurumsal-pro') && (
+                      {user.badges?.corporate_verified && (
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/30 dark:text-orange-100">
                           🟧 Kurumsal
                         </span>

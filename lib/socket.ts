@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client'
+import { getApiBaseURL } from './api'
 
 let socket: Socket | null = null
 let chatSocket: Socket | null = null
@@ -8,7 +9,7 @@ export const initSocket = (token: string): Socket => {
     return socket
   }
 
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   socket = io(baseURL, {
     auth: {
       token,
@@ -24,7 +25,7 @@ export const initChatSocket = (token: string): Socket => {
     return chatSocket
   }
 
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   chatSocket = io(`${baseURL}/chat`, {
     auth: {
       token,
@@ -45,7 +46,7 @@ export const getChatSocket = (): Socket | null => {
 
 export const initCommentsSocket = (token: string): Socket => {
   // Comments socket için ayrı bir instance oluştur
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   const commentsSocket = io(`${baseURL}/comments`, {
     auth: {
       token,
@@ -58,7 +59,7 @@ export const initCommentsSocket = (token: string): Socket => {
 
 export const initPostsSocket = (token: string): Socket => {
   // Posts socket için ayrı bir instance oluştur
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   const postsSocket = io(`${baseURL}/posts`, {
     auth: {
       token,
@@ -71,7 +72,7 @@ export const initPostsSocket = (token: string): Socket => {
 
 export const initArticlesSocket = (token: string): Socket => {
   // Articles socket için ayrı bir instance oluştur
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   const articlesSocket = io(`${baseURL}/articles`, {
     auth: {
       token,
@@ -83,7 +84,7 @@ export const initArticlesSocket = (token: string): Socket => {
 }
 
 export const initAdminSocket = (token: string): Socket => {
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  const baseURL = getApiBaseURL()
   const adminSocket = io(`${baseURL}/admin`, {
     auth: {
       token,

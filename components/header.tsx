@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store'
 import { SearchResults } from './search-results'
 import api from '@/lib/api'
 import { useTheme } from '@/lib/theme-context'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
 interface SearchUser {
   id: string
@@ -16,7 +17,11 @@ interface SearchUser {
   isVerified?: boolean
 }
 
-export function Header() {
+interface HeaderProps {
+  forceMobile?: boolean
+}
+
+export function Header({ forceMobile = false }: HeaderProps = {}) {
   const router = useRouter()
   const { user, accessToken, refreshToken, clearAuth } = useAuthStore()
   const { theme, toggleTheme } = useTheme()
@@ -100,15 +105,64 @@ export function Header() {
     return null
   }
 
+  // Mobil mod: Sadece arama barı
+  if (forceMobile) {
+    return (
+      <div ref={searchRef} className="relative w-full">
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Kullanıcı ara..."
+          value={searchQuery}
+          onChange={handleSearchChange}
+          onFocus={() => searchQuery && setIsSearchOpen(true)}
+          className="w-full px-3 py-2 pl-9 pr-3 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
+        />
+        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+          <svg
+            className="w-4 h-4 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+        </div>
+        {isLoading && (
+          <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+            <div className="w-3.5 h-3.5 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Search Results Dropdown */}
+        {isSearchOpen && (
+          <SearchResults
+            results={searchResults}
+            onSelect={handleUserSelect}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // Desktop mod: Tam header
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 shadow-sm z-50 transition-colors">
-      <div className="flex items-center justify-between w-full h-full px-8">
-        <div className="text-sm font-medium text-[#1f1f1f] dark:text-gray-100">
-          Hoş geldin, <span className="text-[#ff7b00] font-semibold">{user?.username}</span>
+      <div className="flex flex-col md:flex-row md:items-center justify-between w-full h-full px-4 md:px-8 gap-3 md:gap-0">
+        {/* Sol taraf - Hoş geldin (mobilde gizli, desktop'ta görünür) */}
+        <div className="hidden md:block text-sm font-medium text-[#1f1f1f] dark:text-gray-100">
+          Hoş geldin, <span className="text-brand-orange font-semibold">{user?.username}</span>
         </div>
 
-        <div className="flex-1 flex justify-center">
-          <div ref={searchRef} className="relative w-full max-w-[480px]">
+        {/* Orta - Arama çubuğu */}
+        <div className="w-full md:flex-1 md:flex md:justify-center">
+          <div ref={searchRef} className="relative w-full max-w-[480px] md:mx-auto">
               <input
                 ref={inputRef}
                 type="text"
@@ -116,7 +170,7 @@ export function Header() {
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery && setIsSearchOpen(true)}
-                className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/20 focus:border-[#ff7b00]/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
+                className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
               />
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg
@@ -135,7 +189,7 @@ export function Header() {
               </div>
               {isLoading && (
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                  <div className="w-4 h-4 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
 
@@ -147,11 +201,11 @@ export function Header() {
                   isLoading={isLoading}
                 />
               )}
+          </div>
         </div>
-      </div>
 
         {/* Sağ taraf - Theme Toggle + Profil */}
-        <div className="flex items-center justify-end gap-4 pl-6">
+        <div className="flex items-center justify-end gap-3 md:gap-4 md:pl-6">
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
@@ -195,12 +249,16 @@ export function Header() {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="flex items-center space-x-2 group hover:opacity-80 transition-opacity focus:outline-none"
             >
-              <div className="w-8 h-8 rounded-full bg-[#ff7b00] flex items-center justify-center text-white font-semibold text-sm overflow-hidden ring-2 ring-transparent group-hover:ring-[#ff7b00]/20 transition-all">
+              <div className="w-8 h-8 rounded-full bg-brand-orange flex items-center justify-center text-white font-semibold text-sm overflow-hidden ring-2 ring-transparent group-hover:ring-brand-orange/20 transition-all">
                 {user?.avatar ? (
                   <img
-                    src={user.avatar}
+                    src={resolveImageUrl(user.avatar)}
                     alt={user.username}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.error('Header Avatar Error:', resolveImageUrl(user.avatar))
+                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                    }}
                   />
                 ) : (
                   <span>{user?.username?.charAt(0).toUpperCase() || 'U'}</span>
@@ -268,7 +326,7 @@ export function Header() {
               </div>
             )}
           </div>
-      </div>
+        </div>
       </div>
     </header>
   )

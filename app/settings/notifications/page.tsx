@@ -68,7 +68,7 @@ function NotificationSettingsContent() {
   if (loading) {
     return (
       <main className="flex justify-center items-center min-h-screen pt-24 pb-16 px-6">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ff7b00]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-orange"></div>
       </main>
     )
   }
@@ -84,7 +84,7 @@ function NotificationSettingsContent() {
           >
             <ArrowLeft size={20} className="text-gray-700 dark:text-gray-300" />
           </button>
-          <h1 className="text-2xl font-bold text-[#111] dark:text-white">Bildirim Ayarları</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-[#111] dark:text-white">Bildirim Ayarları</h1>
         </div>
 
         {/* Content Card */}
@@ -124,7 +124,7 @@ function NotificationSettingsContent() {
             <button
               onClick={onSave}
               disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-[#ff7b00] text-white hover:bg-[#e36f00] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+              className="px-6 py-2.5 rounded-xl bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
             >
               {saving ? 'Kaydediliyor...' : 'Kaydet'}
             </button>
@@ -154,7 +154,7 @@ function ToggleRow({ label, description, value, onChange }: ToggleRowProps) {
       <button
         onClick={onChange}
         className={`w-14 h-8 rounded-full relative transition-all duration-300 ${
-          value ? 'bg-[#ff7b00]' : 'bg-gray-300 dark:bg-gray-700'
+          value ? 'bg-brand-orange' : 'bg-gray-300 dark:bg-gray-700'
         }`}
         aria-pressed={value}
         role="switch"
