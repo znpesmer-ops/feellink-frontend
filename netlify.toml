@@ -1,0 +1,41 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Next.js için: public/ klasörü otomatik olarak root'ta servis edilir
+# Ancak Netlify'da static dosyaların doğru Content-Type ile servis edilmesi için
+# explicit redirect'ler gerekebilir
+
+# Static dosyalar (logo.png) için - Content-Type: image/png garantisi
+# Bu redirect'ler Netlify'nin dosyayı HTML olarak değil, PNG olarak servis etmesini sağlar
+[[redirects]]
+  from = "/logo.png"
+  to = "/logo.png"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/logo-mail.png"
+  to = "/logo-mail.png"
+  status = 200
+  force = true
+
+# Next.js static assets (_next/static)
+[[redirects]]
+  from = "/_next/static/*"
+  to = "/_next/static/:splat"
+  status = 200
+
+# Next.js API routes
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 200
+
+# Next.js fallback - en sonda olmalı (SPA routing için)
+# NOT: Bu redirect static dosyaları (logo.png) etkilememeli çünkü yukarıdaki redirect'ler önce gelir
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

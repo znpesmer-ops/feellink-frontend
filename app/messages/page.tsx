@@ -1685,3 +1685,6 @@ export default function MessagesPage() {
   )
 }
 
+// Dynamic export - prerender'i devre dışı bırak (useSearchParams ve socket kullanımı nedeniyle)
+export const dynamic = 'force-dynamic';
+
