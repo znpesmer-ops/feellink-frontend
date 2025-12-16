@@ -94,28 +94,13 @@ interface ColorPaletteItem {
   frequency?: number;
 }
 
-// Pro plan kontrolü için yardımcı fonksiyon
+// Plan kontrolü kaldırıldı - artık herkes erişebilir
 function isProPlan(
-  user?: { plan?: SubscriptionPlanCode; roles?: UserRoleCode[] } | null,
+  user?: { plan?: SubscriptionPlanCode; roles?: UserRoleCode[]; isAdmin?: boolean; superAdmin?: boolean } | null,
   capabilities?: { plan?: SubscriptionPlanCode; roles?: UserRoleCode[] } | null
 ) {
-  if (!user && !capabilities) return false;
-
-  // Önce capabilities'den plan kontrolü yap
-  const plan = capabilities?.plan?.toLowerCase() ?? user?.plan?.toLowerCase() ?? '';
-  const roles = capabilities?.roles ?? user?.roles ?? [];
-
-  // 1) Plan isminde "pro" geçiyorsa direkt pro kabul et
-  if (plan === 'pro') return true;
-
-  // 2) Rol bazlı kontrol (pro rolleri)
-  const proRoles: UserRoleCode[] = ['artist', 'corporate', 'collector'];
-  const hasProRole = roles.some((role) => proRoles.includes(role));
-
-  // 3) ORI planı da pro sayılabilir (isteğe bağlı)
-  if (plan === 'ori') return true;
-
-  return hasProRole;
+  // Plan kontrolü kaldırıldı - her zaman true döndür
+  return true;
 }
 
 // Blur / Overlay için koruma komponenti
@@ -159,22 +144,11 @@ function BlurGuard({ isPro, children }: BlurGuardProps) {
         {/* Vignette efekti (çok hafif kararma – profesyonel görünüm) */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent to-black/10 dark:from-transparent dark:to-black/30 rounded-2xl" />
 
-        {/* Blur üzerine yazılar */}
+        {/* Plan kontrolü kaldırıldı - artık herkes erişebilir */}
         <div className="relative z-10 flex flex-col items-center justify-center gap-3">
           <p className="text-center text-sm text-gray-600 dark:text-gray-300 max-w-xs leading-relaxed">
-            Bu özellik <span className="font-semibold">Pro Plan</span> kullanıcılarına özeldir.
-            <br />
-            Gelişmiş analizleri görüntülemek için Pro plana geçebilirsiniz.
+            Bu özellik tüm kullanıcılara açıktır.
           </p>
-
-          {/* Premium button */}
-          <button
-            type="button"
-            onClick={() => router.push('/settings')}
-            className="mt-1 rounded-xl bg-gradient-to-r from-[#FF8A00] to-[#1E88E5] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#FF8A00]/20 hover:shadow-[#1E88E5]/30 hover:scale-[1.02] transition-all"
-          >
-            Pro Plana Geç
-          </button>
         </div>
       </div>
     </div>
@@ -540,7 +514,7 @@ export default function AnalyticsPage() {
   return (
     <div className="w-full px-6 py-4">
       {/* 🔥 KRİTİK: Geniş container - tam ekran genişliği */}
-      <div className="max-w-[1600px] mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Başlık */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-[#FF8A00] flex items-center gap-3 mb-2">
@@ -550,18 +524,16 @@ export default function AnalyticsPage() {
           <p className="text-gray-500 dark:text-gray-400">
             İçeriğinizin performansını ve etkileşimlerini takip edin
           </p>
-          {!pro && (
-            <p className="mt-2 text-xs text-amber-300">
-              Pro Plan ile: ayrıntılı grafikler, renk analizi, etkinlik katılım istatistikleri ve en
-              çok etkileşim aldığınız içerikler açılır.
-            </p>
-          )}
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Ayrıntılı grafikler, renk analizi, etkinlik katılım istatistikleri ve en
+            çok etkileşim aldığınız içerikler.
+          </p>
         </div>
 
         {/* ---- ANALİZ KARTLARI GRID ---- */}
         {/* 🔥 KRİTİK: Responsive 3 kolonlu grid - ferah görünüm */}
         <BlurGuard isPro={pro}>
-          <div className="w-full mt-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="w-full mt-10 grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-8">
           {/* Etkileşim Trendi */}
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
             <h3 className="text-[#FF8A00] font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
@@ -654,9 +626,9 @@ export default function AnalyticsPage() {
             <ColorMatchesCard userId={user.id} />
           )}
 
-          {/* Sana En Yakın 5 Renk Eşleşmesi */}
+          {/* Sana En Yakın Renklerle Eşleşen Kişiler */}
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-            <h3 className="text-[#FF8A00] font-semibold mb-4">Sana En Yakın 5 Renk Eşleşmesi</h3>
+            <h3 className="text-[#FF8A00] font-semibold mb-4">Sana En Yakın Renklerle Eşleşen Kişiler</h3>
 
             {isLoadingColorMatches ? (
               <div className="flex items-center justify-center py-8">

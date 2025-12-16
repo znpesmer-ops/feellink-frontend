@@ -38,7 +38,7 @@ function EditProfileContent() {
       setAvatar(user.avatar || '')
       setAvatarPreview(user.avatar || '')
       setFullName(user.fullName || '')
-      setWebsite(user.website || '')
+      setWebsite((user as any).website || '')
       setIsPrivate(user.isPrivate || false)
     }
   }, [user])

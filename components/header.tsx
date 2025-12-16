@@ -97,11 +97,14 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
     } finally {
       clearAuth()
       setIsMenuOpen(false)
-      router.push('/login')
+      // replace kullanarak geri butonuna basınca geri dönmesin
+      router.replace('/login')
     }
   }
 
-  if (!accessToken) {
+  // Token yoksa veya user yoksa header'ı gösterme
+  // Bu, login/register sayfalarında header'ın görünmemesini sağlar
+  if (!accessToken || !user) {
     return null
   }
 
@@ -116,7 +119,7 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
           value={searchQuery}
           onChange={handleSearchChange}
           onFocus={() => searchQuery && setIsSearchOpen(true)}
-          className="w-full px-3 py-2 pl-9 pr-3 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
+          className="w-full px-3 py-2 pl-9 pr-3 text-sm bg-gray-50 dark:bg-[#151b2d] border-2 border-gray-200 dark:border-brand-blue/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder:text-gray-400 dark:placeholder:text-gray-400 text-gray-900 dark:text-gray-100"
         />
         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
           <svg
@@ -153,7 +156,7 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
 
   // Desktop mod: Tam header
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 shadow-sm z-50 transition-colors">
+    <header className="h-[64px] bg-gradient-to-r from-white via-blue-50/40 to-white dark:from-[#0a0f1f] dark:via-[#0f1625] dark:to-[#0a0f1f] border-b-2 border-brand-orange/30 dark:border-brand-orange/50 shadow-sm backdrop-blur-md transition-colors">
       <div className="flex flex-col md:flex-row md:items-center justify-between w-full h-full px-4 md:px-8 gap-3 md:gap-0">
         {/* Sol taraf - Hoş geldin (mobilde gizli, desktop'ta görünür) */}
         <div className="hidden md:block text-sm font-medium text-[#1f1f1f] dark:text-gray-100">
@@ -170,11 +173,11 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery && setIsSearchOpen(true)}
-                className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange/50 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-900 dark:text-gray-100"
+                className="w-full px-4 py-2 pl-10 pr-4 text-sm bg-gradient-to-r from-white to-blue-50/50 dark:from-[#151b2d] dark:to-[#1a2342] border-2 border-brand-blue/30 dark:border-brand-blue/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder:text-gray-400 dark:placeholder:text-gray-400 text-gray-900 dark:text-gray-100"
               />
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg
-                  className="w-5 h-5 text-gray-400"
+                  className="w-5 h-5 text-brand-blue/60 dark:text-blue-400/60"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -256,7 +259,7 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
                     alt={user.username}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      console.error('Header Avatar Error:', resolveImageUrl(user.avatar))
+                      // Silently fallback to placeholder without logging
                       ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
                     }}
                   />
@@ -281,11 +284,11 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
 
             {/* Dropdown Menu */}
             {isMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#151b2d] rounded-2xl shadow-lg border border-gray-100 dark:border-brand-blue/30 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                 <Link
                   href={`/profile/${user?.username || ''}`}
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700"
+                  className="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#1a2342] transition-colors border-b border-gray-100 dark:border-brand-blue/20"
                 >
                   <div className="flex items-center space-x-2">
                     <svg

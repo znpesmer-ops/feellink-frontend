@@ -196,9 +196,10 @@ export default function CreateEventModal({ isOpen, onClose, onCreated }: CreateE
       setCoverImage(null);
       setIsFree(true);
       setPrice(0);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Etkinlik oluşturulamadı:", err);
-      alert("Bir hata oluştu.");
+      const errorMessage = err?.response?.data?.message || err?.message || "Etkinlik oluşturulamadı. Lütfen tekrar deneyin.";
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

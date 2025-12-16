@@ -29,17 +29,14 @@ export const PRO_ROLE_BADGE_CONFIG: Record<
 /**
  * PRO rozet gösterimi için yardımcı fonksiyon
  * @param roles - Kullanıcının rolleri array
- * @param plan - Kullanıcının planı ('FREE' | 'PRO' | 'ORI')
+ * @param plan - Kullanıcının planı (artık kullanılmıyor, geriye uyumluluk için)
  * @returns PRO rozet config veya null
  */
 export function getProRoleBadgeConfig(
   roles: string[] | null | undefined,
   plan: string | null | undefined
 ): { icon: LucideIcon; gradient: string } | null {
-  // Plan PRO değilse rozet gösterme
-  if (plan !== 'PRO' && plan !== 'ORI') {
-    return null
-  }
+  // Plan kontrolü kaldırıldı - artık sadece rol bazlı
 
   // Roller yoksa rozet gösterme
   if (!roles || !Array.isArray(roles) || roles.length === 0) {
@@ -73,19 +70,17 @@ export function getProRoleBadgeTooltip(
   roles: string[] | null | undefined,
   plan: string | null | undefined
 ): string | null {
-  if (plan !== 'PRO' && plan !== 'ORI') {
-    return null
-  }
+  // Plan kontrolü kaldırıldı - artık sadece rol bazlı
 
   if (!roles || !Array.isArray(roles) || roles.length === 0) {
     return null
   }
 
   const roleLabels: Record<string, string> = {
-    artist: 'Sanatçı PRO',
-    corporate: 'Kurumsal PRO',
-    collector: 'Koleksiyoner PRO',
-    art_lover: 'Sanatsever PRO',
+    artist: 'Sanatçı',
+    corporate: 'Kurumsal',
+    collector: 'Koleksiyoner',
+    art_lover: 'Sanatsever',
   }
 
   const priorityOrder: string[] = ['corporate', 'collector', 'artist', 'art_lover']

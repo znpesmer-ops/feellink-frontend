@@ -18,7 +18,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
       // If no token, redirect to login
       if (!accessToken) {
-        router.push('/login')
+        router.replace('/login')
         return
       }
 
@@ -53,13 +53,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             } catch (refreshError) {
               // Refresh failed, logout
               useAuthStore.getState().clearAuth()
-              router.push('/login')
+              router.replace('/login')
               return
             }
           } else {
             // No refresh token, logout
             useAuthStore.getState().clearAuth()
-            router.push('/login')
+            router.replace('/login')
             return
           }
         }

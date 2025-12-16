@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon } from 'lucide-react'
+import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon, FolderPlus } from 'lucide-react'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
@@ -14,6 +14,8 @@ import UserBadge from './UserBadge'
 import { ProRoleBadge } from './ProRoleBadge'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import Slider from 'react-slick'
+import toast from 'react-hot-toast'
+import { AddToCollectionModal } from './collections/AddToCollectionModal'
 
 const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
   ssr: false,
@@ -72,7 +74,7 @@ interface Post {
 }
 
 export function PostModal({ postId, onClose }: PostModalProps) {
-  const { accessToken, user } = useAuthStore()
+  const { accessToken, user, capabilities } = useAuthStore()
   const queryClient = useQueryClient()
   const router = useRouter()
   const [commentText, setCommentText] = useState('')
@@ -83,6 +85,10 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   const [contextMenu, setContextMenu] = useState<{ commentId: string; x: number; y: number } | null>(null)
   const [currentSlide, setCurrentSlide] = useState(0)
   const sliderRef = useRef<Slider | null>(null)
+  const [showAddToCollectionModal, setShowAddToCollectionModal] = useState(false)
+  
+  const roles = capabilities?.roles ?? user?.roles ?? []
+  const canManageCollections = roles.includes('corporate') || roles.includes('collector')
 
   // Modal açıkken body'ye class ekle (arka plan UI elementlerini gizlemek için)
   useEffect(() => {
@@ -256,6 +262,38 @@ export function PostModal({ postId, onClose }: PostModalProps) {
       }
     })
 
+    // Yorum sabitleme dinleme
+    commentsSocket.on('commentPinned', (data: { id: string; postId: string; isPinned: boolean }) => {
+      if (data.postId === postId) {
+        // ✅ Optimistic Update - Socket event'inden gelen güncelleme
+        queryClient.setQueryData<Post>(['post', postId], (oldData) => {
+          if (!oldData) return oldData
+          
+          return {
+            ...oldData,
+            comments: oldData.comments?.map((comment: any) => {
+              // Eğer bu yorum sabitleniyorsa
+              if (data.isPinned && comment.id === data.id) {
+                return { ...comment, isPinned: true }
+              }
+              // Eğer bu yorum sabitleniyorsa, diğer yorumların isPinned'ini false yap
+              if (data.isPinned && comment.id !== data.id) {
+                return { ...comment, isPinned: false }
+              }
+              // Eğer bu yorum sabitlenmesi kaldırılıyorsa
+              if (!data.isPinned && comment.id === data.id) {
+                return { ...comment, isPinned: false }
+              }
+              return comment
+            }) || [],
+          }
+        })
+        
+        // Query'yi invalidate et ki backend'den güncel veriyi çeksin
+        queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      }
+    })
+
     commentsSocket.on('connect', () => {
       console.log('✅ Comments socket connected for post modal')
       // Bağlandıktan sonra odaya tekrar katıl
@@ -267,6 +305,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
       commentsSocket.off('newComment')
       commentsSocket.off('commentCreated')
       commentsSocket.off('commentDeleted')
+      commentsSocket.off('commentPinned')
       commentsSocket.off('connect')
     }
   }, [accessToken, postId, queryClient])
@@ -296,11 +335,55 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   // Handle pin/unpin comment
   const handlePinComment = async (commentId: string, currentPinned: boolean) => {
     try {
-      await api.post(`/posts/comments/${commentId}/pin`, { pinned: !currentPinned })
-      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      const newPinnedState = !currentPinned
+      
+      // ✅ Optimistic Update - UI'ı hemen güncelle
+      queryClient.setQueryData<Post>(['post', postId], (oldData) => {
+        if (!oldData) return oldData
+        
+        return {
+          ...oldData,
+          comments: oldData.comments?.map((comment: any) => {
+            // Eğer bu yorum sabitleniyorsa, diğer tüm yorumların isPinned'ini false yap
+            if (newPinnedState && comment.id === commentId) {
+              return { ...comment, isPinned: true }
+            }
+            // Eğer bu yorum sabitleniyorsa, diğer yorumların isPinned'ini false yap
+            if (newPinnedState && comment.id !== commentId) {
+              return { ...comment, isPinned: false }
+            }
+            // Eğer bu yorum sabitlenmesi kaldırılıyorsa
+            if (!newPinnedState && comment.id === commentId) {
+              return { ...comment, isPinned: false }
+            }
+            return comment
+          }) || [],
+        }
+      })
+      
       setContextMenu(null)
-    } catch (error) {
+      
+      // API isteği
+      await api.post(`/posts/comments/${commentId}/pin`, { pinned: newPinnedState })
+      
+      // Query'yi invalidate et ki backend'den güncel veriyi çeksin (optimistic update'i doğrula)
+      await queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      
+      // Başarı mesajı
+      toast.success(newPinnedState ? 'Yorum sabitlendi' : 'Sabitleme kaldırıldı', {
+        duration: 2000,
+        icon: '📌',
+      })
+    } catch (error: any) {
       console.error('Error pinning comment:', error)
+      
+      // ❌ Hata durumunda optimistic update'i geri al
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      
+      const errorMessage = error?.response?.data?.message || error?.message || 'Yorum sabitlenemedi'
+      toast.error(errorMessage, {
+        duration: 3000,
+      })
     }
   }
 
@@ -475,7 +558,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <span className="text-gray-100 dark:text-gray-100 font-semibold text-sm">
+                  <span className="text-black dark:text-white font-semibold text-sm">
                     {post.user.fullName || post.user.username}
                   </span>
                   {post.user.isVerified && (
@@ -492,7 +575,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                 </button>
               </div>
               {post.caption && (
-                <p className="text-gray-400 dark:text-gray-400 text-sm mt-[2px] leading-snug whitespace-pre-wrap break-words">
+                <p className="text-black dark:text-white text-sm mt-[2px] leading-snug whitespace-pre-wrap break-words">
                   {post.caption}
                 </p>
               )}
@@ -541,25 +624,56 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                     : 'text-gray-700 dark:text-gray-300'
                 }`}
               />
+              {canManageCollections && (
+                <button
+                  onClick={() => setShowAddToCollectionModal(true)}
+                  className="hover:text-brand-orange transition-colors"
+                  title="Koleksiyona Ekle"
+                >
+                  <FolderPlus size={24} className="text-gray-700 dark:text-gray-300" />
+                </button>
+              )}
             </button>
           </div>
 
 
           {/* Comments Section - Instagram Style */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* ✅ SABİTLENEN YORUM ALANI - Özel Banner */}
+            {(() => {
+              const pinnedComment = post.comments?.find((c: any) => c.isPinned);
+              if (!pinnedComment) return null;
+              
+              return (
+                <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-brand-orange/5 dark:bg-brand-orange/10 border border-brand-orange/30 dark:border-brand-orange/40">
+                  <div className="mt-0.5 flex-shrink-0">
+                    <Pin className="w-4 h-4 text-brand-orange fill-brand-orange/80" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-brand-orange">
+                        Sabitlenen yorum
+                      </span>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                        @{pinnedComment.user.username}
+                      </span>
+                    </div>
+                    <p className="text-sm text-black dark:text-white mt-1 line-clamp-2 leading-relaxed">
+                      {pinnedComment.content}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Comments */}
             {post.comments && post.comments.length > 0 ? (
               <>
                 {(() => {
-                  // Sabitlenen yorumlar önce, sonra diğerleri
-                  const sortedComments = [
-                    ...post.comments.filter((c: any) => c.isPinned),
-                    ...post.comments.filter((c: any) => !c.isPinned)
-                  ];
+                  // Sabitlenen yorumlar hariç, sadece normal yorumları göster
+                  const normalComments = post.comments.filter((c: any) => !c.isPinned);
                   
-                  return sortedComments.map((comment: any) => {
-                    const isPinned = !!comment.isPinned;
-                    
+                  return normalComments.map((comment: any) => {
                     return (
                     <div key={comment.id}>
                       {/* Ana yorum */}
@@ -577,67 +691,35 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           }
                         }}
                       >
-                        {/* Sol taraf avatar - sadece normal yorumlarda */}
-                        {!isPinned && (
-                          <Link
-                            href={`/profile/${comment.user.username}`}
-                            className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
-                          >
-                            {comment.user.avatar ? (
-                              <img
-                                src={resolveImageUrl(comment.user.avatar)}
-                                alt={comment.user.username}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  console.error('PostModal Comment Avatar Error:', resolveImageUrl(comment.user.avatar))
-                                  ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                                }}
-                              />
-                            ) : (
-                              <span className="text-gray-500 dark:text-gray-300 text-xs">
-                                {comment.user.username[0].toUpperCase()}
-                              </span>
-                            )}
-                          </Link>
-                        )}
+                        {/* Sol taraf avatar */}
+                        <Link
+                          href={`/profile/${comment.user.username}`}
+                          className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                        >
+                          {comment.user.avatar ? (
+                            <img
+                              src={resolveImageUrl(comment.user.avatar)}
+                              alt={comment.user.username}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                              }}
+                            />
+                          ) : (
+                            <span className="text-gray-500 dark:text-gray-300 text-xs">
+                              {comment.user.username[0].toUpperCase()}
+                            </span>
+                          )}
+                        </Link>
                         
                         <div className="flex-1 min-w-0">
-                          {/* Sabitlenen Yorum Banner'ı */}
-                          {isPinned && (
-                            <div className="flex items-center gap-2 mb-2 text-amber-500 dark:text-amber-400 font-medium">
-                              <Pin size={16} className="fill-amber-500 dark:fill-amber-400" />
-                              <span className="text-xs md:text-sm">Sabitlenen Yorum</span>
-                            </div>
-                          )}
-                          
-                          {/* Kullanıcı Bilgisi - Sabitlenen yorumlarda banner altında, normal yorumlarda üstte */}
+                          {/* Kullanıcı Bilgisi */}
                           <div className="flex items-center gap-2 mb-2">
-                            {isPinned && (
-                              <Link
-                                href={`/profile/${comment.user.username}`}
-                                className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
-                              >
-                                {comment.user.avatar ? (
-                                  <img
-                                    src={resolveImageUrl(comment.user.avatar)}
-                                    alt={comment.user.username}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                                    }}
-                                  />
-                                ) : (
-                                  <span className="text-gray-500 dark:text-gray-300 text-xs">
-                                    {comment.user.username[0].toUpperCase()}
-                                  </span>
-                                )}
-                              </Link>
-                            )}
                             <Link
                               href={`/profile/${comment.user.username}`}
-                              className={`${isPinned ? 'text-sm text-gray-300 dark:text-gray-200' : 'text-sm text-gray-200 dark:text-gray-100'} font-medium hover:opacity-80 transition cursor-pointer inline-block`}
+                              className="text-sm text-black dark:text-white font-semibold hover:opacity-80 transition cursor-pointer inline-block"
                             >
-                              {isPinned ? `@${comment.user.username}` : comment.user.username}
+                              {comment.user.username}
                             </Link>
                             <UserBadge role={comment.user.role} />
                             <ProRoleBadge roles={(comment.user as any).roles} plan={(comment.user as any).plan} />
@@ -646,7 +728,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           {/* Yorum metni */}
                           <div className="flex items-start gap-2">
                             <div className="flex-1">
-                              <span className="text-sm text-gray-400 dark:text-gray-400 block">
+                              <span className="text-sm text-black dark:text-white block leading-relaxed">
                                 {comment.content}
                               </span>
                             </div>
@@ -663,7 +745,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                           
                           {/* Alt satır - tarih ve yanıtla */}
                           <div className="flex items-center gap-3 mt-1">
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                            <p className="text-xs text-[#444] dark:text-gray-400">
                               {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                             </p>
                             <button
@@ -683,7 +765,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                         </div>
                       
                       {/* Context Menu - Sadece gönderi sahibine göster */}
-                      {contextMenu?.commentId === comment.id && user?.id === post.user.id && (
+                      {contextMenu?.commentId === comment.id && user?.id === post.user.id && contextMenu && (
                         <div
                           className="fixed z-50 bg-gray-900 dark:bg-[#1a1a1a] text-gray-200 text-sm rounded-lg shadow-xl border border-gray-700 dark:border-gray-600 animate-in fade-in zoom-in-95 duration-150"
                           style={{
@@ -745,7 +827,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                 )}
                               </Link>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-900 dark:text-gray-100 flex items-center gap-1">
+                                <p className="text-sm text-black dark:text-white flex items-center gap-1 leading-relaxed">
                                   <Link
                                     href={`/profile/${reply.user.username}`}
                                     className="font-semibold hover:opacity-80 transition cursor-pointer"
@@ -756,7 +838,7 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                   <ProRoleBadge roles={(reply.user as any).roles} plan={(reply.user as any).plan} />
                                   <span>{reply.content}</span>
                                 </p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                <p className="text-xs text-[#444] dark:text-gray-400 mt-0.5">
                                   {new Date(reply.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
@@ -829,6 +911,15 @@ export function PostModal({ postId, onClose }: PostModalProps) {
           </div>
         </div>
       </div>
+
+      {/* Add to Collection Modal */}
+      {showAddToCollectionModal && (
+        <AddToCollectionModal
+          postId={postId}
+          open={showAddToCollectionModal}
+          onClose={() => setShowAddToCollectionModal(false)}
+        />
+      )}
     </div>
   )
 }

@@ -159,7 +159,7 @@ export default function RoleSelectionModal({
                       ? 'opacity-50 cursor-not-allowed'
                       : 'dark:bg-[#0d0d0d] bg-white border dark:border-[#2b2b2b] border-gray-200 hover:border-[#ff7b00] hover:shadow-lg hover:scale-105'
                 }`}
-                onClick={() => !isDisabled && handleRoleSelect(role.key, role.route)}
+                onClick={() => !isDisabled && handleRoleSelect(role.key as UserRoleCode, role.route)}
               >
                 {/* Icon */}
                 <div

@@ -38,6 +38,7 @@ body {
   padding: 0;
   height: 100%;
   width: 100%;
+  overflow-x: hidden;
   color: var(--text);
   background: var(--bg);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
@@ -187,6 +188,21 @@ html:not(.dark) body {
 
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out;
+}
+
+@keyframes modalSlide {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modalSlide {
+  animation: modalSlide 0.2s ease-out;
 }
 
 .slide-in-from-bottom-4 {

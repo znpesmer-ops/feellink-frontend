@@ -42,20 +42,25 @@ export default function CreateCollectionModal({ isOpen, onClose, onCreated }: Cr
         coverUrl = upload.data.url;
       }
 
-      await api.post("/collections", {
+      console.log("🔄 Koleksiyon oluşturuluyor:", { title, description, coverImage: coverUrl });
+      const response = await api.post("/collections", {
         title,
         description,
         coverImage: coverUrl,
       });
+      console.log("✅ Koleksiyon oluşturuldu:", response.data);
 
       onCreated(); // Refresh list
       onClose(); // Close modal
       setTitle("");
       setDescription("");
       setCoverImage(null);
-    } catch (err) {
-      console.error("Koleksiyon oluşturulamadı:", err);
-      alert("Bir hata oluştu.");
+    } catch (err: any) {
+      console.error("❌ Koleksiyon oluşturulamadı:", err);
+      console.error("Error response:", err?.response?.data);
+      console.error("Error status:", err?.response?.status);
+      const errorMessage = err?.response?.data?.message || "Bir hata oluştu.";
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -73,3 +73,18 @@ export async function extractColorsFromFile(file: File, maxColors = 5): Promise<
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

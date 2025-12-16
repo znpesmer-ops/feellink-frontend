@@ -19,8 +19,33 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = []
 }
 
-// API base URL - sadece environment variable'dan al
-const baseURL = process.env.NEXT_PUBLIC_API_URL
+// API base URL - dinamik olarak belirle
+// Client-side'da window.location'dan, server-side'da env'den al
+const getBaseURL = (): string => {
+  // Server-side (SSR)
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+  }
+  
+  // Client-side - dinamik URL belirleme
+  const envURL = process.env.NEXT_PUBLIC_API_URL
+  
+  // Eğer env'de IP adresi varsa ve şu anda localhost'tan erişiliyorsa, localhost kullan
+  if (envURL && envURL.includes('192.168.')) {
+    const currentHost = window.location.hostname
+    // Eğer localhost veya 127.0.0.1'den erişiliyorsa, localhost backend kullan
+    if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+      return 'http://localhost:3002'
+    }
+    // Mobil cihazdan erişiliyorsa, IP adresini kullan
+    return envURL
+  }
+  
+  // Varsayılan olarak env URL'i veya localhost
+  return envURL || 'http://localhost:3002'
+}
+
+const baseURL = getBaseURL()
 
 if (!baseURL) {
   console.error('NEXT_PUBLIC_API_URL tanımlı değil!')
@@ -28,7 +53,7 @@ if (!baseURL) {
 
 // getApiBaseURL fonksiyonunu export et (socket.ts ve diğer dosyalar için)
 export const getApiBaseURL = (): string => {
-  return baseURL || 'http://localhost:3002'
+  return baseURL
 }
 
 if (typeof window === 'undefined') {
@@ -73,6 +98,15 @@ api.interceptors.response.use(
     // Network/Connection errors - daha anlaşılır hata mesajı ver
     if (!error.response) {
       // Network hatası (bağlantı yok, timeout, vs.)
+      // Sadece development modunda logla
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Network error:', {
+          code: error.code,
+          message: error.message,
+          url: originalRequest?.url,
+        })
+      }
+
       const networkError: AxiosError = {
         ...error,
         response: {

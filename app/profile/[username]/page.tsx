@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -10,12 +11,13 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2 } from 'lucide-react'
-import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar } from 'react-icons/fi'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock } from 'lucide-react'
+import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from '@/components/UserBadge'
 import { UserBadges } from '@/components/profile/UserBadges'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
+import { ROLE_METADATA, normalizeRole } from '@/lib/role-utils'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import { ProfileArtworksGrid } from '@/components/profile/ProfileArtworksGrid'
 import toast from 'react-hot-toast'
@@ -139,78 +141,45 @@ function ProfileContent() {
   // Helper function to check if user is corporate
   const isCorporateUser = profile?.role?.toUpperCase() === 'CORPORATE'
   
-  // Helper function to check if user is pro artist (artist-pro or kurumsal-pro)
+  // Helper function to check if user is artist or corporate (plan kontrolü kaldırıldı)
   // Profile yüklenene kadar güvenli kontrol
-  // Debug: Role değerlerini kontrol et
   const isProArtist = profile 
     ? (() => {
         // Role string kontrolü (case-insensitive)
         const roleStr = String(profile.role || '').toLowerCase()
-        const isRoleMatch = roleStr === 'artist-pro' || roleStr === 'kurumsal-pro'
+        const isRoleMatch = roleStr === 'artist' || roleStr === 'corporate'
         
         // Roles array kontrolü
         const hasRoleInArray = Array.isArray(profile.roles) && (
-          profile.roles.includes('artist-pro') || 
-          profile.roles.includes('kurumsal-pro') ||
-          profile.roles.some((r: string) => String(r).toLowerCase() === 'artist-pro') ||
-          profile.roles.some((r: string) => String(r).toLowerCase() === 'kurumsal-pro')
+          profile.roles.includes('artist') || 
+          profile.roles.includes('corporate') ||
+          profile.roles.some((r: string) => String(r).toLowerCase() === 'artist') ||
+          profile.roles.some((r: string) => String(r).toLowerCase() === 'corporate')
         )
         
-        // Plan kontrolü (PRO plan + artist/corporate role)
-        const hasProPlan = profile.plan === 'PRO' || profile.plan === 'pro'
+        // Plan kontrolü kaldırıldı - artık sadece rol bazlı
         const isArtistRole = profile.role === 'artist' || profile.role === 'ARTIST' || 
                             (Array.isArray(profile.roles) && profile.roles.includes('artist'))
         const isCorporateRole = profile.role === 'corporate' || profile.role === 'CORPORATE' ||
                                (Array.isArray(profile.roles) && profile.roles.includes('corporate'))
         
-        const result = isRoleMatch || hasRoleInArray || (hasProPlan && (isArtistRole || isCorporateRole))
-        
-        // Debug log (sadece development'ta)
-        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-          console.log('🔍 isProArtist Debug:', {
-            profileRole: profile.role,
-            profileRoles: profile.roles,
-            profilePlan: profile.plan,
-            roleStr,
-            isRoleMatch,
-            hasRoleInArray,
-            hasProPlan,
-            isArtistRole,
-            isCorporateRole,
-            result
-          })
-        }
+        const result = isRoleMatch || hasRoleInArray || isArtistRole || isCorporateRole
         
         return result
       })()
     : false
   
-  // Tab yapısı - Tüm sekmeler (herkes için görünür, içerikler rol bazlı)
+  // Tab yapısı - Tüm sekmeler (herkes için görünür, plan kontrolü kaldırıldı)
   const allTabs = [
     { key: 'posts', label: 'Gönderiler', icon: FiGrid },
-    { key: 'artworks', label: 'Eserler', icon: FiImage, requiresPro: true },
+    { key: 'artworks', label: 'Eserler', icon: FiImage },
     { key: 'articles', label: 'Yazılar', icon: FiFileText },
     { key: 'comments', label: 'Yorumlar', icon: FiMessageCircle },
-    { key: 'events', label: 'Etkinlikler', icon: FiCalendar, requiresPro: true },
+    { key: 'events', label: 'Etkinlikler', icon: FiCalendar },
   ]
   
-  // Kullanıcının rolüne göre sekmeleri filtrele
-  // Pro artist değilse requiresPro: true olan sekmeleri gizle
-  // Profile yüklenene kadar sadece default sekmeleri göster
-  const tabs = (() => {
-    // Profile yüklenene kadar sadece default sekmeler
-    if (!profile) {
-      return allTabs.filter(tab => !tab.requiresPro)
-    }
-    
-    // Pro artist kontrolü
-    if (isProArtist) {
-      return allTabs // Tüm sekmeler
-    }
-    
-    // Pro artist değilse sadece default sekmeler
-    return allTabs.filter(tab => !tab.requiresPro)
-  })()
+  // Plan kontrolü kaldırıldı - artık tüm sekmeler herkes için görünür
+  const tabs = allTabs
   
   // Debug: Tab'ların oluşturulmasını kontrol et (development'ta)
   useEffect(() => {
@@ -224,7 +193,7 @@ function ProfileContent() {
         allTabsCount: allTabs.length,
         filteredTabsCount: tabs.length,
         tabKeys: tabs.map(t => t.key),
-        tabs: tabs.map(t => ({ key: t.key, label: t.label, requiresPro: t.requiresPro }))
+        tabs: tabs.map(t => ({ key: t.key, label: t.label, requiresPro: (t as any).requiresPro || false }))
       })
     }
   }, [profile, isProArtist])
@@ -684,7 +653,7 @@ function ProfileContent() {
                     {profile.username}
                     {profile.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
                     <UserBadge role={profile.role} />
-                    <ProRoleBadge roles={profile.roles} plan={profile.plan} />
+                    <ProRoleBadge roles={profile.roles} plan={null} />
                   </h1>
                 </div>
                 <UserBadges badges={profile.badges} />
@@ -824,6 +793,12 @@ function ProfileContent() {
             <div>
               <p className="font-semibold text-gray-900 dark:text-gray-100">{profile.fullName || profile.username}</p>
               {profile.bio && <p className="mt-1 text-gray-900 dark:text-gray-100">{profile.bio}</p>}
+              {/* Role Label - Plan bilgisi olmadan sadece rol */}
+              {profile.role && (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  {ROLE_METADATA[normalizeRole(profile.role)]?.label || profile.role}
+                </p>
+              )}
             </div>
           </div>
         </div>

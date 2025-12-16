@@ -73,12 +73,15 @@ function ExploreContent() {
     )
   }
 
-  const filters = ['Tümü', 'Sanatçılar', 'Koleksiyonlar', 'Etkinlikler']
+  // Filtre sekmeleri kaldırıldı - sadece varsayılan keşfet akışı gösteriliyor
+  // State (activeFilter) korunuyor - ileride tekrar eklenebilir
+  // const filters = ['Tümü', 'Sanatçılar', 'Koleksiyonlar', 'Etkinlikler']
 
   return (
     <>
       <div className="max-w-7xl mx-auto py-8 px-4">
-        {/* Filtre Barı */}
+        {/* Filtre Barı - KALDIRILDI */}
+        {/* 
         <div className="flex items-center justify-center gap-4 mt-6 mb-8">
           {filters.map((filter) => (
             <button
@@ -94,6 +97,7 @@ function ExploreContent() {
             </button>
           ))}
         </div>
+        */}
 
         {/* Düzenli Grid View */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 p-3 md:p-6">

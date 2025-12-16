@@ -1,6 +1,7 @@
 'use client'
 
-import { getRoleBadges, getRoleLabels, ROLE_CONFIGS, type Role } from '@/lib/role-utils'
+import { getRoleBadges, getRoleLabels, ROLE_METADATA } from '@/lib/role-utils'
+import type { UserRoleCode } from '@/types/capabilities'
 
 interface RoleBadgeProps {
   roles: string[] | undefined | null
@@ -31,8 +32,8 @@ export default function RoleBadge({
   return (
     <div className={`flex items-center gap-1 ${className}`}>
       {badges.map((badge, index) => {
-        const role = roles?.[index] as Role
-        const config = role ? ROLE_CONFIGS[role] : null
+        const role = roles?.[index] as UserRoleCode | undefined
+        const config = role ? ROLE_METADATA[role as keyof typeof ROLE_METADATA] : null
         const label = labels[index]
 
         return (
@@ -64,6 +65,21 @@ export default function RoleBadge({
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

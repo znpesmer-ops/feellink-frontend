@@ -98,6 +98,7 @@ export default function MessagesPage() {
   const [showMenuForId, setShowMenuForId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'chat' | 'media' | 'files'>('chat')
   const [media, setMedia] = useState<Array<{ id: string; imageUrl: string; createdAt: string; senderId: string }>>([])
+  const [jobApplications, setJobApplications] = useState<Record<string, { listingTitle: string; company?: string }>>({})
   const [files, setFiles] = useState<Array<{ id: string; fileUrl: string; fileName: string | null; fileType: string | null; createdAt: string; senderId: string }>>([])
   const [loadingMedia, setLoadingMedia] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
@@ -429,6 +430,35 @@ export default function MessagesPage() {
       setLoading(false)
     }
   }
+
+  // ACCEPTED başvuruları yükle (ilan üzerinden etiketi için)
+  useEffect(() => {
+    if (!accessToken || !user?.id) return
+
+    async function loadAcceptedApplications() {
+      try {
+        const response = await api.get('/jobs/me/applications')
+        const applications = response.data || []
+        const acceptedMap: Record<string, { listingTitle: string; company?: string }> = {}
+        
+        applications.forEach((app: any) => {
+          if (app.status === 'ACCEPTED' && app.jobListing?.createdBy?.id) {
+            // İlan sahibinin ID'si ile eşleştir
+            acceptedMap[app.jobListing.createdBy.id] = {
+              listingTitle: app.jobListing.title,
+              company: app.jobListing.company,
+            }
+          }
+        })
+        
+        setJobApplications(acceptedMap)
+      } catch (error) {
+        console.error('Failed to load accepted applications:', error)
+      }
+    }
+
+    loadAcceptedApplications()
+  }, [accessToken, user?.id])
 
   useEffect(() => {
     if (accessToken) {
@@ -879,12 +909,19 @@ export default function MessagesPage() {
                         </span>
                       ) : null}
                     </div>
-                    <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1">
-                          {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
-                          <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
-                        </h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                            {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
+                            <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
+                          </h3>
+                          {jobApplications[otherUser?.user?.id || ''] && (
+                            <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5">
+                              İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
+                            </p>
+                          )}
+                        </div>
                         {lastMessage ? (
                           <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 whitespace-nowrap">
                             {formatTimeAgo(lastMessage.createdAt)}
@@ -966,6 +1003,11 @@ export default function MessagesPage() {
                         {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                         <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                       </h2>
+                      {jobApplications[otherUser?.user?.id || ''] && (
+                        <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5">
+                          İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
+                        </p>
+                      )}
                       {isTyping ? (
                         <p className="text-xs text-brand-orange">Yazıyor...</p>
                       ) : isOnline ? (
@@ -1293,6 +1335,11 @@ export default function MessagesPage() {
                         <h2 className="font-semibold text-gray-900 dark:text-white truncate">
                           {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                         </h2>
+                        {jobApplications[otherUser?.user?.id || ''] && (
+                          <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5 truncate">
+                            İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
+                          </p>
+                        )}
                         {isTyping ? (
                           <p className="text-xs text-brand-orange">Yazıyor...</p>
                         ) : isOnline ? (

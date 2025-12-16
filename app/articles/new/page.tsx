@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
-import { Upload, X } from 'lucide-react'
+import { Upload, X, Calendar } from 'lucide-react'
 import ArticleImageCropper from '@/components/articles/ArticleImageCropper'
 
 function NewArticleContent() {
@@ -142,8 +142,7 @@ function NewArticleContent() {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-900 p-6 md:p-8 transition-colors">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-          <span>📝</span>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Yeni Yazı Oluştur
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
@@ -244,16 +243,23 @@ function NewArticleContent() {
           {/* Zamanlanmış Yayın */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              🕒 Yayın Zamanı (Opsiyonel)
+              Yayın Zamanı (Opsiyonel)
             </label>
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              min={new Date().toISOString().slice(0, 16)}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-xl bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#ff7b00] transition-all"
-            />
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            <div className="relative flex items-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:border-[#ff7b00]/50 transition-all focus-within:ring-2 focus-within:ring-[#ff7b00] focus-within:border-[#ff7b00]">
+              {/* Takvim ikonu */}
+              <Calendar className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+              
+              {/* Tarih-saat inputu */}
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                placeholder="Tarih ve saat seçin"
+                className="ml-3 w-full bg-transparent outline-none text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
+              />
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
               {scheduledAt
                 ? `Yazı ${new Date(scheduledAt).toLocaleString('tr-TR', {
                     day: 'numeric',
@@ -262,12 +268,12 @@ function NewArticleContent() {
                     hour: '2-digit',
                     minute: '2-digit',
                   })} tarihinde otomatik yayınlanacak`
-                : 'Belirli bir tarih ve saatte otomatik yayınlamak için seçin'}
+                : 'Belirli bir tarih ve saatte otomatik yayınlanması için seçin'}
             </p>
           </div>
 
           {/* Butonlar */}
-          <div className="flex flex-wrap items-center gap-3 pt-4">
+          <div className="flex flex-wrap items-center gap-4 pt-6">
             <button
               type="button"
               onClick={async () => {
@@ -312,15 +318,15 @@ function NewArticleContent() {
                 }
               }}
               disabled={uploading}
-              className="px-6 py-3 border-2 border-[#ff7b00] text-[#ff7b00] rounded-xl font-medium hover:bg-[#ff7b00]/10 dark:hover:bg-[#ff7b00]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploading ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                   <span>Kaydediliyor...</span>
                 </div>
               ) : (
-                '💾 Taslak Olarak Kaydet'
+                'Taslak Olarak Kaydet'
               )}
             </button>
             {scheduledAt && (
@@ -372,7 +378,7 @@ function NewArticleContent() {
                   }
                 }}
                 disabled={uploading || !scheduledAt}
-                className="bg-gradient-to-r from-[#ff7b00] to-[#ff9500] text-white px-6 py-3 rounded-xl font-medium hover:from-[#e36f00] hover:to-[#ff8500] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md flex items-center gap-2"
+                className="px-6 py-3 rounded-xl bg-[#ff7b00] text-white font-semibold hover:bg-[#e36f00] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
               >
                 {uploading ? (
                   <div className="flex items-center justify-center gap-2">
@@ -380,17 +386,14 @@ function NewArticleContent() {
                     <span>Zamanlanıyor...</span>
                   </div>
                 ) : (
-                  <>
-                    <span>🕒</span>
-                    <span>Zamanla ve Kaydet</span>
-                  </>
+                  'Zamanla ve Kaydet'
                 )}
               </button>
             )}
             <button
               type="submit"
               disabled={uploading || !!scheduledAt}
-              className={`${scheduledAt ? 'flex-1' : 'flex-1'} bg-[#ff7b00] text-white px-6 py-3 rounded-xl font-medium hover:bg-[#e36f00] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md`}
+              className="flex-1 px-6 py-3 rounded-xl bg-[#ff7b00] text-white font-semibold hover:bg-[#e36f00] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
             >
               {uploading ? (
                 <div className="flex items-center justify-center gap-2">
@@ -398,13 +401,13 @@ function NewArticleContent() {
                   <span>Yayınlanıyor...</span>
                 </div>
               ) : (
-                '📤 Hemen Yayınla'
+                'Hemen Yayınla'
               )}
             </button>
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+              className="px-6 py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm hover:shadow-md"
             >
               İptal
             </button>

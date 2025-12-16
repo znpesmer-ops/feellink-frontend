@@ -177,7 +177,7 @@ export default function TopEventsChart({ events }: TopEventsChartProps) {
       </h3>
       <div className="h-[2px] w-20 bg-[#ff7b00] rounded-full mb-6" />
       <div className="h-64">
-        <Bar ref={chartRef} data={data} options={options} />
+        <Bar ref={chartRef} data={data} options={options as any} />
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
         Top {sortedEvents.length} etkinlik — toplam {sortedEvents.reduce((sum, e) => sum + e.ticketCount, 0)} bilet satışı

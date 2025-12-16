@@ -17,6 +17,7 @@ interface User {
   isPrivate?: boolean
   isVerified?: boolean
   isAdmin?: boolean
+  superAdmin?: boolean // 🔥 GOD-MODE
 }
 
 interface AuthState {
@@ -25,6 +26,7 @@ interface AuthState {
   sidebar: SidebarVisibility | null
   accessToken: string | null
   refreshToken: string | null
+  unreadCount: number
   setAuth: (
     user: User,
     accessToken: string,
@@ -38,6 +40,7 @@ interface AuthState {
   updateTokens: (accessToken: string, refreshToken?: string) => void
   clearAuth: () => void
   refreshUser: () => Promise<void> // Kullanıcı bilgilerini backend'den yenile
+  setUnreadCount: (count: number) => void // Bildirim okunmamış sayısını güncelle
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -48,6 +51,7 @@ export const useAuthStore = create<AuthState>()(
       sidebar: null,
       accessToken: null,
       refreshToken: null,
+      unreadCount: 0,
       setAuth: (user, accessToken, refreshToken, capabilities = null, sidebar = null) => {
         set({ user, accessToken, refreshToken, capabilities, sidebar })
       },
@@ -72,7 +76,7 @@ export const useAuthStore = create<AuthState>()(
         }))
       },
       clearAuth: () => {
-        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null })
+        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0 })
         // 🔥 Logout durumunda localStorage'dan rolleri de temizle
         localStorage.removeItem('feellink_roles')
       },
@@ -91,6 +95,9 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.warn('Kullanıcı bilgisi yenilenemedi:', error)
         }
+      },
+      setUnreadCount: (count: number) => {
+        set({ unreadCount: count })
       },
     }),
     {

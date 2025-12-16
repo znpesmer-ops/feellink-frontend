@@ -17,6 +17,14 @@ export const initSocket = (token: string): Socket => {
     transports: ['websocket'],
   })
 
+  // Handle connection errors silently
+  socket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('WebSocket connection error:', error.message)
+    }
+  })
+
   return socket
 }
 
@@ -31,6 +39,14 @@ export const initChatSocket = (token: string): Socket => {
       token,
     },
     transports: ['websocket'],
+  })
+
+  // Handle connection errors silently
+  chatSocket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Chat WebSocket connection error:', error.message)
+    }
   })
 
   return chatSocket
@@ -54,6 +70,14 @@ export const initCommentsSocket = (token: string): Socket => {
     transports: ['websocket'],
   })
 
+  // Handle connection errors silently
+  commentsSocket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Comments WebSocket connection error:', error.message)
+    }
+  })
+
   return commentsSocket
 }
 
@@ -65,6 +89,14 @@ export const initPostsSocket = (token: string): Socket => {
       token,
     },
     transports: ['websocket'],
+  })
+
+  // Handle connection errors silently
+  postsSocket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Posts WebSocket connection error:', error.message)
+    }
   })
 
   return postsSocket
@@ -80,6 +112,14 @@ export const initArticlesSocket = (token: string): Socket => {
     transports: ['websocket'],
   })
 
+  // Handle connection errors silently
+  articlesSocket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Articles WebSocket connection error:', error.message)
+    }
+  })
+
   return articlesSocket
 }
 
@@ -90,6 +130,14 @@ export const initAdminSocket = (token: string): Socket => {
       token,
     },
     transports: ['websocket'],
+  })
+
+  // Handle connection errors silently
+  adminSocket.on('connect_error', (error) => {
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Admin WebSocket connection error:', error.message)
+    }
   })
 
   return adminSocket

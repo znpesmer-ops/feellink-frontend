@@ -5,6 +5,7 @@ const nextConfig = {
     domains: [
       'localhost',
       '192.168.1.38',
+      '192.168.1.59',
       '127.0.0.1',
       'indirect-shark-waters-titles.trycloudflare.com',
       'previously-willing-cbs-establishing.trycloudflare.com',
@@ -31,6 +32,24 @@ const nextConfig = {
       {
         protocol: 'http',
         hostname: '192.168.1.38',
+        port: '3002',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '192.168.1.59',
+        port: '3000',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '192.168.1.59',
+        port: '3001',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '192.168.1.59',
         port: '3002',
         pathname: '/**',
       },

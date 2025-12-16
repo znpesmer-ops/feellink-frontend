@@ -177,7 +177,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 lg:px-6 py-4">
       {/* Header with socket status */}
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold dark:text-white text-gray-900">Dashboard</h2>

@@ -17,16 +17,21 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [coverId, setCoverId] = useState<string | null>(null)
 
-  // Kullanıcının SADECE ESERLERİNİ çek (type === 'artwork')
+  // ÖNE ÇIKAN TEMALAR: Sadece kullanıcının KENDİ eserlerini göster
+  // ❌ Genel arama YOK
+  // ❌ Başkalarının eserleri YOK
+  // ❌ Koleksiyon mantığı YOK
+  // ✅ Sadece kullanıcının kendi yüklediği eserler (type === 'artwork')
   const { data: posts, isLoading: isLoadingArtworks } = useQuery({
     queryKey: ['profile-artworks', userId || username],
     queryFn: async () => {
-      // userId varsa userId ile çek, yoksa username ile çek
+      // Sadece kullanıcının kendi post'larını çek
       const endpoint = userId ? `/posts/user/${userId}` : `/posts/user/${username}`
       const response = await api.get(endpoint)
       const allPosts = response.data || []
       
       // SADECE ESERLERİ filtrele (type === 'artwork')
+      // Backend zaten userId kontrolü yapıyor, burada sadece type filtresi
       const artworks = allPosts.filter((p: any) => p.type === 'artwork')
       
       return artworks
@@ -50,8 +55,9 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
         })
       ).data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['highlights', username] })
+    onSuccess: async () => {
+      // Çözüm A: Optimistic update yapma, sadece refetch et
+      await queryClient.refetchQueries({ queryKey: ['highlights', username] })
       onClose()
     },
   })
@@ -114,7 +120,11 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
           </label>
 
           <div className="text-sm text-neutral-400 dark:text-neutral-500">
-            Eserlerinden seç (en az 1). Birine sağ üstten tıklayarak kapak olarak işaretleyebilirsin.
+            Kendi eserlerinden seç (en az 1). Birine sağ üstten tıklayarak kapak olarak işaretleyebilirsin.
+            <br />
+            <span className="text-xs text-neutral-500 dark:text-neutral-600">
+              Not: Sadece kendi yüklediğin eserler burada görünür.
+            </span>
           </div>
 
           {!selectableArtworks || selectableArtworks.length === 0 ? (

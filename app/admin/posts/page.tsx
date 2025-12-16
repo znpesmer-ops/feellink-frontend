@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store'
 import { initPostsSocket } from '@/lib/socket'
 import { Search, Trash2, Image, Heart, MessageCircle, Calendar } from 'lucide-react'
 import ConfirmModal from '@/components/common/ConfirmModal'
+import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
 interface Post {
   id: string
@@ -102,10 +103,22 @@ export default function AdminPostsPage() {
       setLoading(true)
       const response = await api.get(`/admin/posts?page=${page}&limit=20`)
       // Ensure media array exists for all posts
-      const postsWithMedia = response.data.posts.map((p: Post) => ({
-        ...p,
-        media: p.media || [],
-      }))
+      const postsWithMedia = response.data.posts.map((p: Post) => {
+        // Debug: Log first post to see structure
+        if (p.id === response.data.posts[0]?.id) {
+          console.log('🔍 Admin Posts - First post structure:', {
+            id: p.id,
+            hasMedia: !!p.media,
+            mediaLength: p.media?.length || 0,
+            media: p.media,
+            caption: p.caption,
+          })
+        }
+        return {
+          ...p,
+          media: p.media || [],
+        }
+      })
       setPosts(postsWithMedia)
       setTotal(response.data.total)
     } catch (err) {
@@ -157,7 +170,7 @@ export default function AdminPostsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 lg:px-6 py-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-[var(--text)]">Gönderiler</h2>
@@ -191,28 +204,71 @@ export default function AdminPostsPage() {
             >
               {/* Post Media */}
               <div className="relative w-full h-64 rounded-xl overflow-hidden bg-[var(--muted)] border border-[var(--border)] mb-4">
-                {post.media && post.media.length > 0 && !imageErrors.has(post.id) ? (
-                  <>
-                    <img
-                      src={post.media[0]?.thumbnailUrl || post.media[0]?.url}
-                      alt={post.caption || 'Gönderi'}
-                      className="object-cover w-full h-full transition-transform duration-300 hover:scale-[1.03]"
-                      onError={() => {
-                        setImageErrors((prev) => new Set(prev).add(post.id))
-                      }}
-                    />
-                    {post.media.length > 1 && (
-                      <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 font-medium">
-                        <Image size={12} />
-                        {post.media.length}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-[var(--sub)] text-sm italic">
-                    {imageErrors.has(post.id) ? 'Görsel yüklenemedi' : 'Görsel yok'}
-                  </div>
-                )}
+                {(() => {
+                  // ✅ Tüm olası görsel alanlarını kontrol et
+                  let imageUrl: string | null = null
+
+                  // Öncelik sırası: media array > diğer alanlar
+                  if (post.media && Array.isArray(post.media) && post.media.length > 0) {
+                    const firstMedia = post.media[0]
+                    imageUrl = firstMedia?.thumbnailUrl || firstMedia?.url || null
+                  }
+
+                  // Fallback: diğer olası alanlar
+                  if (!imageUrl) {
+                    imageUrl =
+                      (post as any).image ||
+                      (post as any).imageUrl ||
+                      (post as any).images?.[0] ||
+                      null
+                  }
+
+                  // URL'yi resolve et
+                  const resolvedImageUrl = imageUrl ? resolveImageUrl(imageUrl) : null
+
+                  // Debug log (sadece ilk post için)
+                  if (post.id === filteredPosts[0]?.id && resolvedImageUrl) {
+                    console.log('🖼️ Admin Post Image:', {
+                      postId: post.id,
+                      hasMedia: !!post.media,
+                      mediaLength: post.media?.length || 0,
+                      imageUrl,
+                      resolvedImageUrl,
+                    })
+                  }
+
+                  if (resolvedImageUrl && !imageErrors.has(post.id)) {
+                    return (
+                      <>
+                        <img
+                          src={resolvedImageUrl}
+                          alt={post.caption || 'Gönderi'}
+                          className="object-cover w-full h-full transition-transform duration-300 hover:scale-[1.03]"
+                          onError={(e) => {
+                            console.error('❌ Image load error:', {
+                              postId: post.id,
+                              src: resolvedImageUrl,
+                              error: e,
+                            })
+                            setImageErrors((prev) => new Set(prev).add(post.id))
+                          }}
+                        />
+                        {post.media && post.media.length > 1 && (
+                          <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 font-medium">
+                            <Image size={12} />
+                            {post.media.length}
+                          </div>
+                        )}
+                      </>
+                    )
+                  }
+
+                  return (
+                    <div className="flex items-center justify-center h-full text-[var(--sub)] text-sm italic">
+                      {imageErrors.has(post.id) ? 'Görsel yüklenemedi' : 'Görsel yok'}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Post Content */}

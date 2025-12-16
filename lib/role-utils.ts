@@ -139,8 +139,8 @@ export function hasPermission(
   }
   const perms = capabilities.permissions
   if (typeof permission === 'string') {
-    if ((perms as Record<string, boolean>)[permission] !== undefined) {
-      return Boolean((perms as Record<string, boolean>)[permission])
+    if ((perms as unknown as Record<string, boolean>)[permission] !== undefined) {
+      return Boolean((perms as unknown as Record<string, boolean>)[permission])
     }
     const mapped = PERMISSION_KEY_MAP[permission]
     return mapped ? perms[mapped] : false

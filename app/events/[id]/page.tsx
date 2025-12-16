@@ -1,13 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Calendar, Users, MessageCircle, Ticket, Loader2, X, Plus, Edit3, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Calendar, Users, MessageCircle, Ticket, Loader2, X, Plus, Edit3, Trash2, MoreVertical } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import RightSidebar from "@/components/right-sidebar";
 import CreateTicketModal from "@/components/tickets/CreateTicketModal";
 import BuyTicketModal from "@/components/tickets/BuyTicketModal";
+import DeleteConfirmModal from "@/components/common/DeleteConfirmModal";
 import { useAuthStore } from "@/lib/store";
+import { resolveImageUrl } from "@/lib/resolveImageUrl";
 
 interface EventComment {
   id: string;
@@ -40,6 +43,10 @@ interface Event {
     fullName?: string;
     avatar?: string;
   };
+  participants?: {
+    userId: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  }[];
 }
 
 export default function EventDetailPage() {
@@ -57,6 +64,11 @@ export default function EventDetailPage() {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [tickets, setTickets] = useState<any[]>([]);
   const [showBuyTicketModal, setShowBuyTicketModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -78,13 +90,43 @@ export default function EventDetailPage() {
     fetchData();
   }, [id]);
 
+  // Etkinlik sahibi için PENDING talepleri çek
+  useEffect(() => {
+    async function fetchPendingRequests() {
+      if (!event || !user || event.ownerId !== user.id) {
+        return;
+      }
+
+      setLoadingRequests(true);
+      try {
+        const res = await api.get(`/events/${id}/requests`);
+        setPendingRequests(res.data || []);
+      } catch (error) {
+        console.error("Talep listesi alınamadı:", error);
+      } finally {
+        setLoadingRequests(false);
+      }
+    }
+
+    if (event && user) {
+      fetchPendingRequests();
+    }
+  }, [id, event, user]);
+
   const handleJoin = async () => {
     setJoining(true);
     try {
       await api.post(`/events/${id}/join`);
-      setEvent((prev) => prev ? { ...prev, participantCount: prev.participantCount + 1 } : null);
-    } catch (err) {
+      toast.success("Talebiniz iletildi. Etkinlik sahibinin onayı bekleniyor.");
+      // Don't increment count yet - it will increment when approved
+    } catch (err: any) {
       console.error(err);
+      const errorMessage = err?.response?.data?.message || err?.message || "Talep oluşturulamadı.";
+      if (err?.response?.status === 403 && errorMessage.includes("Already joined")) {
+        toast.error("Bu etkinlik için zaten bir talebiniz var.");
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setJoining(false);
     }
@@ -117,6 +159,45 @@ export default function EventDetailPage() {
     }
   };
 
+  const handleDeleteEvent = async () => {
+    if (!event) return;
+    
+    setIsDeleting(true);
+    try {
+      await api.delete(`/events/${id}`);
+      toast.success("Etkinlik başarıyla silindi.");
+      router.push("/events");
+    } catch (error: any) {
+      console.error("Etkinlik silinemedi:", error);
+      toast.error(error.response?.data?.message || "Etkinlik silinemedi.");
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
+
+  const handleUpdateRequestStatus = async (requestUserId: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      await api.patch(`/events/${id}/requests/${requestUserId}`, { status });
+      
+      if (status === 'APPROVED') {
+        toast.success("Talep onaylandı.");
+        // Update participant count
+        if (event) {
+          setEvent({ ...event, participantCount: event.participantCount + 1 });
+        }
+      } else {
+        toast.success("Talep reddedildi.");
+      }
+
+      // Remove from pending requests
+      setPendingRequests(prev => prev.filter(r => r.userId !== requestUserId));
+    } catch (error: any) {
+      console.error("Talep durumu güncellenemedi:", error);
+      toast.error(error.response?.data?.message || "Talep durumu güncellenemedi.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -133,6 +214,11 @@ export default function EventDetailPage() {
     );
   }
 
+  // Kullanıcının bu etkinlikteki durumu
+  const userParticipant = event.participants?.find(p => p.userId === user?.id);
+  const isApproved = userParticipant?.status === 'APPROVED';
+  const hasRequest = userParticipant !== undefined;
+
   return (
     <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
       {/* 📰 Orta içerik */}
@@ -147,8 +233,70 @@ export default function EventDetailPage() {
             />
           </div>
 
-          {/* Başlık & Bilgiler */}
-          <h1 className="text-3xl font-bold text-brand-orange mb-2">{event.title}</h1>
+          {/* Başlık & Etkinlik Sahibi */}
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <h1 className="text-3xl font-bold text-brand-orange">{event.title}</h1>
+            <div className="flex items-center gap-3">
+              {/* Etkinlik Sahibi - Başlığın sağında */}
+              {event.owner && (
+                <Link
+                  href={`/profile/${event.owner.username}`}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  {event.owner.avatar ? (
+                    <img
+                      src={resolveImageUrl(event.owner.avatar)}
+                      alt={event.owner.username}
+                      className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-brand-orange/20 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+                      <span className="text-xs font-semibold text-brand-orange">
+                        {(event.owner.fullName || event.owner.username)?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                    {event.owner.fullName || event.owner.username}
+                  </span>
+                </Link>
+              )}
+              {/* Üç nokta menüsü - sadece etkinlik sahibi için */}
+              {user?.id === event.ownerId && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowMenu(!showMenu)}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <MoreVertical size={20} className="text-gray-500 dark:text-gray-400" />
+                  </button>
+                  {showMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowMenu(false)}
+                      />
+                      <div className="absolute right-0 top-10 z-20 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[160px]">
+                        <button
+                          onClick={() => {
+                            setShowMenu(false);
+                            setShowDeleteModal(true);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+                        >
+                          <Trash2 size={16} /> Etkinliği Sil
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center gap-4 text-gray-500 dark:text-gray-400 mb-6">
             <span className="flex items-center gap-1">
               <Calendar size={16} />
@@ -170,103 +318,158 @@ export default function EventDetailPage() {
             {event.description || "Açıklama bulunmuyor."}
           </p>
 
-          {/* Biletler */}
-          {tickets.length > 0 && (
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">🎟️ Biletler</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {tickets.map((ticket) => (
-                  <div
-                    key={ticket.id}
-                    className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-5"
-                  >
-                    <h4 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{ticket.type}</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                      Kapasite: {ticket.capacity} | Satılan: {ticket.sold}
-                    </p>
-                    <p className="text-2xl font-bold text-brand-orange mb-4">{ticket.price} ₺</p>
-                    
-                    {/* Organizatör için yönetim butonları */}
-                    {event.ownerId === user?.id ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            // TODO: Düzenle modal'ı aç
-                            toast.info("Düzenleme özelliği yakında eklenecek");
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl font-medium transition"
-                        >
-                          <Edit3 size={16} /> Düzenle
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (confirm(`"${ticket.type}" biletini silmek istediğinizden emin misiniz?`)) {
-                              try {
-                                await api.delete(`/tickets/${ticket.id}`);
-                                toast.success("Bilet başarıyla silindi.");
-                                // Ticket listesini yenile
-                                const ticketsRes = await api.get(`/tickets/event/${id}`).catch(() => ({ data: [] }));
-                                setTickets(ticketsRes.data || []);
-                              } catch (error: any) {
-                                toast.error(error.response?.data?.message || "Bilet silinemedi.");
+          {/* Biletler - Sadece APPROVED kullanıcılar için */}
+          {tickets.length > 0 && isApproved && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">🎟️ Biletler</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {tickets.map((ticket) => (
+                    <div
+                      key={ticket.id}
+                      className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-5"
+                    >
+                      <h4 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{ticket.type}</h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                        Kapasite: {ticket.capacity} | Satılan: {ticket.sold}
+                      </p>
+                      <p className="text-2xl font-bold text-brand-orange mb-4">{ticket.price} ₺</p>
+                      
+                      {/* Organizatör için yönetim butonları */}
+                      {event.ownerId === user?.id ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              // TODO: Düzenle modal'ı aç
+                              toast("Düzenleme özelliği yakında eklenecek");
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-xl font-medium transition"
+                          >
+                            <Edit3 size={16} /> Düzenle
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm(`"${ticket.type}" biletini silmek istediğinizden emin misiniz?`)) {
+                                try {
+                                  await api.delete(`/tickets/${ticket.id}`);
+                                  toast.success("Bilet başarıyla silindi.");
+                                  // Ticket listesini yenile
+                                  const ticketsRes = await api.get(`/tickets/event/${id}`).catch(() => ({ data: [] }));
+                                  setTickets(ticketsRes.data || []);
+                                } catch (error: any) {
+                                  toast.error(error.response?.data?.message || "Bilet silinemedi.");
+                                }
                               }
-                            }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl font-medium transition"
+                          >
+                            <Trash2 size={16} /> Sil
+                          </button>
+                        </div>
+                      ) : (
+                        /* Kullanıcı için kart içinde buton yok, sadece bilgi */
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {ticket.sold >= ticket.capacity ? (
+                            <span className="text-red-500 font-medium">Tükendi</span>
+                          ) : (
+                            <span className="text-green-500 font-medium">Satışta</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+          )}
+
+          {/* Katılım Talepleri - Sadece etkinlik sahibi için */}
+          {event.ownerId === user?.id && pendingRequests.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                📋 Katılım Talepleri ({pendingRequests.length})
+              </h3>
+              <div className="space-y-3">
+                {pendingRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      {request.user.avatar ? (
+                        <img
+                          src={resolveImageUrl(request.user.avatar)}
+                          alt={request.user.username}
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png';
                           }}
-                          className="flex-1 flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl font-medium transition"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-brand-orange/20 dark:bg-brand-orange/30 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+                          <span className="text-sm font-semibold text-brand-orange">
+                            {(request.user.fullName || request.user.username)?.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <Link
+                          href={`/profile/${request.user.username}`}
+                          className="font-semibold text-gray-900 dark:text-gray-100 hover:text-brand-orange transition-colors"
                         >
-                          <Trash2 size={16} /> Sil
-                        </button>
+                          {request.user.fullName || request.user.username}
+                        </Link>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          @{request.user.username}
+                        </p>
                       </div>
-                    ) : (
-                      /* Kullanıcı için kart içinde buton yok, sadece bilgi */
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {ticket.sold >= ticket.capacity ? (
-                          <span className="text-red-500 font-medium">Tükendi</span>
-                        ) : (
-                          <span className="text-green-500 font-medium">Satışta</span>
-                        )}
-                      </div>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleUpdateRequestStatus(request.userId, 'APPROVED')}
+                        className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition"
+                      >
+                        Onayla
+                      </button>
+                      <button
+                        onClick={() => handleUpdateRequestStatus(request.userId, 'REJECTED')}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition"
+                      >
+                        Reddet
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Bilet Al / Yönetim Butonları */}
-          <div className="mt-6 mb-10 flex gap-3">
-            {/* Kullanıcı için: Tek Bilet Al butonu */}
-            {event.ownerId !== user?.id && (
-              <>
-                {(() => {
-                  // Fiyat hesaplama: önce event.price, sonra tickets'dan en düşük fiyat
-                  const ticketPrice = tickets.length > 0 
-                    ? Math.min(...tickets.filter(t => t.sold < t.capacity).map(t => t.price))
-                    : null;
-                  const displayPrice = event.price && event.price > 0 ? event.price : (ticketPrice || 0);
-                  const isFree = (event.isFree || displayPrice === 0) && (!tickets.length || ticketPrice === 0);
-
-                  if (isFree) {
-                    return (
-                      <button
-                        onClick={() => setShowBuyTicketModal(true)}
-                        className="bg-orange-100 dark:bg-orange-900/30 text-brand-orange dark:text-orange-400 px-6 py-2 rounded-xl font-medium hover:bg-brand-blue/20 dark:hover:bg-brand-blue/30 transition flex items-center gap-2"
-                      >
-                        <Ticket size={18} /> Ücretsiz Bilet Al
-                      </button>
-                    );
-                  } else {
-                    return (
-                      <button
-                        onClick={() => setShowBuyTicketModal(true)}
-                        className="bg-brand-orange hover:bg-brand-orange/90 text-white px-6 py-2 rounded-xl font-medium transition flex items-center gap-2"
-                      >
-                        <Ticket size={18} /> Bilet Al – {displayPrice}₺
-                      </button>
-                    );
-                  }
-                })()}
-              </>
+          {/* Talep Oluştur / Yönetim Butonları */}
+          <div className="mt-6 mb-10">
+            {/* Kullanıcı için: Talep Oluştur butonu - Sadece APPROVED değilse göster */}
+            {event.ownerId !== user?.id && !isApproved && (
+                <div className="flex flex-col">
+                  <button
+                    onClick={handleJoin}
+                    disabled={joining || hasRequest}
+                    className="bg-brand-orange hover:bg-brand-orange/90 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl font-medium transition flex items-center gap-2 w-fit"
+                  >
+                    {joining ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Gönderiliyor...
+                      </>
+                    ) : hasRequest ? (
+                      <>
+                        <Ticket size={18} /> Talep Beklemede
+                      </>
+                    ) : (
+                      <>
+                        <Ticket size={18} /> Talep Oluştur
+                      </>
+                    )}
+                  </button>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Etkinlik sahibi talebinizi onayladığında biletiniz oluşturulacaktır.
+                  </p>
+                </div>
             )}
 
             {/* Organizatör için: Bilet Ekle butonu */}
@@ -396,6 +599,17 @@ export default function EventDetailPage() {
           onClose={() => setShowBuyTicketModal(false)}
         />
       )}
+
+      {/* Silme Onay Modal */}
+      <DeleteConfirmModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteEvent}
+        title="Etkinliği silmek istiyor musunuz?"
+        message="Bu işlem geri alınamaz. Etkinliğe ait talepler ve biletler iptal edilecektir."
+        confirmText="Etkinliği Sil"
+        cancelText="Vazgeç"
+      />
     </div>
   );
 }

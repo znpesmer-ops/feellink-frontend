@@ -18,6 +18,7 @@ import {
   Shield,
   Activity,
   MessageCircle,
+  Palette,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
@@ -38,12 +39,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       // Not logged in
       if (!accessToken || !user) {
-        router.push('/login')
+        router.replace('/login')
         return
       }
 
+      // Admin kontrolü - isAdmin veya superAdmin olmalı (profesyonel SaaS mantığı)
+      const isAdmin = user.isAdmin === true || user.superAdmin === true
+
       // If user is not admin, try refreshing user data once
-      if (user.isAdmin !== true && !hasRefreshed) {
+      if (!isAdmin && !hasRefreshed) {
         try {
           setHasRefreshed(true)
           await refreshUser()
@@ -54,7 +58,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }
       }
 
-      if (user.isAdmin !== true) {
+      // Final admin check (after potential refresh)
+      const currentUser = useAuthStore.getState().user
+      const finalIsAdmin = currentUser?.isAdmin === true || currentUser?.superAdmin === true
+
+      if (!finalIsAdmin) {
         alert('Bu sayfaya erişim yetkiniz yok! Lütfen çıkış yapıp tekrar giriş yapın.')
         router.push('/feed')
         return
@@ -76,7 +84,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       console.warn('Logout error:', error)
     } finally {
       clearAuth()
-      router.push('/login')
+      // replace kullanarak geri butonuna basınca geri dönmesin
+      router.replace('/login')
     }
   }
 
@@ -84,6 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin', icon: Home, label: 'Dashboard' },
     { href: '/admin/users', icon: Users, label: 'Kullanıcılar' },
     { href: '/admin/posts', icon: FileText, label: 'Gönderiler' },
+    { href: '/admin/artworks', icon: Palette, label: 'Eserler' },
     { href: '/admin/comments', icon: MessageCircle, label: 'Yorumlar' },
     { href: '/admin/articles', icon: BookOpen, label: 'Makaleler' },
     { href: '/admin/events', icon: Calendar, label: 'Etkinlikler' },
@@ -112,9 +122,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex h-screen bg-[var(--bg)] text-[var(--text)]">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[var(--panel)] border-r border-[var(--border)] shadow-sm flex flex-col justify-between">
+    <div className="flex w-full min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      {/* Sidebar - Genişletilmiş */}
+      <aside className="w-72 bg-[var(--panel)] border-r border-[var(--border)] shadow-sm flex flex-col justify-between">
         <div>
           <div className="px-6 py-4">
             <h1 className="text-xl font-bold text-[var(--accent)]">Feellink Admin</h1>
@@ -152,9 +162,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content - Genişletilmiş ve optimize edilmiş */}
       <main className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 bg-[var(--panel)] shadow-sm px-8 py-4 flex justify-between items-center z-50 border-b border-[var(--border)]">
+        <header className="sticky top-0 bg-[var(--panel)] shadow-sm px-4 lg:px-6 py-4 flex justify-between items-center z-50 border-b border-[var(--border)]">
           <h1 className="text-2xl font-semibold text-[var(--text)]">
             Hoş geldin, {user?.username}
           </h1>
@@ -166,7 +176,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
         </header>
-        <div className="p-8 bg-[var(--bg)]">{children}</div>
+        <div className="w-full bg-[var(--bg)]">
+          {children}
+        </div>
       </main>
     </div>
   )

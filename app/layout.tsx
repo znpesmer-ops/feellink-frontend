@@ -20,7 +20,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-white dark:bg-gray-950 text-[#1f1f1f] dark:text-gray-100 transition-colors min-h-screen">
         <Providers>
-          <LayoutConditional>{children}</LayoutConditional>
+          {children}
         </Providers>
       </body>
     </html>

@@ -186,7 +186,7 @@ export default function TicketChart({ eventId, initialTicketCount = 0 }: TicketC
         </h3>
       </div>
       <div className="h-64">
-        <Line data={data} options={options} />
+        <Line data={data} options={options as any} />
       </div>
     </div>
   );

@@ -86,16 +86,16 @@ function MyApplicationsTab({
         return {
           badge: (
             <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400">
-              Olumlu Geri Dönüş
+              Olumlu Yanıt
             </span>
           ),
-          description: 'Başvurunuz olumlu değerlendirilmiştir. Sizinle iletişime geçilecektir.',
+          description: 'Başvurunuz olumlu yanıtlandı. İlan sahibi ile iletişime geçildi.',
         }
       case 'REJECTED':
         return {
           badge: (
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-500/10 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400">
-              Olumsuz Geri Dönüş
+            <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+              Olumsuz Yanıt
             </span>
           ),
           description: 'Bu ilan için sürece devam edilmeyecektir.',
@@ -108,15 +108,6 @@ function MyApplicationsTab({
             </span>
           ),
           description: 'Başvurunuz ilan sahibi tarafından incelenmektedir.',
-        }
-      case 'INTERVIEW':
-        return {
-          badge: (
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400">
-              Görüşmeye Davet Edildi
-            </span>
-          ),
-          description: 'Görüşme için sizinle iletişime geçilecektir.',
         }
       case 'PENDING':
       case 'WAITING':

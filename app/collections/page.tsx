@@ -23,20 +23,21 @@ interface Collection {
   };
 }
 
-type FilterType = "Tümü" | "Kurumsal" | "Sanatçı" | "Popüler" | "Yeni";
+type FilterType = "Tümü" | "Kurumsal" | "Sanatçı" | "Popüler" | "Yeni" | "Koleksiyonlarım";
 
 export default function CollectionsPage() {
   const pathname = usePathname();
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [myCollections, setMyCollections] = useState<Collection[]>([]);
   const [filteredCollections, setFilteredCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("Tümü");
   const { user, capabilities, accessToken } = useAuthStore();
 
-  // Rol bazlı kontrol: sadece artist ve corporate koleksiyon oluşturabilir
+  // Rol bazlı kontrol: sadece corporate ve collector koleksiyon oluşturabilir
   const roles = capabilities?.roles ?? user?.roles ?? [];
-  const canCreateCollection = roles.includes("artist") || roles.includes("corporate");
+  const canCreateCollection = roles.includes("corporate") || roles.includes("collector");
 
   useEffect(() => {
     if (!accessToken) return;
@@ -44,12 +45,25 @@ export default function CollectionsPage() {
     async function fetchCollections() {
       try {
         setLoading(true);
-        const res = await api.get<Collection[]>("/collections/public");
-        setCollections(res.data || []);
-        setFilteredCollections(res.data || []);
-      } catch (error) {
-        console.error("Koleksiyonlar alınamadı:", error);
+        console.log("🔄 Koleksiyonlar yükleniyor...");
+        const [publicRes, myRes] = await Promise.all([
+          api.get<Collection[]>("/collections/public"),
+          canCreateCollection ? api.get<Collection[]>("/collections/my").catch((err) => {
+            console.warn("⚠️ My collections yüklenemedi:", err);
+            return { data: [] };
+          }) : Promise.resolve({ data: [] }),
+        ]);
+        console.log("✅ Public collections:", publicRes.data);
+        console.log("✅ My collections:", myRes.data);
+        setCollections(publicRes.data || []);
+        setMyCollections(myRes.data || []);
+        setFilteredCollections(publicRes.data || []);
+      } catch (error: any) {
+        console.error("❌ Koleksiyonlar alınamadı:", error);
+        console.error("Error response:", error?.response?.data);
+        console.error("Error status:", error?.response?.status);
         setCollections([]);
+        setMyCollections([]);
         setFilteredCollections([]);
       } finally {
         setLoading(false);
@@ -57,13 +71,16 @@ export default function CollectionsPage() {
     }
 
     fetchCollections();
-  }, [accessToken]);
+  }, [accessToken, canCreateCollection]);
 
   // Filtreleme mantığı
   useEffect(() => {
-    let filtered = [...collections];
+    let filtered: Collection[] = [];
 
     switch (activeFilter) {
+      case "Koleksiyonlarım":
+        filtered = myCollections;
+        break;
       case "Kurumsal":
         filtered = collections.filter(
           (col) => col.owner?.roles && Array.isArray(col.owner.roles) && col.owner.roles.includes("corporate")
@@ -86,7 +103,7 @@ export default function CollectionsPage() {
     }
 
     setFilteredCollections(filtered);
-  }, [activeFilter, collections]);
+  }, [activeFilter, collections, myCollections]);
 
   const handleRefresh = async () => {
     try {
@@ -121,9 +138,8 @@ export default function CollectionsPage() {
             {canCreateCollection && (
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md whitespace-nowrap flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md whitespace-nowrap"
               >
-                <Plus size={18} />
                 Koleksiyon Oluştur
               </button>
             )}
@@ -136,7 +152,14 @@ export default function CollectionsPage() {
 
         {/* Filtre Butonları */}
         <div className="flex items-center gap-3 mb-8 flex-wrap">
-          {(["Tümü", "Kurumsal", "Sanatçı", "Popüler", "Yeni"] as FilterType[]).map((filter) => (
+          {([
+            "Tümü",
+            "Kurumsal",
+            "Sanatçı",
+            "Popüler",
+            "Yeni",
+            ...(canCreateCollection ? ["Koleksiyonlarım"] : []),
+          ] as FilterType[]).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
@@ -146,12 +169,6 @@ export default function CollectionsPage() {
                   : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-[#ff7b00] hover:border-[#ff7b00]"
               }`}
             >
-              {filter === "Tümü" && "🎨"}
-              {filter === "Kurumsal" && "🖼"}
-              {filter === "Sanatçı" && "👤"}
-              {filter === "Popüler" && "🔥"}
-              {filter === "Yeni" && "🆕"}
-              {" "}
               {filter}
             </button>
           ))}
@@ -165,16 +182,17 @@ export default function CollectionsPage() {
               Henüz koleksiyon bulunmuyor
             </h2>
             <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-              {activeFilter !== "Tümü"
+              {activeFilter === "Koleksiyonlarım"
+                ? "Henüz koleksiyonunuz yok. Yeni bir koleksiyon oluşturarak başlayabilirsiniz."
+                : activeFilter !== "Tümü"
                 ? "Bu filtreye uygun koleksiyon bulunmuyor."
                 : "Yeni bir koleksiyon oluşturarak başlayabilirsiniz."}
             </p>
             {canCreateCollection && (
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md"
               >
-                <Plus size={18} />
                 Koleksiyon Oluştur
               </button>
             )}

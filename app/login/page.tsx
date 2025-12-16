@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sun, Moon } from 'lucide-react'
+import Image from 'next/image'
 import api, { getErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { getDashboardRouteFromUser } from '@/lib/role-utils'
@@ -98,6 +99,17 @@ export default function LoginPage() {
 
   // Eğer zaten giriş yapılmışsa role göre yönlendir
   useEffect(() => {
+    // Login sayfasında olduğumuz için, eğer token yoksa auth state'i temizle
+    if (!accessToken) {
+      // Token yoksa state'i temizle (eski kullanıcı bilgileri kalmasın)
+      if (user) {
+        const { clearAuth } = useAuthStore.getState()
+        clearAuth()
+      }
+      setIsChecking(false)
+      return
+    }
+    
     if (accessToken && user) {
       handlePostAuthNavigation(user, capabilities ?? undefined)
     } else {
@@ -222,23 +234,15 @@ export default function LoginPage() {
               : 'bg-white border border-gray-200 shadow-[0_0_25px_rgba(0,0,0,0.05)]'
           }`}
         >
-          {/* Logo veya Başlık */}
-          <div className="text-center mb-8">
-            <h1
-              className={`text-3xl font-bold tracking-tight ${
-                darkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            >
-              <span className="text-[#ff7a00]">Feellink</span>{' '}
-              {isLoginMode ? 'Giriş' : 'Kayıt'}
-            </h1>
-            <p
-              className={`text-sm mt-1 ${
-                darkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}
-            >
-              Duyguların teknolojiyle buluştuğu yere hoş geldin
-            </p>
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/logo.png"
+              alt="Feellink Logo"
+              width={130}
+              height={50}
+              className="object-contain"
+            />
           </div>
 
           {/* Login/Register Toggle */}

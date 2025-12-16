@@ -120,7 +120,12 @@ export const UserBadges: React.FC<UserBadgesProps> = ({ badges }) => {
 
   if (!normalized || normalized.length === 0) return null
 
-  const validBadges = normalized.filter((badge): badge is BadgeId =>
+  // Filter out plan-related badges (intentionally hidden from UI)
+  // Backend logic and authorization remain unchanged
+  const planBadges = ['sanatsever-pro', 'kurumsal-pro', 'sanatci-pro']
+  const filteredBadges = normalized.filter((badge) => !planBadges.includes(badge))
+
+  const validBadges = filteredBadges.filter((badge): badge is BadgeId =>
     Object.prototype.hasOwnProperty.call(BADGE_CONFIG, badge),
   )
 

@@ -13,8 +13,8 @@ import {
   Calendar,
   Layers,
   BarChart3,
-  Ticket,
   Sparkles,
+  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { ROLE_METADATA, normalizeRole } from '@/lib/role-utils'
@@ -39,13 +39,13 @@ interface SidebarProps {
 
 export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}) {
   const pathname = usePathname()
-  const { user, capabilities, accessToken, sidebar } = useAuthStore()
-  const [unreadCount, setUnreadCount] = useState(0)
+  const { user, capabilities, accessToken, sidebar, unreadCount, setUnreadCount } = useAuthStore()
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false)
 
   useEffect(() => {
     if (!accessToken) return
 
+    // ✅ Store'dan unreadCount'ı güncelle
     api
       .get('/notifications/unread-count')
       .then((response) => setUnreadCount(response.data.count))
@@ -53,6 +53,7 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
 
     const socket = initSocket(accessToken)
     socket.on('notification', () => {
+      // ✅ Yeni bildirim geldiğinde store'u güncelle
       api
         .get('/notifications/unread-count')
         .then((response) => setUnreadCount(response.data.count))
@@ -62,7 +63,7 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
     return () => {
       socket.off('notification')
     }
-  }, [accessToken])
+  }, [accessToken, setUnreadCount])
 
   useEffect(() => {
     if (!accessToken) return
@@ -96,9 +97,12 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
             showMessages: Boolean(capabilities.sidebar?.messages),
             showListings: Boolean(capabilities.sidebar?.listings),
             showAnalytics: Boolean(capabilities.sidebar?.analytics),
-            showEvents: Boolean(capabilities.sidebar?.myEvents || capabilities.sidebar?.createEvent),
+            showEvents: Boolean(
+              capabilities.sidebar?.myEvents || capabilities.sidebar?.createEvent
+            ),
             showCollections: Boolean(
-              capabilities.sidebar?.collections || capabilities.sidebar?.manageCollections
+              capabilities.sidebar?.collections ||
+                capabilities.sidebar?.manageCollections
             ),
             showTickets: true,
           }
@@ -113,9 +117,7 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
             showCollections: true,
             showTickets: true,
           })
-    
-    // 🔥 KRİTİK: Her zaman /profile/me kullan - user.id undefined sorununu önler
-    // Backend otomatik olarak authenticated user'ı bulur
+
     const profileHref = '/profile/me'
 
     const items: NavItem[] = [
@@ -124,9 +126,8 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
       {
         key: 'listings',
         label: 'Feellink',
-        href: '/fellink/public',
+        href: '/fellink',
         icon: Sparkles,
-        // ❗ FEELLINK her zaman görünür - flag yok, rol kontrolü yok
       },
       {
         key: 'messages',
@@ -138,17 +139,31 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
       },
       { key: 'profile', label: 'Profil', href: profileHref, icon: User, flag: 'showProfile' },
       { key: 'analytics', label: 'Analizler', href: '/analytics', icon: BarChart3 },
-      { key: 'collections', label: 'Koleksiyonlar', href: '/collections', icon: Layers, flag: 'showCollections' },
-      { key: 'events', label: 'Etkinlikler', href: '/events', icon: Calendar }, // Her zaman görünür - flag yok
-      { key: 'tickets', label: 'Biletlerim', href: '/my-tickets', icon: Ticket, flag: 'showTickets' },
+      {
+        key: 'collections',
+        label: 'Koleksiyonlar',
+        href: '/collections',
+        icon: Layers,
+        flag: 'showCollections',
+      },
+      { key: 'events', label: 'Etkinlikler', href: '/events', icon: Calendar },
+      // Biletlerim geçici olarak gizlendi (route ve backend korunuyor)
+      // { key: 'tickets', label: 'Biletlerim', href: '/my-tickets', icon: Ticket, flag: 'showTickets' },
       { key: 'notifications', label: 'Bildirimler', href: '/notifications', icon: Bell, badgeCount: unreadCount },
       { key: 'settings', label: 'Ayarlar', href: '/settings', icon: Settings },
     ]
 
-    // FEELLINK her zaman görünür - diğer menüler flag kontrolünden geçer
+    // Admin menüsünü ekle (eğer kullanıcı admin veya superAdmin ise)
+    if (user.isAdmin || user.superAdmin) {
+      items.push({
+        key: 'admin',
+        label: 'Admin Paneli',
+        href: '/admin',
+        icon: Shield,
+      })
+    }
+
     return items.filter((item) => {
-      // FEELLINK menüsü her zaman görünür (flag yok)
-      if (item.key === 'listings') return true
       if (!item.flag) return true
       return sidebarFlags[item.flag]
     })
@@ -163,8 +178,13 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
   }
 
   const activeRoute = pathname
-  const planLabel =
-    capabilities.plan === 'PRO' ? 'Pro' : capabilities.plan === 'ORI' ? 'Ori' : 'Free'
+  
+  // Admin kontrolü - profesyonel SaaS mantığı
+  const isAdmin = user?.isAdmin === true || user?.superAdmin === true
+  
+  // Plan etiketi kaldırıldı - artık sadece rol gösteriliyor
+  
+  // Rol etiketi - Admin için özel gösterim
   const resolvedRoles =
     (capabilities.roles && capabilities.roles.length > 0
       ? capabilities.roles
@@ -173,74 +193,91 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
   const roleLabels = normalizedRoles
     .map((role) => ROLE_METADATA[role]?.label)
     .filter(Boolean) as string[]
-  const primaryRoleLabel = roleLabels[0] ?? ROLE_METADATA.art_lover.label
+  
+  const primaryRoleLabel = isAdmin
+    ? 'Admin'
+    : roleLabels[0] ?? ROLE_METADATA.art_lover.label
+
   return (
-    <aside className={`${forceVisible ? 'flex' : 'hidden lg:flex'} ${forceVisible ? '' : 'fixed'} inset-y-0 left-0 w-64 bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm`}>
-      <div className="flex flex-col h-full w-full">
-        {!forceVisible && (
-          <div className="flex items-center h-16 border-b border-gray-100 dark:border-gray-800 px-6">
-            <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">Feellink</p>
-          </div>
-        )}
+    <aside className="w-full h-full bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm flex flex-col">
 
-        <nav className="flex-1 overflow-y-auto px-4 py-6">
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = activeRoute === item.href || activeRoute.startsWith(`${item.href}/`)
-              const Icon = item.icon
-              const baseClasses =
-                'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
-              const defaultState =
-                'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
-              const feellinkState =
-                'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
-              const inactiveClasses = item.key === 'listings' ? feellinkState : defaultState
+      {/* LOGO */}
+      <div className="w-full flex items-center justify-start px-4 pt-0 pb-0 -mt-2">
+        <img
+          src="/logo.png"
+          alt="Feellink Logo"
+          className="h-8 w-auto object-contain pl-3"
+        />
+      </div>
 
-              return (
-                <li key={item.key}>
-                  <Link
-                    href={item.href}
-                    onClick={onLinkClick}
-                    className={`${baseClasses} ${
-                      isActive
-                        ? 'bg-brand-blue/10 text-brand-orange'
-                        : inactiveClasses
-                    }`}
-                  >
-                    <Icon 
-                      className={`h-4 w-4 ${
-                        item.key === 'notifications' && 
-                        item.badgeCount !== undefined && 
-                        item.badgeCount > 0 && 
-                        !isActive
-                          ? 'text-brand-orange animate-pulse'
-                          : ''
-                      }`}
-                    />
-                    <span className="flex-1">{item.label}</span>
-                    {item.highlight && (
-                      <span className="inline-flex h-2 w-2 rounded-full bg-brand-orange"></span>
-                    )}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
+      {/* MENU */}
+      <nav className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+        <ul className="flex flex-col gap-3">
+          {navItems.map((item) => {
+            const isActive =
+              activeRoute === item.href ||
+              activeRoute.startsWith(`${item.href}/`)
+            const Icon = item.icon
+            const baseClasses =
+              'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
+            const inactiveClasses =
+              'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
 
-        <div className="border-t border-gray-200/70 dark:border-white/10 px-6 py-5 text-sm text-gray-500 dark:text-gray-400">
-          <p className="font-medium text-gray-900 dark:text-white">Aktif Rol</p>
-          <div className="mt-3 text-gray-900 dark:text-white font-semibold tracking-wide">
-            {primaryRoleLabel} — {planLabel.toUpperCase()} PLAN
-          </div>
-          {roleLabels.length > 1 && (
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-              {roleLabels.slice(1).join(' • ')}
-            </p>
+            return (
+              <li key={item.key}>
+                <Link
+                  href={item.href}
+                  onClick={onLinkClick}
+                  className={`${baseClasses} ${
+                    isActive ? 'bg-brand-blue/10 text-brand-orange' : inactiveClasses
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="flex-1">{item.label}</span>
+
+                  {item.highlight && (
+                    <span className="inline-flex h-2 w-2 rounded-full bg-brand-orange"></span>
+                  )}
+
+                  {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-orange text-white text-xs font-semibold">
+                      {item.badgeCount > 99 ? '99+' : item.badgeCount}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      {/* ROLE / PLAN */}
+      <div className="border-t border-gray-200/70 dark:border-white/10 px-6 py-5 text-sm text-gray-500 dark:text-gray-400">
+        <p className="font-medium text-gray-900 dark:text-white">Aktif Rol</p>
+
+        <div className="mt-3 text-gray-900 dark:text-white font-semibold tracking-wide">
+          {isAdmin ? (
+            <span className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-[#ff7b00]" />
+              <span>Admin</span>
+            </span>
+          ) : (
+            primaryRoleLabel
           )}
         </div>
+
+        {!isAdmin && roleLabels.length > 1 && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            {roleLabels.slice(1).join(' • ')}
+          </p>
+        )}
+        
+        {isAdmin && (
+          <p className="mt-2 text-xs text-[#ff7b00] dark:text-[#ff9500] leading-relaxed font-medium">
+            Tüm özelliklere erişim
+          </p>
+        )}
       </div>
     </aside>
   )
 }
-

@@ -86,7 +86,7 @@ export default function DashboardPage() {
 
   const role = payload.roles?.[0] ?? payload.dashboard.role
   const roleLabel = ROLE_LABELS[role] ?? role
-  const planLabel = PLAN_LABELS[payload.plan] ?? PLAN_LABELS[payload.dashboard.plan] ?? payload.dashboard.plan
+  // Plan label kaldırıldı - artık kullanılmıyor
 
   return (
     <div className="mx-auto mt-10 flex w-full max-w-3xl flex-col gap-8 px-4 pb-16">
@@ -98,8 +98,7 @@ export default function DashboardPage() {
               {payload.dashboard.title}
             </h1>
             <p className="mt-3 text-sm text-feellink-dark/70">
-              Rolün <strong className="text-feellink-dark">{roleLabel}</strong> · Planın{' '}
-              <strong className="text-feellink-blue">{planLabel}</strong>
+              Rolün <strong className="text-feellink-dark">{roleLabel}</strong>
             </p>
           </div>
           <div className="rounded-2xl border border-feellink-blue/30 bg-feellink-light px-4 py-2 text-xs font-semibold uppercase text-feellink-blue">
@@ -123,20 +122,32 @@ export default function DashboardPage() {
       </section>
 
       <section className="rounded-3xl border border-feellink-light bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-feellink-dark/60">Planını Yönet</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-feellink-dark/60">Rolünü Yönet</h3>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button className="rounded-xl border border-feellink-blue px-4 py-2 text-sm font-medium text-feellink-blue transition hover:bg-feellink-blue hover:text-white">
+          <button 
+            onClick={() => window.location.href = '/select-role'}
+            className="rounded-xl border border-feellink-blue px-4 py-2 text-sm font-medium text-feellink-blue transition hover:bg-feellink-blue hover:text-white"
+          >
             Rolünü Güncelle
           </button>
-          <button className="rounded-xl bg-feellink-orange px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#ff8f26]">
-            Planını Değiştir
-          </button>
-          <p className="text-xs text-feellink-dark/50">Yakında: Plan yükseltme / düşürme akışı.</p>
         </div>
       </section>
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

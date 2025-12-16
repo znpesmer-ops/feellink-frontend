@@ -25,13 +25,15 @@ type RegisterForm = z.infer<typeof registerSchema>
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { setAuth, accessToken, user, capabilities } = useAuthStore()
+  const { setAuth, accessToken, user, capabilities, clearAuth } = useAuthStore()
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
   const [mode, setMode] = useState<'user' | 'corporate'>('user')
 
-  // Eğer zaten giriş yapılmışsa feed'e yönlendir
+  // Register sayfasında olduğumuz için, sayfa yüklendiğinde eski auth state'i temizle
+  // Ama sadece eğer zaten giriş yapılmamışsa
   useEffect(() => {
+    // Eğer zaten giriş yapılmışsa feed'e yönlendir
     if (accessToken && user && capabilities) {
       if (!capabilities.roles || capabilities.roles.length === 0) {
         router.push('/select-role')
@@ -44,9 +46,14 @@ export default function RegisterPage() {
         router.push(route)
       }
     } else {
+      // Giriş yapılmamışsa, eski auth state'i temizle (eğer varsa)
+      // Bu, login sayfasına dönüldüğünde header'da eski kullanıcı görünmemesini sağlar
+      if (user || accessToken) {
+        clearAuth()
+      }
       setIsChecking(false)
     }
-  }, [accessToken, user, capabilities, router])
+  }, [accessToken, user, capabilities, router, clearAuth])
 
   const {
     register,
@@ -60,7 +67,20 @@ export default function RegisterPage() {
     try {
       setError('')
       const endpoint = mode === 'corporate' ? '/auth/register-corporate' : '/auth/register'
-      const response = await api.post(endpoint, data)
+      
+      // Boş string'leri undefined'a çevir (backend @IsOptional için)
+      const payload = {
+        email: data.email.trim(),
+        username: data.username.trim(),
+        password: data.password,
+        ...(data.fullName && data.fullName.trim() ? { fullName: data.fullName.trim() } : {}),
+      }
+      
+      // Debug: Gönderilen datayı logla
+      console.log('REGISTER DATA:', payload)
+      console.log('Endpoint:', endpoint)
+      
+      const response = await api.post(endpoint, payload)
       const {
         user: registeredUser,
         accessToken: newAccessToken,
@@ -81,7 +101,19 @@ export default function RegisterPage() {
         router.push(route)
       }
     } catch (err: any) {
-      setError(getErrorMessage(err))
+      // Debug: Hata detaylarını logla
+      console.error('REGISTER ERROR:', err)
+      console.error('Error response:', err?.response?.data)
+      console.error('Error status:', err?.response?.status)
+      
+      const errorMessage = getErrorMessage(err)
+      setError(errorMessage)
+      
+      // Validation hatalarını daha detaylı göster
+      if (err?.response?.data?.message && Array.isArray(err.response.data.message)) {
+        const validationErrors = err.response.data.message.map((msg: string) => msg).join(', ')
+        setError(`Validation hatası: ${validationErrors}`)
+      }
     }
   }
 

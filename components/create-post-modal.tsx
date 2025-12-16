@@ -39,16 +39,11 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
       setError('')
       const formData = new FormData()
       
-      // 🎨 Eser için tek dosya ('file'), Post için çoklu dosya ('files')
-      if (postType === 'artwork') {
-        if (files.length > 0) {
-          formData.append('file', files[0])
-        }
-      } else {
-        files.forEach((file) => {
-          formData.append('files', file)
-        })
-      }
+      // Backend her zaman 'files' field name'ini bekliyor (FilesInterceptor('files', 10))
+      // Artwork için tek dosya, Post için çoklu dosya - ama field name aynı: 'files'
+      files.forEach((file) => {
+        formData.append('files', file)
+      })
       
       if (caption) {
         formData.append('caption', caption)
@@ -69,7 +64,11 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
         formData.append('colorPalette', JSON.stringify(colorPalette))
       }
 
-      const response = await api.post('/posts/create', formData)
+      const response = await api.post('/posts/create', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
       return response.data
     },
     onSuccess: () => {

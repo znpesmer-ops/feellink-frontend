@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Calendar, Ticket, Loader2, Edit3, Eye, Trash2, Users } from "lucide-react";
 import api from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
@@ -24,11 +24,22 @@ interface Event {
   location?: string;
   createdAt?: string;
   ownerId?: string;
+  owner?: {
+    id: string;
+    username: string;
+    fullName?: string;
+    avatar?: string;
+  };
+  participants?: {
+    userId: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  }[];
 }
 
 export default function EventsFeedPage() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"all" | "mine">("all");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"all" | "mine" | "requested" | "approved">("all");
   const [events, setEvents] = useState<Event[]>([]);
   const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [filtered, setFiltered] = useState<Event[]>([]);
@@ -44,6 +55,10 @@ export default function EventsFeedPage() {
     const tabParam = searchParams.get("tab");
     if (tabParam === "mine" && user) {
       setActiveTab("mine");
+    } else if (tabParam === "requested" && user) {
+      setActiveTab("requested");
+    } else if (tabParam === "approved" && user) {
+      setActiveTab("approved");
     }
   }, [searchParams, user]);
 
@@ -73,15 +88,31 @@ export default function EventsFeedPage() {
     fetchEvents();
   }, [user]);
 
-  // Tab değiştiğinde filtreyi sıfırla
+  // Tab değiştiğinde filtreyi uygula
   useEffect(() => {
     if (activeTab === "all") {
       setFiltered(events);
       setFilter("all");
-    } else {
+    } else if (activeTab === "mine") {
       setFiltered(myEvents);
+    } else if (activeTab === "requested" && user) {
+      // Talep oluşturduğum etkinlikler (PENDING)
+      const requestedEvents = events.filter((e) =>
+        user?.id && e.participants?.some(
+          (p) => p.userId === user.id && p.status === "PENDING"
+        )
+      );
+      setFiltered(requestedEvents);
+    } else if (activeTab === "approved" && user) {
+      // Onaylanan etkinlikler (APPROVED)
+      const approvedEvents = events.filter((e) =>
+        user?.id && e.participants?.some(
+          (p) => p.userId === user.id && p.status === "APPROVED"
+        )
+      );
+      setFiltered(approvedEvents);
     }
-  }, [activeTab, events, myEvents]);
+  }, [activeTab, events, myEvents, user]);
 
   const applyFilter = (type: string) => {
     setFilter(type);
@@ -141,10 +172,10 @@ export default function EventsFeedPage() {
     if (primaryRole === "art_lover" && plan === "FREE") {
       if (myEvents.length > 0) {
         const sortedEvents = [...myEvents].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          (a, b) => (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0)
         );
         const lastEvent = sortedEvents[0];
-        if (lastEvent) {
+        if (lastEvent && lastEvent.createdAt) {
           const lastEventDate = new Date(lastEvent.createdAt);
           const yearDiff = now.getFullYear() - lastEventDate.getFullYear();
           const monthDiff = now.getMonth() - lastEventDate.getMonth();
@@ -159,6 +190,7 @@ export default function EventsFeedPage() {
     // Kurumsal Free: Ayda 30
     else if (primaryRole === "corporate" && plan === "FREE") {
       const thisMonthEvents = myEvents.filter((e) => {
+        if (!e.createdAt) return false;
         const eventDate = new Date(e.createdAt);
         return (
           eventDate.getFullYear() === now.getFullYear() &&
@@ -173,6 +205,7 @@ export default function EventsFeedPage() {
     // Koleksiyoner Free ve Sanatçı Free: Ayda 5
     else if ((primaryRole === "collector" || primaryRole === "artist") && plan === "FREE") {
       const thisMonthEvents = myEvents.filter((e) => {
+        if (!e.createdAt) return false;
         const eventDate = new Date(e.createdAt);
         return (
           eventDate.getFullYear() === now.getFullYear() &&
@@ -219,9 +252,9 @@ export default function EventsFeedPage() {
         </div>
 
         {/* TAB BAR */}
-        <div className="flex gap-6 border-b border-gray-200 dark:border-gray-700 pb-3">
+        <div className="flex gap-4 md:gap-6 border-b border-gray-200 dark:border-gray-700 pb-3 overflow-x-auto">
           <button
-            className={`text-sm font-medium transition-colors ${
+            className={`text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === "all"
                 ? "text-brand-orange border-b-2 border-brand-orange pb-3 -mb-3"
                 : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
@@ -231,21 +264,43 @@ export default function EventsFeedPage() {
             Etkinlikler
           </button>
           {user && (
-            <button
-              className={`text-sm font-medium transition-colors ${
-                activeTab === "mine"
-                  ? "text-brand-orange border-b-2 border-brand-orange pb-3 -mb-3"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-              }`}
-              onClick={() => setActiveTab("mine")}
-            >
-              Etkinliklerim
-            </button>
+            <>
+              <button
+                className={`text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "mine"
+                    ? "text-brand-orange border-b-2 border-brand-orange pb-3 -mb-3"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+                onClick={() => setActiveTab("mine")}
+              >
+                Etkinliklerim
+              </button>
+              <button
+                className={`text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "requested"
+                    ? "text-brand-orange border-b-2 border-brand-orange pb-3 -mb-3"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+                onClick={() => setActiveTab("requested")}
+              >
+                Talep Oluşturduklarım
+              </button>
+              <button
+                className={`text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "approved"
+                    ? "text-brand-orange border-b-2 border-brand-orange pb-3 -mb-3"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                }`}
+                onClick={() => setActiveTab("approved")}
+              >
+                Onaylanan Etkinlikler
+              </button>
+            </>
           )}
         </div>
 
         {/* Filtre Çubuğu - Sadece "Etkinlikler" sekmesinde göster */}
-        {activeTab === "all" && (
+        {activeTab === "all" && filtered.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-8">
             {[
               { key: "all", label: "Tümü" },
@@ -273,7 +328,13 @@ export default function EventsFeedPage() {
           <div className="text-center mt-20 text-gray-500 dark:text-gray-400 text-lg">
             {activeTab === "all" 
               ? "Filtreye uygun etkinlik bulunamadı."
-              : "Henüz etkinlik oluşturmadınız."}
+              : activeTab === "mine"
+              ? "Henüz etkinlik oluşturmadınız."
+              : activeTab === "requested"
+              ? "Henüz talep oluşturduğun bir etkinlik yok."
+              : activeTab === "approved"
+              ? "Henüz onaylanan bir etkinliğin bulunmuyor."
+              : "Etkinlik bulunamadı."}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -285,7 +346,7 @@ export default function EventsFeedPage() {
                     key={ev.id}
                     className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all"
                   >
-                    <div className="relative h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
                       <img
                         src={ev.coverImage ? resolveImageUrl(ev.coverImage) : "/placeholder.png"}
                         alt={ev.title}
@@ -294,9 +355,38 @@ export default function EventsFeedPage() {
                     </div>
 
                     <div className="p-4">
-                      <h2 className="font-semibold text-lg mb-1 text-gray-900 dark:text-gray-100 line-clamp-1">
-                        {ev.title}
-                      </h2>
+                      {/* Başlık & Etkinlik Sahibi */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h2 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-1 flex-1">
+                          {ev.title}
+                        </h2>
+                        {ev.owner && (
+                          <div
+                            onClick={() => router.push(`/profile/${ev.owner?.username || ''}`)}
+                            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity flex-shrink-0 cursor-pointer"
+                          >
+                            {ev.owner.avatar ? (
+                              <img
+                                src={resolveImageUrl(ev.owner.avatar)}
+                                alt={ev.owner.username}
+                                className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-brand-orange/20 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+                                <span className="text-[10px] font-semibold text-brand-orange">
+                                  {(ev.owner.fullName || ev.owner.username)?.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            )}
+                            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium hidden sm:inline">
+                              {ev.owner.fullName || ev.owner.username}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">
                         {ev.description || "Açıklama bulunmuyor."}
                       </p>
@@ -341,9 +431,9 @@ export default function EventsFeedPage() {
                 <Link
                   key={ev.id}
                   href={`/events/${ev.id}`}
-                  className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all group"
+                  className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all group no-underline hover:no-underline"
                 >
-                  <div className="relative h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                  <div className="h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
                     <img
                       src={ev.coverImage ? resolveImageUrl(ev.coverImage) : "/placeholder.png"}
                       alt={ev.title}
@@ -353,9 +443,41 @@ export default function EventsFeedPage() {
 
                   <div className="p-4 flex flex-col justify-between min-h-[160px]">
                     <div>
-                      <h2 className="font-semibold text-lg mb-1 text-gray-900 dark:text-gray-100 line-clamp-1">
-                        {ev.title}
-                      </h2>
+                      {/* Başlık & Etkinlik Sahibi */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h2 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-1 flex-1">
+                          {ev.title}
+                        </h2>
+                        {ev.owner && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (ev.owner) router.push(`/profile/${ev.owner.username}`);
+                            }}
+                            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity flex-shrink-0 cursor-pointer"
+                          >
+                            {ev.owner.avatar ? (
+                              <img
+                                src={resolveImageUrl(ev.owner.avatar)}
+                                alt={ev.owner.username}
+                                className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-brand-orange/20 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+                                <span className="text-[10px] font-semibold text-brand-orange">
+                                  {(ev.owner.fullName || ev.owner.username)?.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            )}
+                            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium hidden sm:inline">
+                              {ev.owner.fullName || ev.owner.username}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">
                         {ev.description || "Açıklama bulunmuyor."}
                       </p>
@@ -372,27 +494,29 @@ export default function EventsFeedPage() {
                       </div>
 
                       <div className="flex justify-between items-center">
-                        <span className={`text-sm font-bold ${
-                          (ev.isFree || ev.price === 0) 
-                            ? "text-green-500 dark:text-green-400" 
-                            : "text-brand-orange"
-                        }`}>
-                          {ev.isFree || ev.price === 0 || !ev.price
-                            ? "Ücretsiz"
-                            : `${ev.price} ₺`}
-                        </span>
-                        {/* Sadece başkalarının etkinliklerinde "Bilet Al" butonu göster */}
-                        {user?.id !== ev.ownerId && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              window.location.href = `/events/${ev.id}`;
-                            }}
-                            className="text-sm text-white bg-brand-orange hover:bg-brand-orange/90 px-3 py-1.5 rounded-lg flex items-center gap-1 transition"
-                          >
-                            <Ticket size={14} /> Bilet Al
-                          </button>
-                        )}
+                        {/* Feed'de fiyat gösterilmiyor - sadeleştirme */}
+                        {/* Sadece başkalarının etkinliklerinde "Talep Oluştur" etiketi göster (tıklanamaz) */}
+                        {user?.id !== ev.ownerId && (() => {
+                          // Onaylanan Etkinlikler sekmesinde hiç gösterme
+                          if (activeTab === "approved") {
+                            return null;
+                          }
+                          
+                          // Diğer sekmelerde bilgilendirici etiket (tıklanamaz)
+                          const isApproved = user?.id && ev.participants?.some(
+                            (p) => p.userId === user.id && p.status === "APPROVED"
+                          );
+                          
+                          if (isApproved) {
+                            return null; // Onaylanmış etkinliklerde gösterme
+                          }
+                          
+                          return (
+                            <span className="text-sm text-brand-orange cursor-default select-none flex items-center gap-1">
+                              <Ticket size={14} /> Talep Oluştur
+                            </span>
+                          );
+                        })()}
                         {user?.id === ev.ownerId && (
                           <span className="text-xs text-gray-500 dark:text-gray-400 italic">
                             Senin etkinliğin

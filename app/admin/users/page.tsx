@@ -6,6 +6,7 @@ import { Search, Mail, Calendar, Shield, CheckCircle, XCircle, Trash2 } from 'lu
 import RoleChanger from '@/components/admin/RoleChanger'
 import { ROLE_METADATA } from '@/lib/role-utils'
 import { BadgeState, SubscriptionPlanCode, UserRoleCode } from '@/types/capabilities'
+import DeleteModal from '@/components/DeleteModal'
 
 interface User {
   id: string
@@ -30,6 +31,8 @@ export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   useEffect(() => {
     fetchUsers()
@@ -60,6 +63,28 @@ export default function AdminUsersPage() {
     }
   }
 
+  const handleDeleteClick = (user: User) => {
+    setSelectedUser(user)
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedUser) return
+
+    try {
+      await api.delete(`/admin/users/${selectedUser.id}`)
+      setDeleteModalOpen(false)
+      setSelectedUser(null)
+      await fetchUsers()
+    } catch (error: any) {
+      console.error('Error deleting user:', error)
+      const errorMessage = error?.response?.data?.message || error?.message || 'Kullanıcı silinemedi'
+      alert(errorMessage)
+      setDeleteModalOpen(false)
+      setSelectedUser(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -69,7 +94,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 lg:px-6 py-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold dark:text-white text-gray-900">Kullanıcılar</h2>
@@ -93,30 +118,30 @@ export default function AdminUsersPage() {
         />
       </div>
 
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm dark:bg-[#111] bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm dark:bg-[#111] bg-white overflow-hidden w-full">
+        <div className="overflow-x-auto pr-2">
+          <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 dark:bg-[#0d0d0d] border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px]">
                   Kullanıcı
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[220px]">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Roller
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[200px]">
+                  Roller / Yetki
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px]">
                   Durum
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[100px]">
                   Takipçi
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[120px]">
                   Tarih
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[140px]">
                   İşlemler
                 </th>
               </tr>
@@ -149,48 +174,57 @@ export default function AdminUsersPage() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2 text-sm dark:text-gray-300 text-gray-700">
-                      <Mail size={14} className="text-gray-400" />
-                      {user.email}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-sm dark:text-gray-300 text-gray-700 min-w-0">
+                      <Mail size={14} className="text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{user.email}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {(user.roles && user.roles.length > 0 ? user.roles : ['art_lover']).map((role) => (
-                        <span
-                          key={role}
-                          className="px-2 py-1 text-xs font-medium rounded-full bg-[var(--accent)]/10 text-[var(--accent)]"
-                        >
-                          {ROLE_METADATA[role as UserRoleCode]?.label ?? role}
-                        </span>
-                      ))}
+                    <div className="flex flex-wrap gap-1.5">
+                      {(user.roles && user.roles.length > 0 ? user.roles : ['art_lover']).map((role) => {
+                        const roleKey = role as UserRoleCode
+                        const roleLabel = ROLE_METADATA[roleKey]?.label ?? role
+                        
+                        // Rol bazlı renk sistemi
+                        let roleColorClasses = ''
+                        if (roleKey === 'artist') {
+                          roleColorClasses = 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-500/30'
+                        } else if (roleKey === 'corporate') {
+                          roleColorClasses = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30'
+                        } else if (roleKey === 'collector') {
+                          roleColorClasses = 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30'
+                        } else {
+                          // art_lover
+                          roleColorClasses = 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700/50'
+                        }
+                        
+                        return (
+                          <span
+                            key={role}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-full border ${roleColorClasses}`}
+                          >
+                            {roleLabel}
+                          </span>
+                        )
+                      })}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      {user.plan && (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-200">
-                          {user.plan === 'PRO' ? 'Pro Plan' : 'Free Plan'}
-                        </span>
-                      )}
-                      {user.badges?.pro && (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-yellow-500/20 dark:text-yellow-200">
-                          🟤 Pro Rozeti
-                        </span>
-                      )}
-                      {user.badges?.corporate_verified && (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/30 dark:text-orange-100">
-                          🟧 Kurumsal
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {user.isAdmin && (
+                        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30 whitespace-nowrap">
+                          <Shield size={12} className="inline mr-1" />
+                          Admin
                         </span>
                       )}
                       {user.isVerified && (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400">
+                        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400 whitespace-nowrap">
                           Doğrulanmış
                         </span>
                       )}
                       {user.isOnline && (
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Çevrimiçi"></span>
                       )}
                     </div>
                   </td>
@@ -223,6 +257,13 @@ export default function AdminUsersPage() {
                           <XCircle className="w-5 h-5" />
                         )}
                       </button>
+                      <button
+                        onClick={() => handleDeleteClick(user)}
+                        className="p-2 rounded-lg transition-colors text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        title="Kullanıcıyı sil"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -254,6 +295,24 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </div>
+
+      {/* Bilgi Notu */}
+      <div className="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/10 p-4">
+        <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">
+          <strong className="font-semibold">Feellink'te tüm kullanıcılar eşit özelliklere sahiptir.</strong> Yetkilendirme rol bazlıdır.
+        </p>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteModal
+        open={deleteModalOpen}
+        user={selectedUser}
+        onClose={() => {
+          setDeleteModalOpen(false)
+          setSelectedUser(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   )
 }

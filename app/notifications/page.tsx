@@ -14,9 +14,8 @@ import { ProRoleBadge } from '@/components/ProRoleBadge'
 
 function NotificationsContent() {
   const router = useRouter()
-  const { accessToken, user } = useAuthStore()
+  const { accessToken, user, unreadCount, setUnreadCount } = useAuthStore()
   const queryClient = useQueryClient()
-  const [unreadCount, setUnreadCount] = useState(0)
   const [filter, setFilter] = useState<'all' | 'unread' | 'comment' | 'reply'>('all')
 
   // Infinite scroll notifications query
@@ -35,24 +34,39 @@ function NotificationsContent() {
         params.append('offset', pageParam.toString())
       }
       const response = await api.get(`/notifications?${params.toString()}`)
-      return response.data
+      // Backend artık { notifications, unreadCount } döndürüyor
+      const result = response.data
+      if (result.unreadCount !== undefined) {
+        setUnreadCount(result.unreadCount)
+      }
+      // Eski format için geriye uyumluluk - direkt notifications array'ini döndür
+      return result.notifications || result
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
-      if (lastPage.length < 20) return undefined
+      // lastPage artık notifications array'i (veya eski format için direkt array)
+      const notifications = Array.isArray(lastPage) ? lastPage : (lastPage.notifications || [])
+      if (notifications.length < 20) return undefined
       return allPages.length * 20
     },
     enabled: !!accessToken,
   })
 
-  // Fetch unread count
+  // ✅ Bildirimler yüklendiğinde unreadCount'ı güncelle
   useEffect(() => {
-    if (accessToken) {
-      api.get('/notifications/unread-count').then((response) => {
-        setUnreadCount(response.data.count)
-      })
+    if (accessToken && data) {
+      // İlk sayfadan unreadCount'ı al
+      const firstPage = data.pages[0]
+      if (firstPage?.unreadCount !== undefined) {
+        setUnreadCount(firstPage.unreadCount)
+      } else {
+        // Fallback: API'den çek
+        api.get('/notifications/unread-count').then((response) => {
+          setUnreadCount(response.data.count)
+        })
+      }
     }
-  }, [accessToken])
+  }, [accessToken, data, setUnreadCount])
 
   // Socket connection for real-time notifications
   useEffect(() => {
@@ -77,8 +91,8 @@ function NotificationsContent() {
             ),
           }
         })
-        // Decrement unread count if there was an unread notification
-        setUnreadCount((prev) => Math.max(0, prev - 1))
+        // Decrement unread count if there was an unread notification (store'dan)
+        setUnreadCount(Math.max(0, unreadCount - 1))
         return
       }
 
@@ -94,8 +108,8 @@ function NotificationsContent() {
         }
       })
 
-      // Increment unread count
-      setUnreadCount((prev) => prev + 1)
+      // Increment unread count (store'dan)
+      setUnreadCount(unreadCount + 1)
     })
 
     socket.on('connect', () => {
@@ -135,7 +149,8 @@ function NotificationsContent() {
     try {
       await api.put(`/notifications/${notificationId}/read`)
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+      // Store'dan güncelle
+      setUnreadCount(Math.max(0, unreadCount - 1))
     } catch (error) {
       console.error('Failed to mark as read:', error)
     }
@@ -144,9 +159,14 @@ function NotificationsContent() {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      await api.put('/notifications/read-all')
+      const response = await api.put('/notifications/read-all')
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      setUnreadCount(0)
+      // Backend'den gelen unreadCount'ı kullan
+      if (response.data?.unreadCount !== undefined) {
+        setUnreadCount(response.data.unreadCount)
+      } else {
+        setUnreadCount(0)
+      }
     } catch (error) {
       console.error('Failed to mark all as read:', error)
     }
@@ -157,7 +177,7 @@ function NotificationsContent() {
     try {
       await api.post(`/follow/request/${fromUserId}/accept`)
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+      setUnreadCount(Math.max(0, unreadCount - 1))
     } catch (error) {
       console.error('Failed to accept follow request:', error)
       alert('İstek kabul edilemedi. Tekrar deneyin.')
@@ -169,14 +189,18 @@ function NotificationsContent() {
     try {
       await api.post(`/follow/request/${fromUserId}/reject`)
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+      setUnreadCount(Math.max(0, unreadCount - 1))
     } catch (error) {
       console.error('Failed to reject follow request:', error)
       alert('İstek reddedilemedi. Tekrar deneyin.')
     }
   }
 
-  const notifications = data?.pages.flatMap((page) => page) || []
+  // Backend artık { notifications, unreadCount } döndürüyor
+  const notifications = data?.pages.flatMap((page) => {
+    // Eski format için geriye uyumluluk
+    return page.notifications || page
+  }) || []
 
   // Filter notifications
   const filteredNotifications = notifications.filter((n: any) => {

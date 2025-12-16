@@ -10,7 +10,7 @@ import { HighlightDetailModal } from './HighlightDetailModal'
 import { RenameHighlightModal } from './RenameHighlightModal'
 import { AddArtworkToHighlightModal } from './AddArtworkToHighlightModal'
 import { DeleteHighlightModal } from './DeleteHighlightModal'
-import { MoreVertical } from 'lucide-react'
+import { MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Highlight {
   id: string
@@ -42,9 +42,15 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
   const [showAddArtworkModal, setShowAddArtworkModal] = useState<Highlight | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState<Highlight | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(true)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
   const queryClient = useQueryClient()
   const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
+  const carouselRef = useRef<HTMLDivElement>(null)
 
   // Menü dışına tıklama ile kapatma
   useEffect(() => {
@@ -70,17 +76,84 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
     }
   }, [menuOpen])
 
-  const { data: highlights, isLoading } = useQuery({
+  // Desktop drag handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!carouselRef.current) return
+    setIsDragging(true)
+    setStartX(e.pageX - carouselRef.current.offsetLeft)
+    setScrollLeft(carouselRef.current.scrollLeft)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !carouselRef.current) return
+    e.preventDefault()
+    const x = e.pageX - carouselRef.current.offsetLeft
+    const walk = (x - startX) * 2 // Scroll speed multiplier
+    carouselRef.current.scrollLeft = scrollLeft - walk
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleMouseLeave = () => {
+    setIsDragging(false)
+  }
+
+  // Arrow navigation
+  const scrollLeftHandler = () => {
+    if (!carouselRef.current) return
+    const cardWidth = 128 + 12 // w-32 (128px) + gap-3 (12px)
+    carouselRef.current.scrollBy({ left: -cardWidth * 3, behavior: 'smooth' })
+  }
+
+  const scrollRightHandler = () => {
+    if (!carouselRef.current) return
+    const cardWidth = 128 + 12 // w-32 (128px) + gap-3 (12px)
+    carouselRef.current.scrollBy({ left: cardWidth * 3, behavior: 'smooth' })
+  }
+
+  const { data: highlights, isLoading, isRefetching } = useQuery({
     queryKey: ['highlights', username],
     queryFn: async () => {
-      const response = await api.get(`/highlights/${username}`)
-      return response.data as Highlight[]
+      try {
+        const response = await api.get(`/highlights/${username}`)
+        // API'den gelen data her zaman array olmalı
+        const data = response.data
+        return Array.isArray(data) ? data : []
+      } catch (error) {
+        console.error('Highlights yüklenemedi:', error)
+        return []
+      }
     },
     enabled: !!username,
+    // Stale data'yı göster (refetch sırasında highlights kaybolmasın)
+    placeholderData: (previousData) => previousData, // React Query v5
+    staleTime: 0, // Her zaman fresh data iste
   })
 
-  if (isLoading) return null
-  if (!highlights || highlights.length === 0) {
+  // highlights her zaman array olmalı
+  const highlightsArray = Array.isArray(highlights) ? highlights : []
+
+  // Carousel scroll kontrolü ve arrow visibility
+  useEffect(() => {
+    const carousel = carouselRef.current
+    if (!carousel) return
+
+    const updateArrowVisibility = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = carousel
+      setShowLeftArrow(scrollLeft > 0)
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 10) // 10px tolerance
+    }
+
+    updateArrowVisibility()
+    carousel.addEventListener('scroll', updateArrowVisibility)
+    return () => carousel.removeEventListener('scroll', updateArrowVisibility)
+  }, [highlightsArray])
+
+  // İlk yükleme sırasında null döndür (stale data yoksa)
+  if (isLoading && !highlights) return null
+  if (!highlightsArray || highlightsArray.length === 0) {
     // Sadece kendi profilimizde "Yeni Tema" butonu göster
     if (!isOwnProfile) return null
     
@@ -109,14 +182,44 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
   }
 
   return (
-    <div className="w-full mb-6">
+    <div className="w-full mb-6 relative group" onMouseEnter={() => {}}>
       <h3 className="text-sm text-neutral-400 mb-2 dark:text-neutral-500">Öne Çıkan Temalar</h3>
-      <div className="flex gap-3 overflow-x-auto overflow-y-visible pb-2 custom-scrollbar">
-        {highlights.map((hl) => (
-          <div
-            key={hl.id}
-            className="flex-shrink-0 w-32 h-40 rounded-2xl bg-[#181818] dark:bg-gray-900 border border-neutral-800 dark:border-neutral-700 hover:border-brand-orange dark:hover:border-brand-orange transition shadow-sm relative group overflow-visible"
+      {/* Carousel Container with snap scroll */}
+      <div className="relative">
+        {/* Left Arrow - Desktop only, hover visible */}
+        {showLeftArrow && (
+          <button
+            onClick={scrollLeftHandler}
+            className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-black/60 dark:bg-black/80 backdrop-blur-sm text-white hover:bg-black/80 dark:hover:bg-black/90 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+            aria-label="Önceki"
           >
+            <ChevronLeft size={20} />
+          </button>
+        )}
+
+        {/* Carousel */}
+        <div
+          ref={carouselRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          className="flex gap-3 overflow-x-auto overflow-y-visible pb-2 scrollbar-hide"
+          style={{
+            scrollBehavior: 'smooth',
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            cursor: isDragging ? 'grabbing' : 'grab',
+          }}
+        >
+          {highlightsArray.map((hl) => (
+            <div
+              key={hl.id}
+              className="flex-shrink-0 w-32 h-40 rounded-2xl bg-[#181818] dark:bg-gray-900 border border-neutral-800 dark:border-neutral-700 hover:border-brand-orange dark:hover:border-brand-orange transition-all duration-300 shadow-sm hover:shadow-lg hover:scale-105 relative group overflow-visible"
+              style={{ scrollSnapAlign: 'start' }}
+            >
             {/* İçerik container - overflow-hidden burada */}
             <div className="w-full h-full rounded-2xl overflow-hidden">
               <button
@@ -180,16 +283,31 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
           </div>
         ))}
 
-        {/* Sadece kendi profilimizde "Yeni Tema" butonu göster */}
-        {isOwnProfile && (
+          {/* Sadece kendi profilimizde "Yeni Tema" butonu göster */}
+          {isOwnProfile && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex-shrink-0 w-32 h-40 rounded-2xl border border-dashed border-neutral-700 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 hover:border-orange-500 hover:text-orange-400 dark:hover:border-orange-500 dark:hover:text-orange-400 flex flex-col items-center justify-center gap-2 transition-all duration-300 hover:scale-105 snap-start"
+            >
+              <span className="text-2xl">＋</span>
+              <span className="text-xs font-medium text-center">Yeni Tema</span>
+            </button>
+          )}
+        </div>
+
+        {/* Right Arrow - Desktop only, hover visible */}
+        {showRightArrow && (
           <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex-shrink-0 w-32 h-40 rounded-2xl border border-dashed border-neutral-700 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 hover:border-orange-500 hover:text-orange-400 dark:hover:border-orange-500 dark:hover:text-orange-400 flex flex-col items-center justify-center gap-2 transition-colors"
+            onClick={scrollRightHandler}
+            className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-black/60 dark:bg-black/80 backdrop-blur-sm text-white hover:bg-black/80 dark:hover:bg-black/90 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+            aria-label="Sonraki"
           >
-            <span className="text-2xl">＋</span>
-            <span className="text-xs font-medium text-center">Yeni Tema</span>
+            <ChevronRight size={20} />
           </button>
         )}
+
+        {/* Gradient fade - Right side */}
+        <div className="hidden md:block absolute right-0 top-0 bottom-2 w-20 bg-gradient-to-l from-gray-950 dark:from-gray-950 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
       {showCreateModal && (
@@ -238,12 +356,12 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
             left: `${menuPosition.left}px`,
           }}
         >
-          {highlights.find((hl) => hl.id === menuOpen) && (
+          {highlightsArray.find((hl) => hl.id === menuOpen) && (
             <>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  const highlight = highlights.find((hl) => hl.id === menuOpen)
+                  const highlight = highlightsArray.find((hl) => hl.id === menuOpen)
                   if (highlight) {
                     setShowRenameModal(highlight)
                     setMenuOpen(null)
@@ -257,7 +375,7 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  const highlight = highlights.find((hl) => hl.id === menuOpen)
+                  const highlight = highlightsArray.find((hl) => hl.id === menuOpen)
                   if (highlight) {
                     setShowAddArtworkModal(highlight)
                     setMenuOpen(null)
@@ -272,7 +390,7 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  const highlight = highlights.find((hl) => hl.id === menuOpen)
+                  const highlight = highlightsArray.find((hl) => hl.id === menuOpen)
                   if (highlight) {
                     setShowDeleteModal(highlight)
                     setMenuOpen(null)

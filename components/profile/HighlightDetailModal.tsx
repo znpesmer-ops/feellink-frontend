@@ -2,6 +2,11 @@
 
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
+// Simple cn utility for className merging
+const cn = (...classes: (string | undefined | false)[]) => {
+  return classes.filter(Boolean).join(' ')
+}
+
 interface Highlight {
   id: string
   title: string
@@ -37,24 +42,40 @@ export function HighlightDetailModal({ highlight, onClose }: HighlightDetailModa
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto pr-1">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto pr-1 custom-scrollbar">
           {highlight.items?.map((item) => {
             const imageUrl = item.post.imageUrl
+            const artworkTitle = item.post.caption || 'İsimsiz Eser'
 
             return (
               <div
                 key={item.id}
-                className="relative aspect-square rounded-xl overflow-hidden bg-neutral-800 dark:bg-gray-800"
+                className="relative aspect-square rounded-xl overflow-hidden bg-neutral-800 dark:bg-gray-800 group cursor-pointer"
               >
                 {imageUrl ? (
-                  <img
-                    src={resolveImageUrl(imageUrl)}
-                    alt={item.post.caption ?? ''}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                    }}
-                  />
+                  <>
+                    <img
+                      src={resolveImageUrl(imageUrl)}
+                      alt={artworkTitle}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                      }}
+                    />
+
+                    {/* Hover Overlay - Eser adı */}
+                    <div
+                      className={cn(
+                        'absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl flex items-end pointer-events-none'
+                      )}
+                    >
+                      <div className="p-3 w-full">
+                        <p className="text-white text-sm font-medium line-clamp-1 leading-tight">
+                          {artworkTitle}
+                        </p>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-neutral-500 text-xs">Görsel</span>

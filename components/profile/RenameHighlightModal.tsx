@@ -21,8 +21,9 @@ export function RenameHighlightModal({ highlight, onClose }: RenameHighlightModa
     mutationFn: async (newTitle: string) => {
       return (await api.patch(`/highlights/${highlight.id}`, { title: newTitle })).data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['highlights'] })
+    onSuccess: async () => {
+      // Çözüm A: Optimistic update yapma, sadece refetch et
+      await queryClient.refetchQueries({ queryKey: ['highlights'] })
       toast.success('Tema adı güncellendi')
       onClose()
     },
