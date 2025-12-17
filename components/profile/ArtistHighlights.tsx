@@ -127,8 +127,12 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
       }
     },
     enabled: !!username,
-    // Stale data'yı göster (refetch sırasında highlights kaybolmasın)
-    placeholderData: (previousData) => previousData, // React Query v5
+    // 🔥 KRİTİK: Stale data'yı göster (refetch sırasında highlights kaybolmasın)
+    // previousData undefined olsa bile boş array döndür (UI kaybolmasın)
+    placeholderData: (previousData) => previousData ?? [],
+    // Refetch sırasında da stale data'yı göster
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     staleTime: 0, // Her zaman fresh data iste
   })
 
@@ -151,8 +155,14 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
     return () => carousel.removeEventListener('scroll', updateArrowVisibility)
   }, [highlightsArray])
 
-  // İlk yükleme sırasında null döndür (stale data yoksa)
-  if (isLoading && !highlights) return null
+  // 🔥 KRİTİK: İlk yükleme sırasında null döndür (stale data yoksa)
+  // Ama refetch sırasında highlights varsa (placeholderData sayesinde) göster
+  // isLoading true olsa bile highlights varsa göster (refetch sırasında UI kaybolmasın)
+  // highlightsArray boş olsa bile (placeholderData [] döndürdüyse) göster
+  if (isLoading && !highlights && !isRefetching) return null
+  
+  // 🔥 KRİTİK: highlightsArray boş olsa bile, eğer refetch sırasındaysa göster (placeholderData sayesinde)
+  // Sadece gerçekten hiç data yoksa ve ilk yükleme değilse boş state göster
   if (!highlightsArray || highlightsArray.length === 0) {
     // Sadece kendi profilimizde "Yeni Tema" butonu göster
     if (!isOwnProfile) return null
@@ -306,8 +316,6 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
           </button>
         )}
 
-        {/* Gradient fade - Right side */}
-        <div className="hidden md:block absolute right-0 top-0 bottom-2 w-20 bg-gradient-to-l from-gray-950 dark:from-gray-950 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
       {showCreateModal && (
@@ -384,7 +392,7 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
                 }}
                 className="w-full px-4 py-2.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-sm font-medium transition-colors text-left"
               >
-                Eser Ekle
+                Temayı Düzenle
               </button>
               <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
               <button

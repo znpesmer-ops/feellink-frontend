@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2, Sparkles, UserCircle2, Eye, Trash2, MoreVertical, Users } from 'lucide-react'
+import { Loader2, Sparkles, UserCircle2, Eye, Trash2, MoreVertical, Users, Edit } from 'lucide-react'
 
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -438,6 +438,18 @@ function MyJobsTab({
                     />
                     <div className="absolute right-0 bottom-full mb-2 w-40 origin-bottom-right bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 z-20">
                       <div className="py-1">
+                        <button
+                          onClick={() => {
+                            router.push(`/jobs/new?edit=${job.id}`)
+                            setOpenMenuId(null)
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Edit className="h-4 w-4" />
+                            Düzenle
+                          </div>
+                        </button>
                         <button
                           onClick={() => {
                             onDeleteClick(job.id)

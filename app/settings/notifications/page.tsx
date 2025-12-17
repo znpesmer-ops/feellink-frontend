@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { ArrowLeft } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 interface NotificationPreferences {
   mention: boolean
@@ -24,7 +25,8 @@ function NotificationSettingsContent() {
     like: true,
     comment: true,
   })
-  const [saving, setSaving] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (!accessToken) return
@@ -40,6 +42,7 @@ function NotificationSettingsContent() {
         })
       } catch (error) {
         console.error('Failed to load notification preferences:', error)
+        toast.error('Ayarlar yüklenemedi. Lütfen tekrar deneyin.')
       } finally {
         setLoading(false)
       }
@@ -48,26 +51,56 @@ function NotificationSettingsContent() {
     loadPrefs()
   }, [accessToken])
 
-  const onToggle = (key: keyof NotificationPreferences) => {
-    setPrefs((p) => ({ ...p, [key]: !p[key] }))
+  const debounceSave = useMemo(() => {
+    return (next: NotificationPreferences, prev: NotificationPreferences) => {
+      // Önceki timeout'u temizle
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+
+      // Yeni timeout ayarla
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          setIsSaving(true)
+          await api.patch('/notification-preferences', next)
+          // Başarılı kaydetme için toast gösterme (kullanıcıyı rahatsız etmemek için)
+        } catch (error) {
+          console.error('Failed to save preferences:', error)
+          // Hata durumunda eski state'e geri dön
+          setPrefs(prev)
+          toast.error('Ayarlar kaydedilemedi. Lütfen tekrar deneyin.')
+        } finally {
+          setIsSaving(false)
+        }
+      }, 400)
+    }
+  }, [])
+
+  const updateSetting = (key: keyof NotificationPreferences, value: boolean) => {
+    if (!prefs) return
+    
+    const prev = { ...prefs }
+    const next = { ...prefs, [key]: value }
+    
+    // Optimistic update
+    setPrefs(next)
+    
+    // Debounce ile kaydet
+    debounceSave(next, prev)
   }
 
-  const onSave = async () => {
-    setSaving(true)
-    try {
-      await api.put('/notification-preferences', prefs)
-      alert('Ayarlar başarıyla kaydedildi!')
-    } catch (error) {
-      console.error('Failed to save preferences:', error)
-      alert('Ayarlar kaydedilirken bir hata oluştu.')
-    } finally {
-      setSaving(false)
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
     }
-  }
+  }, [])
 
   if (loading) {
     return (
-      <main className="flex justify-center items-center min-h-screen pt-24 pb-16 px-6">
+      <main className="flex justify-center items-center min-h-screen pt-24 pb-16 px-6 bg-white dark:bg-[#0a0a0a]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-orange"></div>
       </main>
     )
@@ -87,47 +120,51 @@ function NotificationSettingsContent() {
           <h1 className="text-xl md:text-2xl font-bold text-[#111] dark:text-white">Bildirim Ayarları</h1>
         </div>
 
-        {/* Content Card */}
-        <div className="bg-white/80 dark:bg-[#1a1a1a]/70 backdrop-blur-md border border-gray-200 dark:border-gray-700/40 rounded-2xl p-6 shadow-sm">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-            Hangi bildirimleri almak istediğini seç. Kapattığın bildirimler veritabanına kaydedilmez ve sana gönderilmez.
-          </p>
+        {/* Modern Card */}
+        <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
+          {/* Header Section */}
+          <div className="px-6 py-5 border-b border-black/10 dark:border-white/10">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Bildirim Ayarları</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-white/60">
+              Hangi bildirimleri almak istediğini seç. Değişiklikler otomatik kaydedilir.
+            </p>
+          </div>
 
-          <div className="space-y-1">
+          {/* Toggle Rows */}
+          <div className="divide-y divide-black/10 dark:divide-white/10">
             <ToggleRow
-              label="Etiketlenmeler (@mention)"
+              label="Etiketlenmeler"
               description="Seni bir yorumda etiketlediklerinde bildirim al"
               value={prefs.mention}
-              onChange={() => onToggle('mention')}
+              onChange={() => updateSetting('mention', !prefs.mention)}
             />
             <ToggleRow
               label="Takip bildirimleri"
               description="Seni takip ettiklerinde veya takip isteği geldiğinde bildirim al"
               value={prefs.follow}
-              onChange={() => onToggle('follow')}
+              onChange={() => updateSetting('follow', !prefs.follow)}
             />
             <ToggleRow
               label="Beğeniler"
               description="Gönderilerini beğendiklerinde bildirim al"
               value={prefs.like}
-              onChange={() => onToggle('like')}
+              onChange={() => updateSetting('like', !prefs.like)}
             />
             <ToggleRow
               label="Yorumlar"
               description="Gönderilerine yorum yaptıklarında bildirim al"
               value={prefs.comment}
-              onChange={() => onToggle('comment')}
+              onChange={() => updateSetting('comment', !prefs.comment)}
             />
           </div>
 
-          <div className="mt-8 flex justify-end">
-            <button
-              onClick={onSave}
-              disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-            >
-              {saving ? 'Kaydediliyor...' : 'Kaydet'}
-            </button>
+          {/* Saving Indicator */}
+          <div className="px-6 py-4 flex justify-end">
+            {isSaving && (
+              <span className="text-xs px-3 py-1 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-300 border border-orange-500/30 dark:border-orange-500/20">
+                Kaydediliyor…
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -144,23 +181,25 @@ interface ToggleRowProps {
 
 function ToggleRow({ label, description, value, onChange }: ToggleRowProps) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-gray-100 dark:border-gray-800/50 last:border-b-0">
-      <div className="flex-1">
-        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 block">{label}</span>
+    <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+      <div className="flex-1 pr-4">
+        <span className="text-sm font-medium text-gray-900 dark:text-white block">{label}</span>
         {description && (
-          <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 block">{description}</span>
+          <span className="text-xs text-gray-500 dark:text-white/60 mt-1 block">{description}</span>
         )}
       </div>
       <button
         onClick={onChange}
-        className={`w-14 h-8 rounded-full relative transition-all duration-300 ${
-          value ? 'bg-brand-orange' : 'bg-gray-300 dark:bg-gray-700'
+        className={`relative w-14 h-8 rounded-full transition-all duration-300 ${
+          value 
+            ? 'bg-brand-orange hover:bg-brand-orange/90' 
+            : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
         }`}
         aria-pressed={value}
         role="switch"
       >
         <span
-          className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transition-transform duration-300 ${
+          className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-lg transition-transform duration-300 ${
             value ? 'translate-x-6' : 'translate-x-0'
           }`}
         />
@@ -176,4 +215,3 @@ export default function NotificationSettingsPage() {
     </AuthGuard>
   )
 }
-

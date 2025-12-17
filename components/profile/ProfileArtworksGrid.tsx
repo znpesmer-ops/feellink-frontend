@@ -3,11 +3,12 @@
 import { useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
-import { Image as ImageIcon, QrCode, Download, Loader2, MoreVertical, Trash2, Heart, MessageCircle } from 'lucide-react'
+import { Image as ImageIcon, QrCode, Download, Loader2, MoreVertical, Trash2, Heart, MessageCircle, Edit } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/lib/store'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { EditArtworkModal } from './EditArtworkModal'
 
 interface ProfileArtworksGridProps {
   username: string
@@ -25,9 +26,10 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
   const [downloadingQr, setDownloadingQr] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [editingArtwork, setEditingArtwork] = useState<any | null>(null)
   const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
-  const handleDownloadQr = async (e: React.MouseEvent, artworkId: string) => {
+  const handleDownloadQr = async (e: React.MouseEvent, artworkId: string, artwork: any) => {
     e.stopPropagation() // Card click'i engelle
 
     try {
@@ -38,11 +40,14 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
         responseType: 'blob',
       })
 
+      // Sabit dosya adı - kullanıcı verisine bağlı değil
+      const fileName = 'Feellink_QR.pdf'
+
       // Blob'dan URL oluştur ve indir
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `Feellink_Eser_Etiketi_${artworkId}.pdf`)
+      link.setAttribute('download', fileName)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -132,10 +137,26 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
 
   return (
     <div className="grid grid-cols-3 gap-2">
-      {artworks.map((artwork) => (
+      {artworks.map((artwork, index) => {
+        // Index bazlı ritmik renk ataması (turuncu → mavi → beyaz) - Normal çerçeve
+        const colorClass = index % 3 === 0 
+          ? 'artwork-card--orange' 
+          : index % 3 === 1 
+          ? 'artwork-card--blue' 
+          : 'artwork-card--white'
+
+        // Index bazlı hover çerçeve rengi (döngüsel)
+        const hoverColorClass =
+          index % 3 === 0
+            ? 'hover-outline-orange'
+            : index % 3 === 1
+            ? 'hover-outline-blue'
+            : 'hover-outline-white'
+
+        return (
         <div
           key={artwork.id}
-          className="aspect-square relative cursor-pointer group overflow-visible rounded-xl transition-all duration-300 hover:ring-2 hover:ring-[#ff7b00] hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-950"
+          className={`artwork-card aspect-square relative cursor-pointer group overflow-hidden rounded-xl transition-all duration-300 hover:ring-2 hover:ring-brand-orange hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-950 ${colorClass} ${hoverColorClass}`}
           onClick={() => router.push(`/posts/${artwork.id}`)}
         >
           {/* İçerik container - overflow-hidden burada, görselleri sınırlıyor */}
@@ -177,7 +198,7 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
           {isOwner && (
             <>
               <button
-                onClick={(e) => handleDownloadQr(e, artwork.id)}
+                onClick={(e) => handleDownloadQr(e, artwork.id, artwork)}
                 disabled={downloadingQr === artwork.id}
                 className="absolute top-2 left-2 rounded-full bg-[#ff7b00] hover:bg-[#e36f00] text-white p-1.5 shadow-lg z-[115] transition-colors disabled:opacity-50 disabled:cursor-not-allowed pointer-events-auto"
                 title="QR Kod Etiketi İndir"
@@ -213,6 +234,17 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
                     onClick={(e) => e.stopPropagation()}
                     className="absolute bottom-10 right-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-[120px] z-[120]"
                   >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditingArtwork(artwork)
+                        setMenuOpen(null)
+                      }}
+                      className="w-full px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-sm font-medium transition-colors"
+                    >
+                      <Edit size={16} />
+                      Düzenle
+                    </button>
                     <button
                       onClick={(e) => handleDeleteClick(e, artwork.id)}
                       disabled={deleteMutation.isPending}
@@ -265,8 +297,21 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
       
+      {/* Düzenleme modalı */}
+      {editingArtwork && (
+        <EditArtworkModal
+          artwork={editingArtwork}
+          open={!!editingArtwork}
+          onClose={() => setEditingArtwork(null)}
+          onSuccess={() => {
+            setEditingArtwork(null)
+          }}
+        />
+      )}
+
       {/* Silme onay modalı - Sadece açıkken görünür, z-index sidebar'dan düşük */}
       {confirmDelete && (
         <div 

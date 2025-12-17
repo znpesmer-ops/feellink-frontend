@@ -65,7 +65,7 @@ if (typeof window === 'undefined') {
 const api = axios.create({
   baseURL,
   withCredentials: true,
-  timeout: 15000, // 15 saniye timeout
+  timeout: 30000, // 30 saniye timeout (network error'ları azaltmak için artırıldı)
 })
 
 // Add token to requests
@@ -104,9 +104,12 @@ api.interceptors.response.use(
           code: error.code,
           message: error.message,
           url: originalRequest?.url,
+          baseURL: baseURL,
         })
       }
 
+      // Network error'ları sessizce handle et (kullanıcıya agresif mesaj gösterme)
+      // Backend başlatılıyor olabilir veya geçici bir bağlantı sorunu olabilir
       const networkError: AxiosError = {
         ...error,
         response: {
@@ -114,7 +117,7 @@ api.interceptors.response.use(
             message: error.code === 'ECONNABORTED' || error.message?.includes('timeout')
               ? 'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
               : error.code === 'ERR_NETWORK' || error.message === 'Network Error'
-              ? 'Sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edin.'
+              ? 'Bağlantı kurulamadı. Lütfen tekrar deneyin.'
               : 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.',
           },
           status: 0,
@@ -219,7 +222,7 @@ export const getErrorMessage = (error: any): string => {
       return 'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
     }
     if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
-      return 'Sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edin.'
+      return 'Bağlantı kurulamadı. Lütfen tekrar deneyin.'
     }
     return 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.'
   }

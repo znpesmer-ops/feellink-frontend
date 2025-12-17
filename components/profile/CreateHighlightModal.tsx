@@ -55,9 +55,12 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
         })
       ).data
     },
-    onSuccess: async () => {
-      // Çözüm A: Optimistic update yapma, sadece refetch et
-      await queryClient.refetchQueries({ queryKey: ['highlights', username] })
+    onSuccess: () => {
+      // 🔥 KRİTİK: Query'yi refetch et ama await etme (background'da çalışır)
+      // invalidateQueries yerine refetchQueries kullan - daha güvenli, placeholderData ile UI kaybolmaz
+      queryClient.refetchQueries({ queryKey: ['highlights', username] }).catch(() => {
+        // Refetch hatası olsa bile UI kaybolmasın
+      })
       onClose()
     },
   })
@@ -132,23 +135,24 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
               Henüz eser paylaşmadınız. Önce bir eser paylaşmalısınız.
             </div>
           ) : (
-            <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-              {selectableArtworks.map((artwork: any) => {
-                const selected = selectedIds.includes(artwork.id)
-                const isCover = coverId === artwork.id
-                const imageUrl = artwork.media?.[0]?.url || artwork.imageUrl
+            <div className="max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+                {selectableArtworks.map((artwork: any) => {
+                  const selected = selectedIds.includes(artwork.id)
+                  const isCover = coverId === artwork.id
+                  const imageUrl = artwork.media?.[0]?.url || artwork.imageUrl
 
-                return (
-                  <button
-                    key={artwork.id}
-                    type="button"
-                    onClick={() => toggleSelect(artwork.id)}
-                    className={`relative aspect-square rounded-xl overflow-hidden border transition-all ${
-                      selected
-                        ? 'border-brand-orange ring-2 ring-brand-orange/50'
-                        : 'border-neutral-800 dark:border-neutral-700 hover:border-neutral-600 dark:hover:border-neutral-600'
-                    }`}
-                  >
+                  return (
+                    <button
+                      key={artwork.id}
+                      type="button"
+                      onClick={() => toggleSelect(artwork.id)}
+                      className={`relative aspect-[3/4] rounded-xl overflow-hidden border transition-all hover:scale-[1.02] ${
+                        selected
+                          ? 'border-brand-orange ring-2 ring-brand-orange/50'
+                          : 'border-neutral-800 dark:border-neutral-700 hover:border-neutral-600 dark:hover:border-neutral-600'
+                      }`}
+                    >
                     {imageUrl ? (
                       <img
                         src={resolveImageUrl(imageUrl)}
@@ -186,6 +190,7 @@ export function CreateHighlightModal({ username, userId, onClose }: CreateHighli
                   </button>
                 )
               })}
+              </div>
             </div>
           )}
         </div>

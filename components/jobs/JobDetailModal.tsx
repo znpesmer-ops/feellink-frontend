@@ -1,6 +1,6 @@
 'use client'
 
-import { X, UserCircle2, MapPin, Building2, DollarSign, Calendar, Briefcase, FileText, Tag, ClipboardList, CheckCircle } from 'lucide-react'
+import { X, UserCircle2, MapPin, Building2, Calendar, Briefcase, FileText, Tag, ClipboardList, CheckCircle } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
 interface PublicJobListing {
@@ -160,8 +160,7 @@ export function JobDetailModal({ open, onClose, job }: JobDetailModalProps) {
             {/* Maaş bilgisi */}
             {job.salary && (
               <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="h-5 w-5 text-brand-orange flex-shrink-0" />
+                <div className="flex items-center mb-2">
                   <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
                     Maaş
                   </p>

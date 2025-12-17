@@ -1,19 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
+  const clearAuth = useAuthStore((state) => state.clearAuth);
 
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  // 🔒 Güvenlik: Reset sayfası yüklendiğinde mevcut auth state'i temizle
+  // Bu sayede reset linkiyle gelen biri asla logged-in state'e düşmez
+  useEffect(() => {
+    clearAuth();
+  }, [clearAuth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,8 +48,10 @@ export default function ResetPasswordPage() {
       const res = await api.post('/auth/reset-password', { token, password });
       setMessage(res.data?.message || 'Şifreniz başarıyla güncellendi.');
 
+      // ✅ Reset sonrası sadece login sayfasına yönlendir
+      // ❌ Auth state set etme, token oluşturma, session başlatma YAPILMAZ
       setTimeout(() => {
-        router.push('/login');
+        router.replace('/login?reset=success');
       }, 2000);
     } catch (err: any) {
       console.error(err);

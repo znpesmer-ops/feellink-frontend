@@ -77,6 +77,10 @@ export default function JobListingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{
+    applicationId: string
+    action: 'approve' | 'reject' | null
+  } | null>(null)
 
   // Rol bazlı kontrol
   const roles = capabilities?.roles ?? user?.roles ?? []
@@ -178,7 +182,8 @@ export default function JobListingDetailPage() {
   }
 
   const handleSendMessage = (applicantId: string) => {
-    router.push(`/messages?user=${applicantId}`)
+    // ✅ İlan ID'sini query parametresi olarak ekle
+    router.push(`/messages?user=${applicantId}&jobId=${jobListingId}`)
   }
 
 
@@ -389,7 +394,7 @@ export default function JobListingDetailPage() {
                         {app.status === 'REVIEWED' && (
                           <div className="flex flex-col gap-2 mt-2">
                             <button
-                              onClick={() => handleStatusUpdate(app.id, 'ACCEPTED')}
+                              onClick={() => setConfirmAction({ applicationId: app.id, action: 'approve' })}
                               disabled={updatingStatus === app.id}
                               className="px-3 py-1.5 text-xs font-medium bg-green-50 dark:bg-green-900/30 dark:border dark:border-green-800/50 text-green-600 dark:text-green-300 rounded-md hover:bg-green-100 dark:hover:bg-green-900/40 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                             >
@@ -401,7 +406,7 @@ export default function JobListingDetailPage() {
                               Olumlu Yanıt
                             </button>
                             <button
-                              onClick={() => handleStatusUpdate(app.id, 'REJECTED')}
+                              onClick={() => setConfirmAction({ applicationId: app.id, action: 'reject' })}
                               disabled={updatingStatus === app.id}
                               className="px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/30 dark:border dark:border-red-800/50 text-red-600 dark:text-red-300 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                             >
@@ -449,6 +454,60 @@ export default function JobListingDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ✅ Başvuru Durumu Güncelleme Onay Modalı */}
+      {confirmAction && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/70"
+          onClick={() => setConfirmAction(null)}
+        >
+          <div 
+            className="w-[420px] rounded-xl bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              {confirmAction.action === 'approve'
+                ? 'Olumlu yanıt vermek istiyor musunuz?'
+                : 'Olumsuz yanıt vermek istiyor musunuz?'}
+            </h3>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              {confirmAction.action === 'approve'
+                ? 'Bu işlem sonrası başvuru olumlu olarak işaretlenecektir.'
+                : 'Bu işlem sonrası başvuru olumsuz olarak işaretlenecektir.'}
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                İptal
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (confirmAction.action === 'approve') {
+                    await handleStatusUpdate(confirmAction.applicationId, 'ACCEPTED')
+                  } else if (confirmAction.action === 'reject') {
+                    await handleStatusUpdate(confirmAction.applicationId, 'REJECTED')
+                  }
+                  setConfirmAction(null)
+                }}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
+                  confirmAction.action === 'approve'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {confirmAction.action === 'approve'
+                  ? 'Olumlu Yanıt Ver'
+                  : 'Olumsuz Yanıt Ver'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -99,15 +99,19 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'media' | 'files'>('chat')
   const [media, setMedia] = useState<Array<{ id: string; imageUrl: string; createdAt: string; senderId: string }>>([])
   const [jobApplications, setJobApplications] = useState<Record<string, { listingTitle: string; company?: string }>>({})
+  const [jobContext, setJobContext] = useState<{ id: string; title: string } | null>(null) // ✅ Aktif sohbet için ilan bağlamı
   const [files, setFiles] = useState<Array<{ id: string; fileUrl: string; fileName: string | null; fileType: string | null; createdAt: string; senderId: string }>>([])
   const [loadingMedia, setLoadingMedia] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [deleteConversationId, setDeleteConversationId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatSocketRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const activeConversationRef = useRef<Conversation | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isSendingRef = useRef(false) // ✅ Mesaj çift gönderme koruması
+  const hasInitializedConversationRef = useRef<string | null>(null) // ✅ Conversation oluşturma tek seferlik koruması (userId saklar)
 
   // Socket bağlantısı - sadece bir kez kurulmalı
   useEffect(() => {
@@ -466,6 +470,36 @@ export default function MessagesPage() {
     }
   }, [accessToken])
 
+  // ✅ İlan bağlamını çek (sadece jobId query parametresi varsa)
+  useEffect(() => {
+    const jobId = searchParams?.get('jobId')
+    if (!jobId) {
+      setJobContext(null)
+      return
+    }
+
+    // İlan bilgisini çek
+    const fetchJobContext = async () => {
+      try {
+        const response = await api.get(`/jobs/public`)
+        const jobs = response.data || []
+        const job = jobs.find((j: any) => j.id === jobId)
+        
+        if (job) {
+          setJobContext({
+            id: job.id,
+            title: job.title,
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch job context:', error)
+        setJobContext(null)
+      }
+    }
+
+    fetchJobContext()
+  }, [searchParams?.get('jobId'), accessToken])
+
   // URL'den gelen conversation ID ile otomatik açma
   useEffect(() => {
     const conversationId = searchParams?.get('conversation')
@@ -476,6 +510,64 @@ export default function MessagesPage() {
       }
     }
   }, [searchParams, conversations])
+
+  // URL'den gelen user ID ile otomatik konuşma açma/başlatma
+  useEffect(() => {
+    const userId = searchParams?.get('user')
+    
+    // ✅ KRİTİK KORUMA: Bu useEffect sadece bir kez çalışmalı (redirect sonrası)
+    // Eğer aynı userId için zaten işlem yapıldıysa tekrar yapma
+    if (!userId || hasInitializedConversationRef.current === userId || !user?.id || loading) {
+      return
+    }
+
+    // ✅ Guard: Bu userId için işlem yapıldığını işaretle
+    hasInitializedConversationRef.current = userId
+
+    const initializeConversation = async () => {
+      // Önce mevcut konuşmaları kontrol et
+      const existingConversation = conversations.find((conv) => {
+        const participant = conv.participants?.find((p) => p.userId === userId)
+        return participant !== undefined
+      })
+
+      if (existingConversation) {
+        // Konuşma varsa aç
+        openConversation(existingConversation)
+        return
+      }
+
+      // Konuşma yoksa backend'den get/create iste (backend duplicate kontrolü yapacak)
+      try {
+        const response = await api.post('/chat/conversations', {
+          participantIds: [userId],
+        })
+        const conversation = response.data
+        
+        // Backend duplicate kontrolü yaptığı için, dönen conversation zaten mevcut olabilir
+        // Tekrar kontrol et (state güncellemesi sırasında race condition önleme)
+        const stillExists = conversations.some((conv) => conv.id === conversation.id)
+        if (!stillExists) {
+          // Yeni konuşmayı listeye ekle
+          setConversations((prev) => {
+            // Son bir kontrol daha (state update sırasında)
+            const existsInPrev = prev.some((conv) => conv.id === conversation.id)
+            return existsInPrev ? prev : [conversation, ...prev]
+          })
+        }
+        
+        // Konuşmayı aç
+        openConversation(conversation)
+      } catch (error: any) {
+        console.error('Failed to start conversation:', error)
+        // Hata durumunda sessizce devam et (kullanıcı manuel olarak açabilir)
+        hasInitializedConversationRef.current = null // Hata durumunda tekrar denemeye izin ver
+      }
+    }
+
+    // Konuşmalar yüklendikten sonra işlem yap
+    initializeConversation()
+  }, [searchParams?.get('user'), user?.id, loading]) // ✅ Sadece userId ve loading değiştiğinde çalış
 
   // Aktif konuşma değiştiğinde mesajları yükle ve socket room'una join ol
   useEffect(() => {
@@ -564,6 +656,26 @@ export default function MessagesPage() {
     setActiveConversation(conversation)
     activeConversationRef.current = conversation
     setMessages([])
+  }
+
+  // ✅ Sohbet silme (soft delete)
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      await api.delete(`/chat/conversations/${conversationId}`)
+      
+      // State'ten kaldır
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId))
+      
+      // Eğer silinen sohbet aktif sohbetse, aktif sohbeti temizle
+      if (activeConversation?.id === conversationId) {
+        setActiveConversation(null)
+        activeConversationRef.current = null
+        setMessages([])
+      }
+    } catch (error: any) {
+      console.error('Failed to delete conversation:', error)
+      alert(error?.response?.data?.message || 'Sohbet silinirken bir hata oluştu')
+    }
   }
 
   const handleNewMessageSelect = async (conversationId: string) => {
@@ -661,7 +773,16 @@ export default function MessagesPage() {
 
   // Mesaj gönderme - görsel, dosya ve/veya metin
   const sendMessage = async () => {
+    // ✅ ÇİFT GÖNDERME KORUMASI: Eğer mesaj gönderiliyorsa tekrar gönderme
+    if (isSendingRef.current) {
+      console.log('⚠️ Mesaj zaten gönderiliyor, çift gönderme engellendi')
+      return
+    }
+
     if ((!messageText.trim() && !selectedImage && !selectedFile) || !activeConversation || !chatSocketRef.current?.connected) return
+
+    // Kilit açıldı
+    isSendingRef.current = true
 
     let imageUrl: string | null = null
     let fileUrl: string | null = null
@@ -742,19 +863,24 @@ export default function MessagesPage() {
     })
 
     // Socket ile mesaj gönder - receive_message ile ekleme yapılacak
-    chatSocketRef.current.emit('send_message', {
-      conversationId: activeConversation.id,
-      content: content || undefined,
-      imageUrl: imageUrl || undefined,
-      fileUrl: fileUrl || undefined,
-      fileName: fileName || undefined,
-      fileType: fileType || undefined,
-    }, (response: any) => {
-      if (response?.error) {
-        console.error('Failed to send message:', response.error)
-        alert('Mesaj gönderilirken bir hata oluştu')
-      }
-    })
+    try {
+      chatSocketRef.current.emit('send_message', {
+        conversationId: activeConversation.id,
+        content: content || undefined,
+        imageUrl: imageUrl || undefined,
+        fileUrl: fileUrl || undefined,
+        fileName: fileName || undefined,
+        fileType: fileType || undefined,
+      }, (response: any) => {
+        if (response?.error) {
+          console.error('Failed to send message:', response.error)
+          alert('Mesaj gönderilirken bir hata oluştu')
+        }
+      })
+    } finally {
+      // ✅ Kilit kaldırıldı (başarılı veya hatalı olsun)
+      isSendingRef.current = false
+    }
   }
 
 
@@ -887,7 +1013,7 @@ export default function MessagesPage() {
                 <div
                   key={conversation.id}
                   onClick={() => openConversation(conversation)}
-                  className={`p-4 cursor-pointer border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  className={`group p-4 cursor-pointer border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
                     isActive ? 'bg-brand-orange/10 dark:bg-brand-orange/20' : ''
                   }`}
                 >
@@ -916,7 +1042,14 @@ export default function MessagesPage() {
                             {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                             <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                           </h3>
-                          {jobApplications[otherUser?.user?.id || ''] && (
+                          {/* ✅ İlan bağlamı göster (query parametresinden gelen - sadece aktif sohbet için) */}
+                          {jobContext && conversation.id === activeConversation?.id && (
+                            <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5">
+                              İlan üzerinden • {jobContext.title}
+                            </p>
+                          )}
+                          {/* Eski jobApplications (kabul edilmiş başvurular için) */}
+                          {(!jobContext || conversation.id !== activeConversation?.id) && jobApplications[otherUser?.user?.id || ''] && (
                             <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5">
                               İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
                             </p>
@@ -963,6 +1096,17 @@ export default function MessagesPage() {
                         ) : null}
                       </div>
                     </div>
+                    {/* ✅ Sohbet Silme Menüsü */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation() // Konuşma açılmasını engelle
+                        setDeleteConversationId(conversation.id)
+                      }}
+                      className="ml-2 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Sohbeti Sil"
+                    >
+                      <MoreVertical size={16} className="text-gray-500 dark:text-gray-400" />
+                    </button>
                   </div>
                 </div>
               )
@@ -1003,8 +1147,15 @@ export default function MessagesPage() {
                         {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                         <ProRoleBadge roles={(otherUser?.user as any)?.roles} plan={(otherUser?.user as any)?.plan} />
                       </h2>
-                      {jobApplications[otherUser?.user?.id || ''] && (
-                        <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5">
+                      {/* ✅ İlan bağlamı göster (sohbet header'ında) */}
+                      {jobContext && (
+                        <div className="mt-1 rounded-lg bg-brand-orange/10 dark:bg-brand-orange/20 px-3 py-1 text-xs text-brand-orange dark:text-orange-400">
+                          İlan: {jobContext.title}
+                        </div>
+                      )}
+                      {/* Eski jobApplications (kabul edilmiş başvurular için) */}
+                      {!jobContext && jobApplications[otherUser?.user?.id || ''] && (
+                        <p className="text-xs text-brand-orange dark:text-orange-400 mt-1">
                           İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
                         </p>
                       )}
@@ -1256,9 +1407,15 @@ export default function MessagesPage() {
                   value={messageText}
                   onChange={handleChange}
                   onKeyDown={(e) => {
+                    // ✅ Enter tuşu form submit'i tetikleyecek, ayrıca sendMessage çağırmaya gerek yok
+                    // Form submit zaten sendMessage'ı çağırıyor, çift göndermeyi önlemek için burada çağırmıyoruz
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      sendMessage()
+                      // Form submit'i manuel tetikle (sendMessage onSubmit'te zaten çağrılacak)
+                      const form = e.currentTarget.closest('form')
+                      if (form) {
+                        form.requestSubmit()
+                      }
                     }
                   }}
                   placeholder="Mesaj yaz..."
@@ -1335,7 +1492,14 @@ export default function MessagesPage() {
                         <h2 className="font-semibold text-gray-900 dark:text-white truncate">
                           {otherUser?.user?.fullName || otherUser?.user?.username || 'Kullanıcı'}
                         </h2>
-                        {jobApplications[otherUser?.user?.id || ''] && (
+                        {/* ✅ İlan bağlamı göster (mobil header'da) */}
+                        {jobContext && (
+                          <div className="mt-1 rounded-lg bg-brand-orange/10 dark:bg-brand-orange/20 px-2 py-0.5 text-xs text-brand-orange dark:text-orange-400 truncate">
+                            İlan: {jobContext.title}
+                          </div>
+                        )}
+                        {/* Eski jobApplications (kabul edilmiş başvurular için) */}
+                        {!jobContext && jobApplications[otherUser?.user?.id || ''] && (
                           <p className="text-xs text-brand-orange dark:text-orange-400 mt-0.5 truncate">
                             İlan üzerinden • {jobApplications[otherUser.user.id].listingTitle}
                           </p>
@@ -1727,6 +1891,48 @@ export default function MessagesPage() {
           onClose={() => setShowNewMessageModal(false)}
           onSelect={handleNewMessageSelect}
         />
+      )}
+
+      {/* ✅ Sohbet Silme Onay Modalı */}
+      {deleteConversationId && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/70"
+          onClick={() => setDeleteConversationId(null)}
+        >
+          <div 
+            className="w-[400px] rounded-xl bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Sohbeti silmek istiyor musunuz?
+            </h3>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Bu işlem geri alınamaz. Sohbet yalnızca sizin için silinecektir.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConversationId(null)}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                İptal
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (deleteConversationId) {
+                    await handleDeleteConversation(deleteConversationId)
+                    setDeleteConversationId(null)
+                  }
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              >
+                Sohbeti Sil
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

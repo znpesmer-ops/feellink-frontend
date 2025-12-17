@@ -6,11 +6,38 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
+const cn = (...classes: (string | undefined | false)[]) => {
+  return classes.filter(Boolean).join(' ')
+}
+
+// Güvenli eser başlığı helper - tüm olası field'ları kontrol eder
+const getArtworkTitle = (artwork: any): string => {
+  // Önce title field'ını kontrol et (backend'den gelen)
+  let title = artwork?.title
+  
+  // Eğer title yoksa veya boş string ise, diğer field'ları dene
+  if (!title || title.trim().length === 0) {
+    title = (
+      artwork?.name ||
+      artwork?.artworkTitle ||
+      artwork?.metadata?.title ||
+      artwork?.caption ||
+      ''
+    )
+  }
+  
+  // Trim ve boş string kontrolü
+  const trimmedTitle = (title || '').toString().trim()
+  
+  return trimmedTitle.length > 0 ? trimmedTitle : 'İsimsiz Eser'
+}
+
 interface Artwork {
   id: string
-  title: string
+  title: string | null // Backend'den null gelebilir
   caption?: string | null
   coverUrl: string | null
+  isAlreadyInCollection?: boolean
   owner: {
     id: string
     username: string | null
@@ -291,55 +318,107 @@ export function AddItemModal({ collectionId, open, onClose, onSuccess }: AddItem
               {results.artworks.length > 0 && (
                 <div>
                   {!selectedOwnerId && <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Eserler</h3>}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {results.artworks.map((artwork) => (
-                      <div
-                        key={artwork.id}
-                        className="group relative rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-[#ff7b00] transition cursor-pointer"
-                        onClick={() => handleAddItem(artwork.id)}
-                      >
-                        {/* Media */}
-                        <div className="relative w-full h-32 bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                          {artwork.coverUrl ? (
-                            <img
-                              src={resolveImageUrl(artwork.coverUrl)}
-                              alt={artwork.title}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-8 h-8 text-gray-400" />
-                            </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+                    {results.artworks.map((artwork) => {
+                      const isAlreadyAdded = artwork.isAlreadyInCollection || false
+                      return (
+                        <div
+                          key={artwork.id}
+                          className={cn(
+                            "group relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900 border-2 transition-all",
+                            isAlreadyAdded
+                              ? "border-gray-300/40 dark:border-gray-600/40 cursor-not-allowed"
+                              : "border-gray-200 dark:border-gray-700 hover:border-[#ff7b00] hover:scale-[1.02] cursor-pointer"
                           )}
-
-                          {/* Loading Overlay */}
-                          {addingPostId === artwork.id && (
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                              <Loader2 className="w-6 h-6 animate-spin text-white" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Info */}
-                        <div className="p-2">
-                          <p className="text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-1 mb-1">
-                            {artwork.title}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                            {artwork.owner.avatar ? (
-                              <img
-                                src={resolveImageUrl(artwork.owner.avatar)}
-                                alt={artwork.owner.username || 'Kullanıcı'}
-                                className="w-3 h-3 rounded-full object-cover"
-                              />
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (isAlreadyAdded) {
+                              toast.error('Bu eser zaten koleksiyonda')
+                              return
+                            }
+                            handleAddItem(artwork.id)
+                          }}
+                        >
+                          {/* Media */}
+                          <div className="relative w-full h-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                            {artwork.coverUrl ? (
+                              <>
+                                <img
+                                  src={resolveImageUrl(artwork.coverUrl)}
+                                  alt={getArtworkTitle(artwork)}
+                                  className={cn(
+                                    "w-full h-full object-cover transition-all",
+                                    isAlreadyAdded ? "opacity-30" : ""
+                                  )}
+                                  style={isAlreadyAdded ? { 
+                                    filter: 'blur(8px) grayscale(90%)',
+                                    WebkitFilter: 'blur(8px) grayscale(90%)'
+                                  } : {}}
+                                />
+                                {/* Koyu overlay - Zaten ekli eserler için */}
+                                {isAlreadyAdded && (
+                                  <div className="absolute inset-0 bg-black/50 z-10" />
+                                )}
+                              </>
                             ) : (
-                              <UserCircle2 className="w-3 h-3" />
+                              <div className={cn(
+                                "w-full h-full flex items-center justify-center",
+                                isAlreadyAdded ? "opacity-30" : ""
+                              )}>
+                                <ImageIcon className="w-8 h-8 text-gray-400" />
+                                {isAlreadyAdded && (
+                                  <div className="absolute inset-0 bg-black/50 z-10" />
+                                )}
+                              </div>
                             )}
-                            <span className="truncate">@{artwork.owner.username || 'bilinmeyen'}</span>
+
+                            {/* Loading Overlay */}
+                            {addingPostId === artwork.id && (
+                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                                <Loader2 className="w-6 h-6 animate-spin text-white" />
+                              </div>
+                            )}
+
+                            {/* Instagram tarzı: ZATEN KOLEKSİYONDA → SABİT YEŞİL TİK (sağ üst) */}
+                            {isAlreadyAdded && (
+                              <>
+                                <div className="absolute top-2 right-2 z-40 pointer-events-none">
+                                  <div className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#22c55e] shadow-xl border-2 border-white">
+                                    <span className="text-black text-[16px] font-bold">✓</span>
+                                  </div>
+                                </div>
+                                {/* "Zaten Ekli" Badge - Ortada */}
+                                <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+                                  <div className="bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/20">
+                                    <span className="text-white text-xs font-semibold">Zaten Ekli</span>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+
+                            {/* Info Overlay - Blur'dan etkilenmemesi için yüksek z-index */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-2 z-20">
+                              <p className="text-xs font-medium text-white line-clamp-1 mb-1">
+                                {getArtworkTitle(artwork)}
+                              </p>
+                              <div className="flex items-center gap-1 text-xs text-gray-300">
+                                {artwork.owner.avatar ? (
+                                  <img
+                                    src={resolveImageUrl(artwork.owner.avatar)}
+                                    alt={artwork.owner.username || 'Kullanıcı'}
+                                    className="w-3 h-3 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <UserCircle2 className="w-3 h-3" />
+                                )}
+                                <span className="truncate">@{artwork.owner.username || 'bilinmeyen'}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

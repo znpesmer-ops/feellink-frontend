@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
@@ -44,60 +44,75 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
   const isOwnArticles = targetUserId === user?.id
 
   useEffect(() => {
+    // ✅ Önce state'leri sıfırla
+    setPublishedArticles([])
+    setScheduledArticles([])
+    setLoading(true)
+
     if (!targetUserId) {
       setLoading(false)
       return
     }
 
+    let isCancelled = false
+
     const loadArticles = async () => {
       try {
         // Yayınlanan yazıları çek
         const publishedResponse = await api.get(`/articles/user/${targetUserId}`)
-        const allArticles = publishedResponse.data || []
+        
+        // ✅ Cleanup kontrolü: Eğer component unmount olduysa veya targetUserId değiştiyse state güncelleme
+        if (isCancelled) return
+        
+        const allArticles: Article[] = publishedResponse.data || []
+        
+        // ✅ Duplicate kontrolü: Aynı ID'ye sahip article'ları filtrele
+        const uniqueArticles = Array.from(
+          new Map(allArticles.map((a: Article) => [a.id, a])).values()
+        ) as Article[]
         
         // Yayınlanan ve zamanlanmış yazıları ayır
-        const published = allArticles.filter((a: Article) => a.isPublished)
-        const scheduled = allArticles.filter((a: Article) => !a.isPublished && a.scheduledAt)
+        const published = uniqueArticles.filter((a: Article) => a.isPublished)
+        const scheduled = uniqueArticles.filter((a: Article) => !a.isPublished && a.scheduledAt)
         
-        setPublishedArticles(published)
-        setScheduledArticles(scheduled)
+        // ✅ Replace yap, append değil (çift render'ı önle)
+        if (!isCancelled) {
+          setPublishedArticles(published)
+          setScheduledArticles(scheduled)
+        }
       } catch (error) {
+        if (isCancelled) return
         console.error('Failed to load articles:', error)
-        setPublishedArticles([])
-        setScheduledArticles([])
+        if (!isCancelled) {
+          setPublishedArticles([])
+          setScheduledArticles([])
+        }
       } finally {
-        setLoading(false)
+        if (!isCancelled) {
+          setLoading(false)
+        }
       }
     }
 
     loadArticles()
 
-    // Eğer kendi yazıları ise zamanlanmış yazıları da çek
-    if (isOwnArticles && accessToken) {
-      const loadScheduled = async () => {
-        try {
-          const scheduledResponse = await api.get('/articles/scheduled')
-          setScheduledArticles(scheduledResponse.data || [])
-        } catch (error) {
-          console.error('Failed to load scheduled articles:', error)
-        }
-      }
-      loadScheduled()
-    }
-
     // Socket.IO ile gerçek zamanlı güncelleme
+    let articlesSocket: any = null
     if (accessToken) {
-      const articlesSocket = initArticlesSocket(accessToken)
+      articlesSocket = initArticlesSocket(accessToken as string)
 
       const handleArticleCreated = (article: any) => {
+        if (isCancelled) return
         if (article.authorId === targetUserId || article.author?.id === targetUserId) {
           if (article.isPublished) {
             setPublishedArticles((prev) => {
+              // ✅ Duplicate kontrolü
               if (prev.some((a) => a.id === article.id)) return prev
               return [article, ...prev]
             })
           } else if (article.scheduledAt) {
             setScheduledArticles((prev) => {
+              // ✅ Duplicate kontrolü
               if (prev.some((a) => a.id === article.id)) return prev
               return [article, ...prev]
             })
@@ -106,6 +121,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
       }
 
       const handleArticleUpdated = (updatedArticle: any) => {
+        if (isCancelled) return
         setPublishedArticles((prev) =>
           prev.map((a) => 
             a.id === updatedArticle.id 
@@ -123,6 +139,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
       }
 
       const handleArticleDeleted = ({ id }: { id: string }) => {
+        if (isCancelled) return
         setPublishedArticles((prev) => prev.filter((a) => a.id !== id))
         setScheduledArticles((prev) => prev.filter((a) => a.id !== id))
       }
@@ -130,14 +147,31 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
       articlesSocket.on('articleCreated', handleArticleCreated)
       articlesSocket.on('articleUpdated', handleArticleUpdated)
       articlesSocket.on('articleDeleted', handleArticleDeleted)
-
-      return () => {
-        articlesSocket.off('articleCreated', handleArticleCreated)
-        articlesSocket.off('articleUpdated', handleArticleUpdated)
-        articlesSocket.off('articleDeleted', handleArticleDeleted)
+    }
+    
+    // ✅ Cleanup: targetUserId değiştiğinde veya component unmount olduğunda
+    return () => {
+      isCancelled = true
+      if (articlesSocket) {
+        articlesSocket.off('articleCreated')
+        articlesSocket.off('articleUpdated')
+        articlesSocket.off('articleDeleted')
       }
     }
   }, [targetUserId, accessToken, user?.id, isOwnArticles])
+
+  // ✅ useMemo ile unique articles hesapla (duplicate kontrolü garantili)
+  const uniquePublishedArticles = useMemo(() => {
+    return Array.from(
+      new Map(publishedArticles.map((a) => [a.id, a])).values()
+    ) as Article[]
+  }, [publishedArticles])
+
+  const uniqueScheduledArticles = useMemo(() => {
+    return Array.from(
+      new Map(scheduledArticles.map((a) => [a.id, a])).values()
+    ) as Article[]
+  }, [scheduledArticles])
 
   const handleCancelSchedule = async (articleId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -338,7 +372,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
       {/* ✅ Yayınlanan Yazılar */}
       {activeTab === 'published' && (
         <>
-          {publishedArticles.length === 0 ? (
+          {uniquePublishedArticles.length === 0 ? (
             <div className="text-center py-12">
               <FileText size={48} className="mx-auto mb-4 text-gray-400 dark:text-gray-600" />
               <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-2">
@@ -355,7 +389,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {publishedArticles.map((article) => renderArticleCard(article, false))}
+              {uniquePublishedArticles.map((article) => renderArticleCard(article, false))}
             </div>
           )}
         </>
@@ -364,7 +398,7 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
       {/* ✅ Zamanlanmış Yazılar */}
       {activeTab === 'scheduled' && (
         <>
-          {scheduledArticles.length === 0 ? (
+          {uniqueScheduledArticles.length === 0 ? (
             <div className="text-center py-12">
               <Calendar size={48} className="mx-auto mb-4 text-gray-400 dark:text-gray-600" />
               <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-2">
@@ -376,29 +410,13 @@ export default function UserArticles({ authorId }: UserArticlesProps) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {scheduledArticles.map((article) => renderArticleCard(article, true))}
+              {uniqueScheduledArticles.map((article) => renderArticleCard(article, true))}
             </div>
           )}
         </>
       )}
 
-      {/* ✅ Başkasının profili için sadece yayınlanan yazıları göster */}
-      {!showTabs && (
-        <>
-          {publishedArticles.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText size={48} className="mx-auto mb-4 text-gray-400 dark:text-gray-600" />
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-2">
-                Henüz yazı yayımlanmamış.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {publishedArticles.map((article) => renderArticleCard(article, false))}
-            </div>
-          )}
-        </>
-      )}
+      {/* ✅ Başkasının profili için sadece yayınlanan yazıları göster - activeTab === 'published' koşulunda zaten render ediliyor, bu blok kaldırıldı */}
     </div>
   )
 }

@@ -12,6 +12,66 @@ import { AuthGuard } from '@/lib/auth-guard'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 
+// ✅ Pinned Comment Component (Statik)
+function PinnedComment({ text }: { text: string }) {
+  return (
+    <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1 pinned-comment">
+      {text}
+    </p>
+  )
+}
+
+// ✅ Rotating Comments Component (Slayt)
+function RotatingComments({ comments }: { comments: Array<{ id: string; content: string }> }) {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (!comments.length || comments.length === 1) return
+
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % comments.length)
+    }, 3500) // 3.5 saniye
+
+    return () => clearInterval(interval)
+  }, [comments.length])
+
+  if (!comments.length) return null
+  if (comments.length === 1) {
+    return (
+      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">
+        {comments[0].content}
+      </p>
+    )
+  }
+
+  return (
+    <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1 rotating-comment">
+      {comments[index]?.content}
+    </p>
+  )
+}
+
+// ✅ Comment Preview Component (Ana mantık)
+function CommentPreview({ 
+  pinnedComment, 
+  recentComments 
+}: { 
+  pinnedComment: { user: string; text: string } | null
+  recentComments: Array<{ id: string; content: string; isPinned: boolean; createdAt: string }>
+}) {
+  // Pinned comment varsa sadece onu göster
+  if (pinnedComment) {
+    return <PinnedComment text={pinnedComment.text} />
+  }
+
+  // Pinned yoksa rotating comments göster
+  if (recentComments.length > 0) {
+    return <RotatingComments comments={recentComments} />
+  }
+
+  return null
+}
+
 function ExploreContent() {
   const router = useRouter()
   const { accessToken } = useAuthStore()
@@ -60,6 +120,18 @@ function ExploreContent() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const posts = data?.pages.flatMap((page) => page.posts) || []
+  
+  // Debug: Backend'den gelen veriyi kontrol et
+  useEffect(() => {
+    if (posts.length > 0) {
+      console.log('Explore Posts Sample:', {
+        postId: posts[0].id,
+        pinnedComment: posts[0].pinnedComment,
+        recentComments: posts[0].recentComments,
+        commentsCount: posts[0]._count?.comments
+      })
+    }
+  }, [posts])
 
   if (!accessToken) {
     return null
@@ -222,6 +294,18 @@ function ExploreContent() {
                     {post.caption}
                   </p>
                 )}
+                
+                {/* ✅ Yorum Önizleme - Pinned veya Rotating */}
+                {post._count.comments > 0 && (
+                  <div className="flex items-center gap-2 mt-2 mb-2">
+                    <MessageCircle className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                    <CommentPreview 
+                      pinnedComment={post.pinnedComment}
+                      recentComments={post.recentComments || []}
+                    />
+                  </div>
+                )}
+                
                 <button className="text-brand-orange text-xs font-medium hover:text-brand-blue transition">
                   Gönderiyi Gör
                 </button>

@@ -14,6 +14,15 @@ interface AddArtworkToHighlightModalProps {
   highlight: {
     id: string
     title: string
+    items?: Array<{
+      id: string
+      post: {
+        id: string
+        imageUrl: string | null
+        caption: string | null
+        title: string | null
+      }
+    }>
   }
   username: string
   userId?: string
@@ -64,19 +73,33 @@ export function AddArtworkToHighlightModal({
     enabled: !!username,
   })
 
-  // Modal açıldığında initial state'i set et
+  // Modal açıldığında initial state'i set et - ÖNCE highlight prop, SONRA currentHighlight query
   useEffect(() => {
-    if (currentHighlight?.items) {
-      const existingPostIds = currentHighlight.items.map((item: any) => item.post?.id).filter(Boolean)
+    let existingPostIds: string[] = []
+    
+    // ÖNCE highlight prop'undan direkt al (modal açıldığında hemen kullanılabilir)
+    if (highlight?.items && highlight.items.length > 0) {
+      existingPostIds = highlight.items.map((item: any) => item.post?.id).filter(Boolean)
+      console.log('🔍 AddArtworkToHighlightModal - highlight prop items:', existingPostIds)
+    } 
+    // SONRA query'den gelen veriyi kullan (daha güncel olabilir)
+    else if (currentHighlight?.items && currentHighlight.items.length > 0) {
+      existingPostIds = currentHighlight.items.map((item: any) => item.post?.id).filter(Boolean)
+      console.log('🔍 AddArtworkToHighlightModal - currentHighlight items:', existingPostIds)
+    }
+    
+    if (existingPostIds.length > 0) {
       setInitialWorkIds(existingPostIds)
       setSelectedWorkIds(existingPostIds) // Başlangıçta mevcut eserler seçili
+    } else {
+      console.log('⚠️ AddArtworkToHighlightModal - Hiç eser bulunamadı, highlight:', highlight, 'currentHighlight:', currentHighlight)
     }
-  }, [currentHighlight])
+  }, [highlight, currentHighlight])
 
   // TÜM eserleri göster (ekli olmayanlar + ekli olanlar)
   const allArtworks = posts ?? []
 
-  // Toggle logic: Ekle/Çıkar
+  // Toggle logic: Ekle/Çıkar - Artık zaten ekli olanlar da çıkarılabilir
   const toggleWork = (workId: string) => {
     setSelectedWorkIds((prev) =>
       prev.includes(workId) ? prev.filter((id) => id !== workId) : [...prev, workId]
@@ -129,8 +152,11 @@ export function AddArtworkToHighlightModal({
         worksToRemove.length > 0 ? removeMutation.mutateAsync(worksToRemove) : Promise.resolve(),
       ])
 
-      // Refetch highlights
-      await queryClient.refetchQueries({ queryKey: ['highlights', username] })
+      // 🔥 KRİTİK: Query'yi refetch et ama await etme (background'da çalışır)
+      // invalidateQueries yerine refetchQueries kullan - daha güvenli, placeholderData ile UI kaybolmaz
+      queryClient.refetchQueries({ queryKey: ['highlights', username] }).catch(() => {
+        // Refetch hatası olsa bile UI kaybolmasın
+      })
       
       const addCount = worksToAdd.length
       const removeCount = worksToRemove.length
@@ -144,6 +170,7 @@ export function AddArtworkToHighlightModal({
       }
       toast.success(message || 'Güncelleme başarılı')
       onClose()
+      // 🔥 KRİTİK: Modal kapanınca hiçbir state reset yapma - highlights query'si kendi güncellenecek
     } catch (error) {
       // Error handling zaten mutation'larda var
     }
@@ -194,80 +221,146 @@ export function AddArtworkToHighlightModal({
             Henüz eser paylaşmadınız.
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar mb-4">
-            {allArtworks.map((artwork: any) => {
-              const isSelected = selectedWorkIds.includes(artwork.id)
-              const wasInitiallyAdded = initialWorkIds.includes(artwork.id)
-              const imageUrl = artwork.media?.[0]?.url || artwork.imageUrl
-              const artworkTitle = artwork.caption || artwork.title || 'İsimsiz Eser'
+          <div className="max-h-[400px] overflow-y-auto pr-1 custom-scrollbar mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+              {allArtworks.map((artwork: any, index: number) => {
+                const isSelected = selectedWorkIds.includes(artwork.id)
+                const wasInitiallyAdded = initialWorkIds.includes(artwork.id)
+                const imageUrl = artwork.media?.[0]?.url || artwork.imageUrl
+                
+                // Güvenli başlık çıkarma - tüm olası field'ları kontrol et
+                let artworkTitle = ''
+                if (artwork?.title && typeof artwork.title === 'string' && artwork.title.trim().length > 0) {
+                  artworkTitle = artwork.title.trim()
+                } else if (artwork?.caption && typeof artwork.caption === 'string' && artwork.caption.trim().length > 0) {
+                  artworkTitle = artwork.caption.trim()
+                } else if (artwork?.name && typeof artwork.name === 'string' && artwork.name.trim().length > 0) {
+                  artworkTitle = artwork.name.trim()
+                } else if (artwork?.artworkTitle && typeof artwork.artworkTitle === 'string' && artwork.artworkTitle.trim().length > 0) {
+                  artworkTitle = artwork.artworkTitle.trim()
+                }
+                
+                // Fallback sadece gerçekten boşsa
+                if (!artworkTitle || artworkTitle.length === 0) {
+                  artworkTitle = 'İsimsiz Eser'
+                }
+                
+                // Artık zaten ekli olanlar da tıklanabilir (çıkarılabilir)
+                const isDisabled = false
 
-              return (
-                <button
-                  key={artwork.id}
-                  type="button"
-                  onClick={() => toggleWork(artwork.id)}
-                  className={cn(
-                    'relative aspect-square rounded-xl overflow-hidden border transition-all group cursor-pointer',
-                    isSelected
-                      ? 'border-brand-orange ring-2 ring-brand-orange/50'
-                      : wasInitiallyAdded
-                      ? 'border-brand-orange/70 ring-2 ring-brand-orange/30' // Temada ekli olanlar için turuncu border
-                      : 'border-neutral-800 dark:border-neutral-700 hover:border-neutral-600 dark:hover:border-neutral-600'
-                  )}
-                >
+                // Index bazlı ritmik renk ataması (turuncu → mavi → beyaz) - Normal çerçeve
+                const colorClass = index % 3 === 0 
+                  ? 'artwork-card--orange' 
+                  : index % 3 === 1 
+                  ? 'artwork-card--blue' 
+                  : 'artwork-card--white'
+
+                // Index bazlı hover çerçeve rengi (döngüsel)
+                const hoverColorClass = index % 3 === 0 
+                  ? 'hover-outline-orange' 
+                  : index % 3 === 1 
+                  ? 'hover-outline-blue' 
+                  : 'hover-outline-white'
+
+                return (
+                  <button
+                    key={artwork.id}
+                    type="button"
+                    onClick={() => {
+                      toggleWork(artwork.id)
+                    }}
+                    className={cn(
+                      'artwork-card relative aspect-[3/4] rounded-xl overflow-hidden border transition-all group',
+                      // Dark mode uyumlu arka plan
+                      'bg-[#0f172a] dark:bg-[#0f172a]',
+                      // Index bazlı ritmik renk ataması (normal çerçeve)
+                      colorClass,
+                      // Index bazlı hover çerçeve rengi (döngüsel)
+                      hoverColorClass,
+                      // Cursor ve scale - Artık zaten ekli olanlar da tıklanabilir
+                      wasInitiallyAdded && isSelected
+                        ? 'cursor-pointer hover:scale-[1.02] hover:bg-[#111827]' // Zaten ekli ama seçili (çıkarılabilir)
+                        : 'cursor-pointer hover:scale-[1.02] hover:bg-[#111827]', // Normal hover efekti
+                      // Border renkleri - Dark mode uyumlu
+                      isSelected
+                        ? 'border-brand-orange ring-2 ring-brand-orange/50'
+                        : 'border-white/6 dark:border-white/6 hover:border-white/10 dark:hover:border-white/10'
+                    )}
+                  >
                   {imageUrl ? (
-                    <img
-                      src={resolveImageUrl(imageUrl)}
-                      alt={artworkTitle}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                      }}
-                    />
+                    <>
+                      <img
+                        src={resolveImageUrl(imageUrl)}
+                        alt={artworkTitle}
+                        className={cn(
+                          'w-full h-full object-cover transition-all',
+                          wasInitiallyAdded && isSelected ? 'opacity-75' : ''
+                        )}
+                        style={wasInitiallyAdded && isSelected ? {
+                          filter: 'blur(2px) grayscale(40%)',
+                          WebkitFilter: 'blur(2px) grayscale(40%)'
+                        } : {}}
+                        onError={(e) => {
+                          ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                        }}
+                      />
+                      {/* Çok hafif overlay - Sadece zaten temada olan VE hala seçili olan eserler için */}
+                      {wasInitiallyAdded && isSelected && (
+                        <div className="absolute inset-0 bg-black/20 z-10" />
+                      )}
+                    </>
                   ) : (
-                    <div className="w-full h-full bg-neutral-800 dark:bg-gray-700 flex items-center justify-center">
-                      <span className="text-neutral-500 text-xs">Eser</span>
+                    <div className={cn(
+                      'w-full h-full bg-[#1e293b] dark:bg-[#1e293b] flex items-center justify-center',
+                      wasInitiallyAdded && isSelected ? 'opacity-75' : ''
+                    )}>
+                      <span className="text-white/60 dark:text-white/60 text-xs">Eser</span>
+                      {wasInitiallyAdded && isSelected && (
+                        <div className="absolute inset-0 bg-black/20 z-10" />
+                      )}
                     </div>
                   )}
 
-                  {/* Temada ekli olanlar için koyu overlay */}
-                  {wasInitiallyAdded && (
-                    <div className="absolute inset-0 bg-black/40 z-10 pointer-events-none" />
+                  {/* Instagram tarzı: ZATEN TEMADA → SABİT YEŞİL TİK (sağ üst) - Sadece hala seçiliyse */}
+                  {wasInitiallyAdded && isSelected && (
+                    <>
+                      <div className="absolute top-2 right-2 z-40 pointer-events-none">
+                        <div className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#22c55e] shadow-xl border-2 border-white">
+                          <span className="text-black text-[16px] font-bold">✓</span>
+                        </div>
+                      </div>
+                      {/* "Ekli" Badge - Ortada - En yüksek z-index - Arka plan yok */}
+                      <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+                        <span className="text-white text-sm font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">Ekli</span>
+                      </div>
+                    </>
                   )}
 
-                  {/* "Ekli" rozeti - sadece temada ekli olanlarda */}
-                  {wasInitiallyAdded && (
+                  {/* Instagram tarzı: SEÇİLDİ → TURUNCU TİK (sağ üst) - Sadece yeni eklenenler için */}
+                  {!wasInitiallyAdded && isSelected && (
                     <div className="absolute top-2 right-2 z-20 pointer-events-none">
-                      <span className="text-[10px] bg-brand-orange text-black px-2 py-0.5 rounded-full font-semibold shadow-lg">
-                        ✓ Ekli
-                      </span>
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-orange shadow-lg">
+                        <span className="text-white text-xs font-bold">✓</span>
+                      </div>
                     </div>
                   )}
 
-                  {/* Hover Overlay - SADECE eser adı (kullanıcı adı YOK) */}
+                  {/* Hover Overlay - Tüm eserlerde - Blur'dan etkilenmemesi için yüksek z-index */}
                   <div
                     className={cn(
                       'absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl flex items-end pointer-events-none z-20'
                     )}
                   >
                     <div className="p-2 w-full">
-                      <p className="text-white text-sm font-medium line-clamp-1 leading-tight">
+                      <p className="text-white/90 dark:text-white/90 text-xs font-medium line-clamp-1 leading-tight">
                         {artworkTitle}
                       </p>
                     </div>
                   </div>
-
-                  {/* Seçili eser overlay */}
-                  {isSelected && (
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none z-30">
-                      <div className="w-6 h-6 rounded-full bg-brand-orange flex items-center justify-center shadow-lg">
-                        <span className="text-white text-xs font-bold">✓</span>
-                      </div>
-                    </div>
-                  )}
                 </button>
               )
             })}
+            </div>
           </div>
         )}
 

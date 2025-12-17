@@ -1,0 +1,148 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { X, Loader2 } from 'lucide-react'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
+import { useQueryClient } from '@tanstack/react-query'
+
+interface EditArtworkModalProps {
+  artwork: {
+    id: string
+    title?: string | null
+    caption?: string | null
+  }
+  open: boolean
+  onClose: () => void
+  onSuccess?: () => void
+}
+
+export function EditArtworkModal({ artwork, open, onClose, onSuccess }: EditArtworkModalProps) {
+  const [title, setTitle] = useState(artwork.title || '')
+  const [caption, setCaption] = useState(artwork.caption || '')
+  const [saving, setSaving] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Reset form when artwork changes
+  useEffect(() => {
+    if (open && artwork) {
+      setTitle(artwork.title || '')
+      setCaption(artwork.caption || '')
+    }
+  }, [open, artwork])
+
+  const handleSave = async () => {
+    if (!artwork.id) return
+
+    try {
+      setSaving(true)
+      await api.patch(`/posts/${artwork.id}`, {
+        title: title.trim() || null,
+        caption: caption.trim() || null,
+      })
+
+      toast.success('Eser başarıyla güncellendi')
+      
+      // Sadece ilgili query'leri invalidate et (profil query'sine dokunma - redirect'i engelle)
+      queryClient.invalidateQueries({ queryKey: ['user-artworks'] })
+      queryClient.invalidateQueries({ queryKey: ['user-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+      // Profil query'sini invalidate etme - kullanıcı profil sayfasında kalmalı
+
+      onSuccess?.()
+      onClose()
+    } catch (error: any) {
+      console.error('Update error:', error)
+      toast.error(error.response?.data?.message || 'Eser güncellenirken bir hata oluştu')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Eseri Düzenle
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+            disabled={saving}
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="space-y-4">
+          {/* Eser Adı */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Eser Adı
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Eser adı"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/30 focus:border-[#ff7b00] dark:bg-gray-800 dark:text-gray-100"
+              disabled={saving}
+            />
+          </div>
+
+          {/* Açıklama */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Açıklama
+            </label>
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Açıklama"
+              rows={4}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/30 focus:border-[#ff7b00] dark:bg-gray-800 dark:text-gray-100 resize-none"
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            İptal
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 px-4 py-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Kaydediliyor...</span>
+              </>
+            ) : (
+              'Kaydet'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

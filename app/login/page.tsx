@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -30,6 +30,7 @@ type RegisterForm = z.infer<typeof registerSchema>
 
 export default function LoginPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const { setAuth, accessToken, refreshToken, user, capabilities } = useAuthStore()
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
@@ -42,6 +43,21 @@ export default function LoginPage() {
     needsRoleSelection?: boolean,
   ) => {
     if (!currentUser) {
+      setIsChecking(false)
+      return
+    }
+
+    // 🔥 KRİTİK: Profil sayfasındayken hiçbir redirect yapma
+    if (pathname.startsWith('/profile')) {
+      setIsChecking(false)
+      return
+    }
+
+    // SADECE root (/) veya /login sayfalarında redirect yap
+    // Diğer sayfalarda (ör. /profile/me) refresh yapıldığında bu çalışmamalı
+    const isRootOrLogin = pathname === '/' || pathname === '/login'
+    
+    if (!isRootOrLogin) {
       setIsChecking(false)
       return
     }
@@ -98,7 +114,14 @@ export default function LoginPage() {
   }, [darkMode])
 
   // Eğer zaten giriş yapılmışsa role göre yönlendir
+  // SADECE login sayfasında olduğumuz için bu redirect çalışmalı
   useEffect(() => {
+    // 🔥 KRİTİK: Profil sayfasındayken hiçbir redirect yapma
+    if (pathname.startsWith('/profile')) {
+      setIsChecking(false)
+      return
+    }
+    
     // Login sayfasında olduğumuz için, eğer token yoksa auth state'i temizle
     if (!accessToken) {
       // Token yoksa state'i temizle (eski kullanıcı bilgileri kalmasın)
@@ -110,12 +133,14 @@ export default function LoginPage() {
       return
     }
     
+    // Sadece login sayfasındayken redirect yap
+    // Diğer sayfalarda (ör. /profile/me) refresh yapıldığında bu çalışmamalı
     if (accessToken && user) {
       handlePostAuthNavigation(user, capabilities ?? undefined)
     } else {
       setIsChecking(false)
     }
-  }, [accessToken, user, capabilities, router])
+  }, [accessToken, user, capabilities, router, pathname])
 
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),

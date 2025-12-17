@@ -456,3 +456,68 @@ a:hover {
   visibility: visible !important;
 }
 
+/* Artwork Card - Base (Sadece transition ve outline yapısı) */
+.artwork-card {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Artwork Card - Turuncu (Index % 3 === 0) - Normal durum */
+.artwork-card--orange {
+  outline-color: rgba(249, 115, 22, 0.5);
+}
+
+/* Artwork Card - Mavi (Index % 3 === 1) - Normal durum */
+.artwork-card--blue {
+  outline-color: rgba(59, 130, 246, 0.5); /* blue-500 */
+}
+
+/* Artwork Card - Beyaz (Index % 3 === 2) - Normal durum */
+.artwork-card--white {
+  outline-color: rgba(255, 255, 255, 0.5);
+}
+
+.dark .artwork-card--white {
+  outline-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Hover Outline - Index bazlı döngüsel renk (sadece hover'da etkili) */
+.hover-outline-orange:hover {
+  outline-color: rgba(249, 115, 22, 0.9) !important;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3), 0 4px 12px rgba(249, 115, 22, 0.15) !important;
+  transform: scale(1.02) !important;
+}
+
+.hover-outline-blue:hover {
+  outline-color: rgba(59, 130, 246, 0.9) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(59, 130, 246, 0.15) !important;
+  transform: scale(1.02) !important;
+}
+
+.hover-outline-white:hover {
+  outline-color: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 4px 12px rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.02) !important;
+}
+
+/* ✅ Comment Preview Animations */
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rotating-comment {
+  animation: fadeSlide 0.4s ease-in-out;
+}
+
+.pinned-comment {
+  opacity: 0.9;
+}
+

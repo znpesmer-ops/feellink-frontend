@@ -32,9 +32,12 @@ export function DeleteHighlightModal({ highlight, onClose, onDelete }: DeleteHig
         throw error
       }
     },
-    onSuccess: async () => {
-      // Çözüm A: Optimistic update yapma, sadece refetch et
-      await queryClient.refetchQueries({ queryKey: ['highlights'] })
+    onSuccess: () => {
+      // 🔥 KRİTİK: Query'yi refetch et ama await etme (background'da çalışır)
+      // invalidateQueries yerine refetchQueries kullan - daha güvenli, placeholderData ile UI kaybolmaz
+      queryClient.refetchQueries({ queryKey: ['highlights'] }).catch(() => {
+        // Refetch hatası olsa bile UI kaybolmasın
+      })
       toast.success('Tema başarıyla silindi')
       onDelete(highlight.id)
       onClose()

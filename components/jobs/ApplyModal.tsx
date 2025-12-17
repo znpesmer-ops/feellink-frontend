@@ -139,7 +139,7 @@ export function ApplyModal({ jobListingId, open, onClose, onSuccess }: ApplyModa
       await api.post(`/jobs/${jobListingId}/applications`, payload)
       
       // Profesyonel başarı mesajı
-      toast.success('Başvurunuz alındı. Başvurunuz başarıyla iletildi. İlan sahibi başvurunuzu incelediğinde durum güncellenecektir.', {
+      toast.success('Başvurunuz başarıyla alınmıştır.\nİlan sahibi değerlendirmesini tamamladığında başvuru durumunuz güncellenecektir.', {
         duration: 4000,
       })
       

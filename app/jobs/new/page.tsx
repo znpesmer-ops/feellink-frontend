@@ -1,7 +1,7 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { FormEvent, useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import toast from 'react-hot-toast'
@@ -10,6 +10,7 @@ type ApplicationMethod = 'internal' | 'link' | 'email'
 
 export default function NewJobPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [saveAsDraft, setSaveAsDraft] = useState(false)
@@ -17,9 +18,77 @@ export default function NewJobPage() {
   const [error, setError] = useState<string | null>(null)
   const [shortSummary, setShortSummary] = useState('')
   const maxShortSummaryChars = 100
+  
+  // ✅ Edit mode kontrolü
+  const jobId = searchParams.get('edit')
+  const isEditMode = Boolean(jobId)
+  const [isLoadingJob, setIsLoadingJob] = useState(false)
+
+  // ✅ Edit modunda ilan verilerini yükle
+  useEffect(() => {
+    if (isEditMode && jobId) {
+      setIsLoadingJob(true)
+      api.get(`/jobs/${jobId}`)
+        .then((response) => {
+          const job = response.data
+          // Form alanlarını doldur
+          if (job.title) {
+            const titleInput = document.querySelector('input[name="title"]') as HTMLInputElement
+            if (titleInput) titleInput.value = job.title
+          }
+          if (job.company) {
+            const companyInput = document.querySelector('input[name="companyName"]') as HTMLInputElement
+            if (companyInput) companyInput.value = job.company
+          }
+          // Description'dan shortSummary ve description'ı ayır
+          const description = job.description || ''
+          const shortSummaryMatch = description.match(/\*\*(.+?)\*\*\n\n/)
+          if (shortSummaryMatch) {
+            setShortSummary(shortSummaryMatch[1])
+            const fullDesc = description.replace(/\*\*(.+?)\*\*\n\n/, '')
+            const descTextarea = document.querySelector('textarea[name="description"]') as HTMLTextAreaElement
+            if (descTextarea) descTextarea.value = fullDesc
+          } else {
+            const descTextarea = document.querySelector('textarea[name="description"]') as HTMLTextAreaElement
+            if (descTextarea) descTextarea.value = description
+          }
+          // Location'ı parse et
+          if (job.location) {
+            const parts = job.location.split(', ')
+            if (parts.length >= 2) {
+              const cityInput = document.querySelector('input[name="locationCity"]') as HTMLInputElement
+              const countryInput = document.querySelector('input[name="locationCountry"]') as HTMLInputElement
+              if (cityInput) cityInput.value = parts[0]
+              if (countryInput) countryInput.value = parts.slice(1).join(', ')
+            }
+          }
+          // Salary'yi parse et
+          if (job.salary) {
+            const salaryMatch = job.salary.match(/(\d+)\s*-\s*(\d+)\s*(\w+)/)
+            if (salaryMatch) {
+              const minInput = document.querySelector('input[name="salaryMin"]') as HTMLInputElement
+              const maxInput = document.querySelector('input[name="salaryMax"]') as HTMLInputElement
+              const currencySelect = document.querySelector('select[name="salaryCurrency"]') as HTMLSelectElement
+              if (minInput) minInput.value = salaryMatch[1]
+              if (maxInput) maxInput.value = salaryMatch[2]
+              if (currencySelect) currencySelect.value = salaryMatch[3]
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('İlan yüklenirken hata:', err)
+          toast.error('İlan yüklenirken bir hata oluştu')
+          router.push('/jobs/new')
+        })
+        .finally(() => {
+          setIsLoadingJob(false)
+        })
+    }
+  }, [isEditMode, jobId, router])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (isLoadingJob) return // Edit modunda veri yüklenirken submit'i engelle
     setError(null)
     setIsSubmitting(true)
 
@@ -72,18 +141,7 @@ export default function NewJobPage() {
       fullDescription += `\n\n**Son Başvuru Tarihi:** ${deadlineDate}`
     }
 
-    // Başvuru yöntemi bilgisi
-    if (applicationMethod === 'link') {
-      const applicationUrl = formData.get('applicationUrl')?.toString().trim()
-      if (applicationUrl) {
-        fullDescription += `\n\n**Başvuru:** ${applicationUrl}`
-      }
-    } else if (applicationMethod === 'email') {
-      const applicationEmail = formData.get('applicationEmail')?.toString().trim()
-      if (applicationEmail) {
-        fullDescription += `\n\n**Başvuru E-posta:** ${applicationEmail}`
-      }
-    }
+    // ✅ Başvuru yöntemi artık sadece Feellink üzerinden (internal) - UI'dan kaldırıldı
 
     // Tags oluştur (iş birliği türü, deneyim düzeyi, çalışma şekli)
     const tags: string[] = []
@@ -98,36 +156,58 @@ export default function NewJobPage() {
       return
     }
 
-    // Başvuru yöntemi koşullu validasyon
-    if (applicationMethod === 'link') {
-      const applicationUrl = formData.get('applicationUrl')?.toString().trim()
-      if (!applicationUrl) {
-        setError('Başvuru yöntemi olarak link seçtiniz, lütfen başvuru linkini girin.')
+    // ✅ Yayınlama ayarları validasyonu (sadece yayınlama için, taslak için değil)
+    // Edit modunda da zorunlu çünkü ilan zaten yayında
+    if (!saveAsDraft) {
+      const maxApplications = formData.get('maxApplications')?.toString().trim()
+      const autoCloseOnDeadline = formData.get('autoCloseOnDeadline') === 'on'
+      
+      if (!deadline && !maxApplications && !autoCloseOnDeadline) {
+        setError('İlanı yayınlamak için "Yayınlama Ayarları" bölümünden en az bir alanı doldurmalısınız (Son Başvuru Tarihi, Maks. Başvuru Sayısı veya Otomatik Kapatma).')
         setIsSubmitting(false)
         return
       }
     }
 
-    if (applicationMethod === 'email') {
-      const applicationEmail = formData.get('applicationEmail')?.toString().trim()
-      if (!applicationEmail) {
-        setError('Başvuru yöntemi olarak e-posta seçtiniz, lütfen e-posta adresi girin.')
-        setIsSubmitting(false)
-        return
-      }
-    }
+    // ✅ Başvuru yöntemi validasyonu kaldırıldı - artık sadece Feellink üzerinden (internal)
 
     try {
-      await api.post('/jobs/create', {
-        title,
-        description: fullDescription,
-        company: companyName || undefined,
-        location: location || undefined,
-        salary: salary || undefined,
-        tags: tags.length > 0 ? tags : undefined,
-      })
-
-      toast.success(saveAsDraft ? 'İlan taslak olarak kaydedildi.' : 'İlan başarıyla yayınlandı!')
+      if (isEditMode && jobId) {
+        // ✅ Edit modunda PATCH kullan
+        const maxApplications = formData.get('maxApplications')?.toString().trim()
+        const autoCloseOnDeadline = formData.get('autoCloseOnDeadline') === 'on'
+        
+        await api.patch(`/jobs/${jobId}`, {
+          title,
+          description: fullDescription,
+          company: companyName || undefined,
+          location: location || undefined,
+          salary: salary || undefined,
+          tags: tags.length > 0 ? tags : undefined,
+          deadline: deadline || undefined,
+          maxApplications: maxApplications || undefined,
+          autoCloseOnDeadline: autoCloseOnDeadline || false,
+        })
+        toast.success('İlan başarıyla güncellendi!')
+      } else {
+        // ✅ Yeni ilan oluşturma
+        const maxApplications = formData.get('maxApplications')?.toString().trim()
+        const autoCloseOnDeadline = formData.get('autoCloseOnDeadline') === 'on'
+        
+        await api.post('/jobs/create', {
+          title,
+          description: fullDescription,
+          company: companyName || undefined,
+          location: location || undefined,
+          salary: salary || undefined,
+          tags: tags.length > 0 ? tags : undefined,
+          saveAsDraft: saveAsDraft || false,
+          deadline: deadline || undefined,
+          maxApplications: maxApplications || undefined,
+          autoCloseOnDeadline: autoCloseOnDeadline || false,
+        })
+        toast.success(saveAsDraft ? 'İlan taslak olarak kaydedildi.' : 'İlan başarıyla yayınlandı!')
+      }
       router.push('/fellink/public')
     } catch (err: any) {
       console.error(err)
@@ -140,20 +220,44 @@ export default function NewJobPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
             Feellink İş İlanları
           </p>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-            Yeni ilan oluştur
+            {isEditMode ? 'İlanı düzenle' : 'Yeni ilan oluştur'}
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Kurumun veya koleksiyonun için detaylı ve anlaşılır bir ilan yayınla.
+            {isEditMode 
+              ? 'İlan bilgilerini güncelleyebilirsiniz. Bu değişiklikler mevcut başvuruları etkilemez.'
+              : 'Kurumun veya koleksiyonun için detaylı ve anlaşılır bir ilan yayınla.'}
           </p>
         </div>
       </div>
+
+      {/* ✅ Edit mode badge */}
+      {isEditMode && (
+        <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50/50 dark:border-orange-500/30 dark:bg-orange-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              <span className="text-orange-600 dark:text-orange-400 text-lg">🟠</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+                Bu ilan yayında – değişiklikler kaydedildiğinde güncellenecektir
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoadingJob && (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange"></div>
+        </div>
+      )}
 
       {/* Başvuru Geri Bildirimi Bilgilendirmesi */}
       <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/50 dark:border-blue-500/30 dark:bg-blue-500/10 p-4">
@@ -175,6 +279,7 @@ export default function NewJobPage() {
         </div>
       </div>
 
+      {!isLoadingJob && (
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* İlan Temel Bilgileri */}
         <section className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
@@ -338,10 +443,10 @@ export default function NewJobPage() {
           </div>
         </section>
 
-        {/* Maaş & Başvuru Yöntemi */}
+        {/* Maaş */}
         <section className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-            Maaş & başvuru yöntemi
+            Maaş
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -401,80 +506,19 @@ export default function NewJobPage() {
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
             Bu alan isteğe bağlıdır. Sanat ve kültür alanında proje bazlı veya gönüllü ilanlar yayınlayabilirsiniz.
           </p>
-
-          <div className="border-t border-dashed border-gray-200 dark:border-gray-700 pt-4 mt-2 space-y-3">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Başvuru Yöntemi
-            </p>
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="applicationMethod"
-                  checked={applicationMethod === 'internal'}
-                  onChange={() => setApplicationMethod('internal')}
-                  className="h-4 w-4 text-brand-orange border-gray-300 dark:border-gray-600 focus:ring-brand-orange bg-white dark:bg-gray-800"
-                />
-                <span className="text-gray-700 dark:text-gray-300">Başvurular Feellink üzerinden alınacaktır</span>
-              </label>
-
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="applicationMethod"
-                  checked={applicationMethod === 'link'}
-                  onChange={() => setApplicationMethod('link')}
-                  className="h-4 w-4 text-brand-orange border-gray-300 dark:border-gray-600 focus:ring-brand-orange bg-white dark:bg-gray-800"
-                />
-                <span className="text-gray-700 dark:text-gray-300">Dış link ile başvuru</span>
-              </label>
-
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="applicationMethod"
-                  checked={applicationMethod === 'email'}
-                  onChange={() => setApplicationMethod('email')}
-                  className="h-4 w-4 text-brand-orange border-gray-300 dark:border-gray-600 focus:ring-brand-orange bg-white dark:bg-gray-800"
-                />
-                <span className="text-gray-700 dark:text-gray-300">E-posta ile başvuru</span>
-              </label>
-            </div>
-
-            {applicationMethod === 'link' && (
-              <div className="mt-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Başvuru Linki *
-                </label>
-                <input
-                  name="applicationUrl"
-                  type="url"
-                  placeholder="https://..."
-                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
-                />
-              </div>
-            )}
-
-            {applicationMethod === 'email' && (
-              <div className="mt-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Başvuru E-posta Adresi *
-                </label>
-                <input
-                  name="applicationEmail"
-                  type="email"
-                  placeholder="kariyer@ornekfirma.com"
-                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
-                />
-              </div>
-            )}
-          </div>
+          
+          {/* ✅ Başvuru Yöntemi bölümü bilinçli olarak kaldırıldı - tüm başvurular Feellink üzerinden alınacak */}
         </section>
 
         {/* Yayınlama Ayarları */}
         <section className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-4">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             Yayınlama ayarları
+            {!isEditMode && (
+              <span className="text-xs font-normal text-orange-500 dark:text-orange-400">
+                (Yayınlamak için zorunlu)
+              </span>
+            )}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -491,7 +535,7 @@ export default function NewJobPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Maks. Başvuru Sayısı (Opsiyonel)
+                Maks. Başvuru Sayısı
               </label>
               <input
                 name="maxApplications"
@@ -534,29 +578,32 @@ export default function NewJobPage() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                setSaveAsDraft(true)
-                const form = document.querySelector('form') as HTMLFormElement
-                form?.requestSubmit()
-              }}
-              disabled={isSubmitting}
-              className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition"
-            >
-              Taslak Olarak Kaydet
-            </button>
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveAsDraft(true)
+                  const form = document.querySelector('form') as HTMLFormElement
+                  form?.requestSubmit()
+                }}
+                disabled={isSubmitting}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition"
+              >
+                Taslak Olarak Kaydet
+              </button>
+            )}
             <button
               type="submit"
               onClick={() => setSaveAsDraft(false)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingJob}
               className="inline-flex items-center justify-center rounded-lg bg-brand-orange px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-orange/90 disabled:opacity-60 transition"
             >
-              {isSubmitting ? 'Kaydediliyor…' : 'İlanı Yayınla'}
+              {isSubmitting ? (isEditMode ? 'Güncelleniyor…' : 'Kaydediliyor…') : (isEditMode ? 'Değişiklikleri Kaydet' : 'İlanı Yayınla')}
             </button>
           </div>
         </div>
       </form>
+      )}
     </div>
   )
 }

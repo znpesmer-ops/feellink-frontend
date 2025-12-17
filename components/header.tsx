@@ -82,9 +82,10 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
   }
 
   const handleUserSelect = (username: string) => {
+    // Sadece dropdown'u kapat ve arama sorgusunu temizle
+    // Link component'i zaten navigation yapacak
     setSearchQuery('')
     setIsSearchOpen(false)
-    router.push(`/profile/${username}`)
   }
 
   const handleLogout = async () => {
@@ -97,8 +98,7 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
     } finally {
       clearAuth()
       setIsMenuOpen(false)
-      // replace kullanarak geri butonuna basınca geri dönmesin
-      router.replace('/login')
+      // ✅ Logout sonrası redirect yok - kullanıcı bulunduğu sayfada kalır
     }
   }
 

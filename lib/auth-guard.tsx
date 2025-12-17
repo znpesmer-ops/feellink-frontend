@@ -1,13 +1,29 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from './store'
 import api from './api'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { accessToken, user, capabilities, setAuth, setUser, setCapabilities } = useAuthStore()
+
+  // ✅ Public routes - logout sonrası bu sayfalarda kalınabilir
+  const publicRoutes = [
+    '/',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/posts',        // Eser detay sayfaları public
+    '/artwork',      // Eser sayfaları public (alternatif route)
+  ]
+
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname?.startsWith(route)
+  )
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -16,7 +32,20 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         return // Still hydrating
       }
 
-      // If no token, redirect to login
+      // 🔥 KRİTİK: Profil sayfasındayken login'e redirect yapma (sadece token kontrolü yap)
+      // Profil sayfasında token yoksa bile redirect yapma, sadece loading göster
+      if (pathname?.startsWith('/profile')) {
+        // Profil sayfasında token yoksa bile redirect yapma
+        // Profil sayfası kendi auth kontrolünü yapacak
+        return
+      }
+
+      // ✅ Public route ise redirect yapma
+      if (isPublicRoute) {
+        return
+      }
+
+      // If no token, redirect to login (sadece protected route'larda)
       if (!accessToken) {
         router.replace('/login')
         return
@@ -53,13 +82,19 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             } catch (refreshError) {
               // Refresh failed, logout
               useAuthStore.getState().clearAuth()
-              router.replace('/login')
+              // ✅ Public route ise redirect yapma
+              if (!isPublicRoute && !pathname?.startsWith('/profile')) {
+                router.replace('/login')
+              }
               return
             }
           } else {
             // No refresh token, logout
             useAuthStore.getState().clearAuth()
-            router.replace('/login')
+            // ✅ Public route ise redirect yapma
+            if (!isPublicRoute && !pathname?.startsWith('/profile')) {
+              router.replace('/login')
+            }
             return
           }
         }
@@ -67,10 +102,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     checkAuth()
-  }, [accessToken, user, router, setAuth, setUser, setCapabilities])
+  }, [accessToken, user, router, pathname, setAuth, setUser, setCapabilities, isPublicRoute])
 
-  // Show loading while checking auth or waiting for capabilities
-  if (!accessToken || !user) {
+  // Show loading while checking auth or waiting for capabilities (sadece protected route'larda)
+  if ((!accessToken || !user) && !isPublicRoute && !pathname?.startsWith('/profile')) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
