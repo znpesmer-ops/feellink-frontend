@@ -47,7 +47,7 @@ export function Navbar() {
     { href: '/explore', icon: Compass, label: 'Keşfet' },
     { href: '/articles', icon: FileText, label: 'Yazılar' },
     { href: '/notifications', icon: Bell, label: 'Bildirimler', hasNotification: unreadCount > 0 },
-    { href: `/profile/${user?.username || 'me'}`, icon: User, label: 'Profil' },
+    { href: '/profile/me', icon: User, label: 'Profil' },
   ]
 
   return (

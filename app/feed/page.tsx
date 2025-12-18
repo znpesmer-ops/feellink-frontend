@@ -1,19 +1,36 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { initSocket, initPostsSocket } from '@/lib/socket'
 import { AuthGuard } from '@/lib/auth-guard'
 import HighlightsRow from '@/components/highlights-row'
 import PostCard from '@/components/PostCard'
+import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
 
 function FeedContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { accessToken, user } = useAuthStore()
   const [feedPosts, setFeedPosts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null)
+
+  // URL'den post ve comment parametrelerini oku
+  useEffect(() => {
+    const postId = searchParams.get('post')
+    const commentId = searchParams.get('comment')
+    
+    if (postId) {
+      setSelectedPostId(postId)
+      if (commentId) {
+        setHighlightCommentId(commentId)
+      }
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (!accessToken) {
@@ -95,6 +112,13 @@ function FeedContent() {
     return null
   }
 
+  const handleCloseModal = () => {
+    setSelectedPostId(null)
+    setHighlightCommentId(null)
+    // URL'yi temizle
+    router.replace('/feed', { scroll: false })
+  }
+
   return (
     <div className="w-full">
       {/* 🔸 Ayın Öne Çıkanları — header'ın hemen altından başlıyor, direkt görünür */}
@@ -129,12 +153,21 @@ function FeedContent() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {feedPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <PostCard key={post.id} post={post} showLike={false} />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Post Modal - URL'den açılan post için */}
+      {selectedPostId && (
+        <PostModal 
+          postId={selectedPostId} 
+          onClose={handleCloseModal}
+          highlightCommentId={highlightCommentId || undefined}
+        />
+      )}
     </div>
   )
 }

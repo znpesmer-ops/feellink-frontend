@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,7 +11,7 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit } from 'lucide-react'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit, Bookmark } from 'lucide-react'
 import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from '@/components/UserBadge'
@@ -23,6 +23,7 @@ import { ProfileArtworksGrid } from '@/components/profile/ProfileArtworksGrid'
 import toast from 'react-hot-toast'
 import { ProfileCommentsList } from '@/components/profile/ProfileCommentsList'
 import { ArtistHighlights } from '@/components/profile/ArtistHighlights'
+import { SavedArtworks } from '@/components/profile/SavedArtworks'
 import ZoomModal from '@/components/common/ZoomModal'
 import { EditPostModal } from '@/components/profile/EditPostModal'
 
@@ -40,12 +41,18 @@ function ProfileContent() {
   
   // Parametreyi al - backend'den kontrol edilecek, frontend tahmin etmeyecek
   const paramUsername = decodedParam || ''
-  const isMe = paramUsername === 'me'
+  
+  // isMe'yi useMemo ile memoize et - infinite loop'u önlemek için
+  const isMe = useMemo(() => {
+    if (!currentUser?.id) return false
+    return paramUsername === 'me' || paramUsername === currentUser.id || paramUsername === currentUser.username
+  }, [paramUsername, currentUser?.id, currentUser?.username])
+  
   const username = isMe ? (currentUser?.username || '') : paramUsername
   
   // Aktif tab'ı URL query parameter'ından oku (sayfa yenilendiğinde korunur)
-  const validTabs: Array<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts'> = ['posts', 'articles', 'comments', 'artworks', 'events', 'drafts']
-  const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | null
+  const validTabs: Array<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved'> = ['posts', 'articles', 'comments', 'artworks', 'events', 'drafts', 'saved']
+  const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | null
   const initialTab = (tabFromUrl && validTabs.includes(tabFromUrl)) ? tabFromUrl : 'posts'
   
   const [showFollowers, setShowFollowers] = useState(false)
@@ -55,11 +62,11 @@ function ProfileContent() {
   const [postType, setPostType] = useState<'post' | 'artwork'>('post')
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved'>(initialTab)
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   
   // Tab değiştiğinde URL'yi güncelle (sayfa yenilendiğinde korunur)
-  const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts') => {
+  const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved') => {
     setActiveTab(tab)
     // URL query parameter'ını güncelle (replace kullanarak history'ye ekleme)
     const currentUrl = new URL(window.location.href)
@@ -74,7 +81,7 @@ function ProfileContent() {
   
   // URL'den tab değiştiğinde state'i güncelle (sadece ilk yüklemede)
   useEffect(() => {
-    const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | null
+    const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | null
     if (tabFromUrl && validTabs.includes(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl)
     }
@@ -118,7 +125,7 @@ function ProfileContent() {
         } catch (err: any) {
           console.warn('Failed to fetch /users/me, falling back to username:', err)
           
-          // Fallback: currentUser.username kullan
+          // Fallback 1: currentUser.username kullan
           if (currentUser?.username) {
             try {
               const response = await api.get(`/users/profile/${currentUser.username}`)
@@ -126,12 +133,36 @@ function ProfileContent() {
                 console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
               }
               return response.data
-            } catch (fallbackErr) {
-              throw new Error('Profil yüklenemedi. Lütfen tekrar giriş yapın.')
+            } catch (fallbackErr: any) {
+              // Fallback 2: currentUser.id kullan
+              if (currentUser?.id) {
+                try {
+                  const response = await api.get(`/users/profile/${currentUser.id}`)
+                  if (response.data) {
+                    return response.data
+                  }
+                } catch (idErr: any) {
+                  // Son fallback: Backend'den gelen hata mesajını kullan
+                  throw new Error(fallbackErr?.response?.data?.message || idErr?.response?.data?.message || 'Profil yüklenemedi')
+                }
+              }
+              throw new Error(fallbackErr?.response?.data?.message || 'Profil yüklenemedi')
             }
           }
           
-          throw new Error(err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı. Lütfen tekrar giriş yapın.')
+          // Fallback 3: currentUser.id ile dene
+          if (currentUser?.id) {
+            try {
+              const response = await api.get(`/users/profile/${currentUser.id}`)
+              if (response.data) {
+                return response.data
+              }
+            } catch (idErr: any) {
+              throw new Error(idErr?.response?.data?.message || err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı')
+            }
+          }
+          
+          throw new Error(err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı')
         }
       }
       
@@ -156,7 +187,7 @@ function ProfileContent() {
     // Query enabled koşulu: accessToken varsa ve (username varsa veya "me" parametresi varsa)
     // "me" durumunda username currentUser'dan gelecek, bu yüzden enabled her zaman true olmalı
     // Sayfa yenilendiğinde username boş olabilir, bu durumda query çalışmamalı (redirect'i engelle)
-    enabled: !!accessToken && (paramUsername === 'me' || (!!username && username !== 'undefined' && username !== 'null')),
+    enabled: !!accessToken && (paramUsername === 'me' ? !!currentUser?.id : (!!username && username !== 'undefined' && username !== 'null')),
     // Profil query'si invalidate edildiğinde refetch sırasında boş gelmesini engelle
     // placeholderData ile stale data'yı göster, böylece sayfa yenilendiğinde redirect olmaz
     placeholderData: (previousData) => previousData,
@@ -168,6 +199,64 @@ function ProfileContent() {
       return failureCount < 2
     },
   })
+
+  // 🔒 GÜVENLİ REDIRECT - Sadece gerekli durumlarda ve guard'larla
+  useEffect(() => {
+    // Guard: currentUser yoksa hiçbir şey yapma
+    if (!currentUser?.id) return
+    
+    // Guard: Zaten /profile/me'deyse redirect yapma (infinite loop önleme)
+    if (paramUsername === 'me') return
+    
+    // Guard: isLoading devam ediyorsa bekle
+    if (isLoading) return
+    
+    // Guard: Sadece kendi profiliyse (username veya id ile) ve profil yüklenemezse redirect et
+    // paramUsername === 'me' kontrolü yukarıda yapıldı, burada sadece username/id kontrolü yap
+    const isOwnProfile = paramUsername === currentUser.username || paramUsername === currentUser.id
+    if (!profile && isOwnProfile) {
+      router.replace('/profile/me')
+    }
+  }, [isLoading, profile, currentUser?.id, currentUser?.username, paramUsername, router])
+
+  // Profil hatası durumunda kendi profiliyse redirect et (güvenli)
+  useEffect(() => {
+    // Guard: currentUser yoksa hiçbir şey yapma
+    if (!currentUser?.id) return
+    
+    // Guard: Zaten /profile/me'deyse redirect yapma (infinite loop önleme)
+    if (paramUsername === 'me') return
+    
+    // Guard: Hata yoksa veya hala yükleniyorsa bekle
+    if (!profileError || isLoading) return
+    
+    // Guard: Sadece kendi profiliyse (username veya id ile) redirect et
+    const isOwnProfile = paramUsername === currentUser.username || paramUsername === currentUser.id
+    if (isOwnProfile) {
+      router.replace('/profile/me')
+    }
+  }, [profileError, isLoading, currentUser?.id, currentUser?.username, paramUsername, router])
+
+  // Boşluklu isim veya geçersiz kullanıcı adı hatası için redirect (güvenli)
+  useEffect(() => {
+    // Guard: currentUser yoksa hiçbir şey yapma
+    if (!currentUser?.username) return
+    
+    // Guard: Zaten /profile/me'deyse redirect yapma
+    if (paramUsername === 'me') return
+    
+    // Guard: Hata yoksa veya hala yükleniyorsa bekle
+    if (!profileError || isLoading) return
+    
+    const errorMessage = profileError instanceof Error ? profileError.message : ''
+    const rawParamString = Array.isArray(params.username) ? params.username[0] : (params.username || '')
+    const decodedParamCheck = decodeURIComponent(rawParamString)
+    
+    // Sadece geçersiz kullanıcı adı hatası varsa redirect et
+    if ((errorMessage.includes('Geçersiz kullanıcı adı') || decodedParamCheck?.includes(' '))) {
+      router.replace('/profile/me')
+    }
+  }, [profileError, isLoading, currentUser?.username, params.username, paramUsername, router])
 
   // Helper function to check if user is corporate
   const isCorporateUser = profile?.role?.toUpperCase() === 'CORPORATE'
@@ -205,6 +294,8 @@ function ProfileContent() {
     { key: 'articles', label: 'Yazılar', icon: FiFileText },
     { key: 'comments', label: 'Yorumlar', icon: FiMessageCircle },
     { key: 'events', label: 'Etkinlikler', icon: FiCalendar },
+    // Kaydedilenler sekmesi sadece kendi profili için görünür
+    ...(isMe ? [{ key: 'saved', label: 'Kaydedilenler', icon: Bookmark }] : []),
   ]
   
   // Plan kontrolü kaldırıldı - artık tüm sekmeler herkes için görünür
@@ -558,6 +649,45 @@ function ProfileContent() {
     enabled: !!profile && showFollowing,
   })
 
+  // Remove follower mutation (Instagram-style: remove someone who follows you)
+  const removeFollowerMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(`/follow/remove-follower/${userId}`)
+    },
+    onSuccess: () => {
+      toast.success('Takipçi kaldırıldı')
+      queryClient.invalidateQueries({ queryKey: ['followers', profile?.id] })
+      queryClient.invalidateQueries({ queryKey: ['profile', username] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Takipçi kaldırılamadı')
+    },
+  })
+
+  // Unfollow mutation (for following list)
+  const unfollowMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await api.delete(`/follow/${userId}`)
+    },
+    onSuccess: () => {
+      toast.success('Takip bırakıldı')
+      queryClient.invalidateQueries({ queryKey: ['following', profile?.id] })
+      queryClient.invalidateQueries({ queryKey: ['profile', username] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Takip bırakılamadı')
+    },
+  })
+
+  // State for remove follower confirmation modal
+  const [showRemoveFollowerModal, setShowRemoveFollowerModal] = useState<{ userId: string; username: string } | null>(null)
+  
+  // State for unfollow confirmation modal
+  const [showUnfollowModal, setShowUnfollowModal] = useState<{ userId: string; username: string } | null>(null)
+
+  // State for dropdown menu in followers/following lists
+  const [listMenuOpen, setListMenuOpen] = useState<string | null>(null)
+
   const handleFollow = () => {
     if (profile.isFollowing) {
       followMutation.mutate('unfollow')
@@ -627,9 +757,39 @@ function ProfileContent() {
     blockUserMutation.mutate(profile.id)
   }
 
-  // Early return kontrolleri - JSX içinde yapılacak
+  // Close dropdown menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (listMenuOpen) {
+        setListMenuOpen(null)
+      }
+    }
+
+    if (listMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [listMenuOpen])
+
+  // Early return kontrolleri - ASLA null dönme, her zaman UI göster
   if (!accessToken) {
-    return null
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    )
+  }
+
+  // Guard: currentUser yüklenene kadar bekle (infinite loop önleme)
+  if (!currentUser?.id) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    )
   }
 
   if (isLoading) {
@@ -646,13 +806,26 @@ function ProfileContent() {
   if (profileError && !isLoading) {
     const errorMessage = profileError instanceof Error ? profileError.message : 'Bilinmeyen bir hata oluştu'
     
+    // Kendi profiliyse ve /profile/me'de değilsek redirect yapılacak (useEffect'te)
+    // /profile/me'deysek normal akışa devam et (hata mesajını göster)
+    if (isMe && currentUser?.id && paramUsername !== 'me') {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+        </div>
+      )
+    }
+
     // Boşluklu isim (fullName) hatası için otomatik yönlendirme
     const rawParamString = Array.isArray(params.username) ? params.username[0] : (params.username || '')
     const decodedParamCheck = decodeURIComponent(rawParamString)
     if ((errorMessage.includes('Geçersiz kullanıcı adı') || decodedParamCheck?.includes(' ')) && currentUser?.username) {
-      // Otomatik olarak username'e yönlendir
-      router.replace(`/profile/${currentUser.username}`)
-      return null // Yönlendirme sırasında hiçbir şey gösterme
+      // Redirect useEffect'te yapılacak, burada loading göster
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+        </div>
+      )
     }
     
     // Network error'ları için daha yumuşak mesaj ve otomatik retry
@@ -682,31 +855,67 @@ function ProfileContent() {
       )
     }
     
+    // Kendi profiliyse ve /profile/me'de değilsek otomatik redirect yap
+    if (isMe && currentUser?.id && paramUsername !== 'me') {
+      // Redirect useEffect'te yapılacak, burada loading göster
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+        </div>
+      )
+    }
+
     return (
       <div className="text-center py-12">
         <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
           <p className="font-semibold mb-2">Profil yüklenemedi</p>
           <p className="text-xs mb-4">{errorMessage}</p>
-          <button
-            onClick={() => router.push('/profile/me')}
-            className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
-          >
-            Profilime Git
-          </button>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['profile', username, paramUsername, currentUser?.id] })
+              }}
+              className="px-4 py-2 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+            >
+              Tekrar Dene
+            </button>
+            {isMe && (
+              <button
+                onClick={() => router.replace('/profile/me')}
+                className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
+              >
+                Profilime Git
+              </button>
+            )}
+          </div>
         </div>
       </div>
     )
   }
   
-  // Yükleniyor durumunda hiçbir şey gösterme (layout zaten var)
+  // Yükleniyor durumunda loading göster
   if (isLoading && !profile) {
-    return null
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    )
   }
 
   // Sadece gerçekten profil yoksa ve hata varsa hata göster
   // featuredThemes boşluğu route kararına sebep olmamalı
   // Profil query'si başarısız olduğunda bile sayfada kalmalı (dashboard'a yönlendirme yok)
   if (!profile && !isLoading && profileError) {
+    // Kendi profiliyse ve /profile/me'de değilsek redirect yapılacak (useEffect'te)
+    // /profile/me'deysek normal akışa devam et (hata mesajını göster)
+    if (isMe && currentUser?.id && paramUsername !== 'me') {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+        </div>
+      )
+    }
+
     // Hata mesajını göster ama redirect yapma
     const errorMessage = profileError instanceof Error ? profileError.message : 'Bilinmeyen bir hata oluştu'
     
@@ -764,7 +973,11 @@ function ProfileContent() {
   // Profil yoksa ama hata da yoksa (henüz yükleniyor veya query disabled), loading göster
   // ASLA dashboard'a redirect yapma
   if (!profile && !isLoading) {
-    return null
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    )
   }
 
   return (
@@ -1049,6 +1262,10 @@ function ProfileContent() {
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             <ProfileArtworksGrid username={username} artworks={userArtworks || []} userId={profile?.id} />
           </div>
+        ) : activeTab === 'saved' && isMe ? (
+          <div className="bg-white dark:bg-gray-950 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
+            <SavedArtworks userId={profile.id} />
+          </div>
         ) : activeTab === 'events' && (isCorporateUser || canUploadArtwork) ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             {userEvents && userEvents.length > 0 ? (
@@ -1313,34 +1530,53 @@ function ProfileContent() {
                 followers.map((follower: any) => (
                   <div
                     key={follower.id}
-                    className="p-4 flex items-center space-x-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-                    onClick={() => {
-                      setShowFollowers(false)
-                      router.push(`/profile/${follower.username}`)
-                    }}
+                    className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
                   >
-                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
-                      {follower.avatar ? (
-                        <img
-                          src={resolveImageUrl(follower.avatar)}
-                          alt={follower.username}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                    <div
+                      className="flex items-center space-x-3 flex-1 cursor-pointer min-w-0"
+                      onClick={() => {
+                        setShowFollowers(false)
+                        router.push(`/profile/${follower.username}`)
+                      }}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {follower.avatar ? (
+                          <img
+                            src={resolveImageUrl(follower.avatar)}
+                            alt={follower.username}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                            }}
+                          />
+                        ) : (
+                          <span className="text-gray-500 dark:text-gray-300">
+                            {follower.username[0].toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follower.username}</p>
+                        {follower.fullName && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{follower.fullName}</p>
+                        )}
+                      </div>
+                    </div>
+                    {/* Sağ taraf - Takipten çıkar butonu - sadece kendi profilinde görünür */}
+                    {isMe && (
+                      <div className="flex items-center shrink-0 whitespace-nowrap">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowRemoveFollowerModal({ userId: follower.id, username: follower.username })
                           }}
-                        />
-                      ) : (
-                        <span className="text-gray-500 dark:text-gray-300">
-                          {follower.username[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{follower.username}</p>
-                      {follower.fullName && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{follower.fullName}</p>
-                      )}
-                    </div>
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline leading-none px-2 py-1"
+                          type="button"
+                        >
+                          Takipten çıkar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
@@ -1422,39 +1658,136 @@ function ProfileContent() {
                 following.map((follow: any) => (
                   <div
                     key={follow.id}
-                    className="p-4 flex items-center space-x-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-                    onClick={() => {
-                      setShowFollowing(false)
-                      router.push(`/profile/${follow.username}`)
-                    }}
+                    className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
                   >
-                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
-                      {follow.avatar ? (
-                        <img
-                          src={resolveImageUrl(follow.avatar)}
-                          alt={follow.username}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                    <div
+                      className="flex items-center space-x-3 flex-1 cursor-pointer min-w-0"
+                      onClick={() => {
+                        setShowFollowing(false)
+                        router.push(`/profile/${follow.username}`)
+                      }}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {follow.avatar ? (
+                          <img
+                            src={resolveImageUrl(follow.avatar)}
+                            alt={follow.username}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                            }}
+                          />
+                        ) : (
+                          <span className="text-gray-500 dark:text-gray-300">
+                            {follow.username[0].toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follow.username}</p>
+                        {follow.fullName && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{follow.fullName}</p>
+                        )}
+                      </div>
+                    </div>
+                    {/* Sağ taraf - Takibi bırak butonu - sadece kendi profilinde görünür */}
+                    {isMe && (
+                      <div className="flex items-center shrink-0 whitespace-nowrap">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowUnfollowModal({ userId: follow.id, username: follow.username })
                           }}
-                        />
-                      ) : (
-                        <span className="text-gray-500 dark:text-gray-300">
-                          {follow.username[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{follow.username}</p>
-                      {follow.fullName && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{follow.fullName}</p>
-                      )}
-                    </div>
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline leading-none px-2 py-1"
+                          type="button"
+                        >
+                          Takibi bırak
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">Not following anyone yet</div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Follower Confirmation Modal */}
+      {showRemoveFollowerModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowRemoveFollowerModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Takipten çıkar
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
+              <span className="font-semibold">@{showRemoveFollowerModal.username}</span> kullanıcısını takipçilerinizden çıkarmak istiyor musunuz? Bu işlem sessizce gerçekleşir ve bildirim gönderilmez.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRemoveFollowerModal(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => {
+                  removeFollowerMutation.mutate(showRemoveFollowerModal.userId)
+                  setShowRemoveFollowerModal(null)
+                  setListMenuOpen(null)
+                }}
+                disabled={removeFollowerMutation.isPending}
+                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {removeFollowerMutation.isPending ? 'Kaldırılıyor...' : 'Takipten çıkar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unfollow Confirmation Modal */}
+      {showUnfollowModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowUnfollowModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Takibi bırak
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
+              <span className="font-semibold">@{showUnfollowModal.username}</span> kullanıcısını takip etmeyi bırakmak istiyor musunuz?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowUnfollowModal(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => {
+                  unfollowMutation.mutate(showUnfollowModal.userId)
+                  setShowUnfollowModal(null)
+                  setListMenuOpen(null)
+                }}
+                disabled={unfollowMutation.isPending}
+                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {unfollowMutation.isPending ? 'Bırakılıyor...' : 'Takibi bırak'}
+              </button>
             </div>
           </div>
         </div>

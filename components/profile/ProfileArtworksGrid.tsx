@@ -3,11 +3,11 @@
 import { useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
-import { Image as ImageIcon, QrCode, Download, Loader2, MoreVertical, Trash2, Heart, MessageCircle, Edit } from 'lucide-react'
+import { Image as ImageIcon, QrCode, Download, Loader2, MoreVertical, Trash2, Heart, MessageCircle, Edit, Bookmark } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/lib/store'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { EditArtworkModal } from './EditArtworkModal'
 
 interface ProfileArtworksGridProps {
@@ -27,7 +27,75 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [editingArtwork, setEditingArtwork] = useState<any | null>(null)
+  const [savedArtworks, setSavedArtworks] = useState<Set<string>>(new Set())
   const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+
+  // Fetch saved items for current user (to check if artworks are saved)
+  const { data: savedItemsData } = useQuery({
+    queryKey: ['saved', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return []
+      const response = await api.get(`/users/${user.id}/saved`)
+      return response.data || []
+    },
+    enabled: !!user?.id && !isOwner, // Only fetch if not owner (owner doesn't need to see save button on own artworks)
+  })
+
+  // Update saved artworks set when data changes (filter only artworks)
+  useEffect(() => {
+    if (savedItemsData) {
+      const artworkIds = savedItemsData
+        .filter((item: any) => item.type === 'artwork')
+        .map((item: any) => item.id)
+      setSavedArtworks(new Set(artworkIds))
+    }
+  }, [savedItemsData])
+
+  // Save/Unsave mutation
+  const saveMutation = useMutation({
+    mutationFn: async ({ postId, isSaved }: { postId: string; isSaved: boolean }) => {
+      console.log('🔍 Save mutation called:', { postId, isSaved })
+      if (isSaved) {
+        const response = await api.delete(`/posts/${postId}/save-artwork`)
+        console.log('✅ Unsave response:', response.data)
+        return response.data
+      } else {
+        const response = await api.post(`/posts/${postId}/save-artwork`)
+        console.log('✅ Save response:', response.data)
+        return response.data
+      }
+    },
+    onSuccess: async (_, { postId, isSaved }) => {
+      // Optimistic UI update
+      setSavedArtworks(prev => {
+        const newSet = new Set(prev)
+        if (isSaved) {
+          newSet.delete(postId)
+        } else {
+          newSet.add(postId)
+        }
+        return newSet
+      })
+      toast.success(isSaved ? 'Eser kaydedilenlerden kaldırıldı' : 'Eser kaydedildi')
+      
+      // 🔥 KRİTİK: Query'leri invalidate et VE explicit refetch yap
+      queryClient.invalidateQueries({ queryKey: ['saved', user?.id] })
+      queryClient.invalidateQueries({ queryKey: ['saved-artworks', user?.id] })
+      
+      // Explicit refetch to ensure UI updates immediately
+      await queryClient.refetchQueries({ queryKey: ['saved', user?.id] })
+      await queryClient.refetchQueries({ queryKey: ['saved-artworks', user?.id] })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'İşlem sırasında bir hata oluştu')
+    },
+  })
+
+  const handleSaveToggle = (e: React.MouseEvent, artworkId: string) => {
+    e.stopPropagation()
+    const isSaved = savedArtworks.has(artworkId)
+    saveMutation.mutate({ postId: artworkId, isSaved })
+  }
 
   const handleDownloadQr = async (e: React.MouseEvent, artworkId: string, artwork: any) => {
     e.stopPropagation() // Card click'i engelle
@@ -187,15 +255,8 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
             )}
           </div>
 
-          {/* Eser ikon rozeti - Yüksek z-index ile görünür */}
-          {artwork.media && artwork.media.length > 0 && (
-            <div className="absolute top-2 right-2 rounded-full bg-black/60 backdrop-blur-sm text-white p-1.5 shadow-lg z-[115]">
-              <ImageIcon size={14} strokeWidth={2.5} />
-            </div>
-          )}
-              
           {/* QR Kod Butonu ve Silme Menüsü - Sadece eser sahibi görür - Yüksek z-index */}
-          {isOwner && (
+          {isOwner ? (
             <>
               <button
                 onClick={(e) => handleDownloadQr(e, artwork.id, artwork)}
@@ -257,6 +318,19 @@ export function ProfileArtworksGrid({ artworks, username, userId }: ProfileArtwo
                 )}
               </div>
             </>
+          ) : (
+            /* Kaydet butonu - Sadece sahip değilse görünür */
+            <button
+              onClick={(e) => handleSaveToggle(e, artwork.id)}
+              className="absolute top-2 left-2 rounded-full bg-black/60 backdrop-blur-sm text-white p-1.5 shadow-lg z-[115] hover:bg-black/80 transition-colors"
+              title={savedArtworks.has(artwork.id) ? 'Kaydedilenlerden kaldır' : 'Kaydet'}
+            >
+              <Bookmark 
+                size={14} 
+                strokeWidth={2.5} 
+                fill={savedArtworks.has(artwork.id) ? 'currentColor' : 'none'}
+              />
+            </button>
           )}
 
           {/* Modern Hover Overlay - Glass Effect - Düşük z-index ile menü butonlarının altında */}

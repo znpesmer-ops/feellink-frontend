@@ -8,6 +8,42 @@ import { useAuthStore } from '@/lib/store'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
 import { Send, Search, Image as ImageIcon, X, Edit, Trash2, MoreVertical, Paperclip, Download, FileText } from 'lucide-react'
 import { NewMessageModal } from '@/components/new-message-modal'
+import toast from 'react-hot-toast'
+
+// Feellink Message Empty State Icon
+const FeellinkMessageEmptyIcon = () => (
+  <svg width="72" height="72" viewBox="0 0 72 72" fill="none" className="mx-auto">
+    <defs>
+      <linearGradient id="flGradient" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#FF8A00" />
+        <stop offset="100%" stopColor="#4DA3FF" />
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+        <feMerge>
+          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+
+    <rect
+      x="12"
+      y="14"
+      width="48"
+      height="34"
+      rx="10"
+      stroke="url(#flGradient)"
+      strokeWidth="2"
+      filter="url(#glow)"
+      className="dark:opacity-90"
+    />
+
+    <circle cx="26" cy="31" r="3" fill="#FF8A00" className="dark:opacity-90" />
+    <circle cx="36" cy="31" r="3" fill="#4DA3FF" className="dark:opacity-90" />
+    <circle cx="46" cy="31" r="3" fill="#FF8A00" className="dark:opacity-90" />
+  </svg>
+)
 
 const formatTimeAgo = (date: string | Date) => {
   const now = new Date()
@@ -104,8 +140,15 @@ export default function MessagesPage() {
   const [loadingMedia, setLoadingMedia] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [deleteConversationId, setDeleteConversationId] = useState<string | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [showBlockModal, setShowBlockModal] = useState(false)
+  const [showConversationMenu, setShowConversationMenu] = useState(false)
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockCheckLoading, setBlockCheckLoading] = useState(false)
+  const conversationMenuRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatSocketRef = useRef<any>(null)
+
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const activeConversationRef = useRef<Conversation | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -923,21 +966,66 @@ export default function MessagesPage() {
   // Menü dışına tıklanınca kapat
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      
+      // Mesaj menüsü için
+      if (menuRef.current && !menuRef.current.contains(target)) {
         setShowMenuForId(null)
+      }
+      
+      // Conversation menüsü için
+      if (conversationMenuRef.current) {
+        const isClickInsideMenu = conversationMenuRef.current.contains(target)
+        const isClickOnMenuButton = (target as HTMLElement)?.closest('button[title="Daha fazla"]')
+        
+        // Eğer menü dışına tıklandıysa VE modal açık değilse menüyü kapat
+        if (!isClickInsideMenu && !isClickOnMenuButton && !showReportModal && !showBlockModal) {
+          setShowConversationMenu(false)
+        }
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
+    // setTimeout ile geciktir (buton tıklamalarının önce çalışması için)
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside)
+    }, 0)
+
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClickOutside)
     }
-  }, [])
+  }, [showReportModal, showBlockModal])
 
   const getOtherParticipant = (conversation: Conversation) => {
     const participant = conversation.participants?.find((p) => p.userId !== user?.id)
     return participant ? { ...participant, user: participant.user } : null
   }
+
+  // Block kontrolü
+  const checkBlockStatus = async (otherUserId: string) => {
+    if (!otherUserId) return
+    setBlockCheckLoading(true)
+    try {
+      const response = await api.get(`/blocks/check/${otherUserId}`)
+      setIsBlocked(response.data?.isBlocked || false)
+    } catch (error: any) {
+      console.error('Failed to check block status:', error)
+      // Hata durumunda engellenmemiş olarak işaretle (kullanıcı deneyimini bozmamak için)
+      setIsBlocked(false)
+    } finally {
+      setBlockCheckLoading(false)
+    }
+  }
+
+  // Aktif konuşma değiştiğinde block durumunu kontrol et
+  useEffect(() => {
+    if (activeConversation) {
+      const otherUser = getOtherParticipant(activeConversation)
+      if (otherUser?.user?.id) {
+        checkBlockStatus(otherUser.user.id)
+      }
+    }
+  }, [activeConversation?.id])
 
   const getLastMessage = (conversation: Conversation) => {
     if (conversation.messages && conversation.messages.length > 0) {
@@ -1169,6 +1257,63 @@ export default function MessagesPage() {
                         </p>
                       ) : null}
                     </div>
+                    {/* Menü Butonu */}
+                    <div className="relative" ref={conversationMenuRef}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const otherUser = getOtherParticipant(activeConversation)
+                          if (otherUser?.user?.id) {
+                            checkBlockStatus(otherUser.user.id)
+                            setShowConversationMenu(!showConversationMenu)
+                          }
+                        }}
+                        className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title="Daha fazla"
+                      >
+                        <MoreVertical size={20} className="text-gray-600 dark:text-gray-400" />
+                      </button>
+                      {/* Dropdown Menü */}
+                      {showConversationMenu && (
+                        <div 
+                          ref={conversationMenuRef}
+                          className="absolute right-0 top-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[100] min-w-[180px]"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              // Önce modal state'ini set et
+                              setShowReportModal(true)
+                              // Sonra menüyü kapat
+                              setShowConversationMenu(false)
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                          >
+                            <span>Şikayet Et</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              // Önce modal state'ini set et
+                              setShowBlockModal(true)
+                              // Sonra menüyü kapat
+                              setShowConversationMenu(false)
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                          >
+                            <span>{isBlocked ? 'Engeli Kaldır' : 'Engelle'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })()}
@@ -1375,72 +1520,82 @@ export default function MessagesPage() {
             {/* Mesaj Input - Sadece chat sekmesinde */}
             {activeTab === 'chat' && (
             <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  sendMessage()
-                }}
-                className="flex gap-2"
-              >
-                {/* Görsel Yükleme Butonu */}
-                <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                  <ImageIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageSelect}
-                    ref={fileInputRef}
-                    className="hidden"
-                  />
-                </label>
-                {/* Dosya Yükleme Butonu */}
-                <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                  <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                  <input
-                    type="file"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                </label>
-                <input
-                  type="text"
-                  value={messageText}
-                  onChange={handleChange}
-                  onKeyDown={(e) => {
-                    // ✅ Enter tuşu form submit'i tetikleyecek, ayrıca sendMessage çağırmaya gerek yok
-                    // Form submit zaten sendMessage'ı çağırıyor, çift göndermeyi önlemek için burada çağırmıyoruz
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      // Form submit'i manuel tetikle (sendMessage onSubmit'te zaten çağrılacak)
-                      const form = e.currentTarget.closest('form')
-                      if (form) {
-                        form.requestSubmit()
-                      }
-                    }
+              {isBlocked ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Bu kullanıcıyı engelledin. Mesaj gönderemezsin.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    sendMessage()
                   }}
-                  placeholder="Mesaj yaz..."
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
-                />
-                <button
-                  type="submit"
-                  disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
-                  className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex gap-2"
                 >
-                  {isUploading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Send className="w-5 h-5" />
-                  )}
-                </button>
-              </form>
+                  {/* Görsel Yükleme Butonu */}
+                  <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <ImageIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      ref={fileInputRef}
+                      className="hidden"
+                    />
+                  </label>
+                  {/* Dosya Yükleme Butonu */}
+                  <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <input
+                      type="file"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={handleChange}
+                    onKeyDown={(e) => {
+                      // ✅ Enter tuşu form submit'i tetikleyecek, ayrıca sendMessage çağırmaya gerek yok
+                      // Form submit zaten sendMessage'ı çağırıyor, çift göndermeyi önlemek için burada çağırmıyoruz
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        // Form submit'i manuel tetikle (sendMessage onSubmit'te zaten çağrılacak)
+                        const form = e.currentTarget.closest('form')
+                        if (form) {
+                          form.requestSubmit()
+                        }
+                      }
+                    }}
+                    placeholder="Mesaj yaz..."
+                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
+                    className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </button>
+                </form>
+              )}
             </div>
             )}
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
             <div className="text-center">
-              <p className="text-lg mb-2">💬</p>
-              <p>Bir sohbet seçin</p>
+              <div className="mb-3">
+                <FeellinkMessageEmptyIcon />
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Bir sohbet seçin</p>
             </div>
           </div>
         )}
@@ -1514,6 +1669,60 @@ export default function MessagesPage() {
                           </p>
                         ) : null}
                       </div>
+                    </div>
+                    {/* Mobil Menü Butonu */}
+                    <div className="relative" ref={conversationMenuRef}>
+                      <button
+                        onClick={() => {
+                          const otherUser = getOtherParticipant(activeConversation)
+                          if (otherUser?.user?.id) {
+                            checkBlockStatus(otherUser.user.id)
+                            setShowConversationMenu(!showConversationMenu)
+                          }
+                        }}
+                        className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title="Daha fazla"
+                      >
+                        <MoreVertical size={20} className="text-gray-600 dark:text-gray-400" />
+                      </button>
+                      {/* Dropdown Menü (Mobil) */}
+                      {showConversationMenu && (
+                        <div 
+                          ref={conversationMenuRef}
+                          className="absolute right-0 top-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-[100] min-w-[180px]"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              // Önce modal state'ini set et
+                              setShowReportModal(true)
+                              // Sonra menüyü kapat
+                              setShowConversationMenu(false)
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                          >
+                            <span>Şikayet Et</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              // Önce modal state'ini set et
+                              setShowBlockModal(true)
+                              // Sonra menüyü kapat
+                              setShowConversationMenu(false)
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                          >
+                            <span>{isBlocked ? 'Engeli Kaldır' : 'Engelle'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </>
                 )
@@ -1829,58 +2038,71 @@ export default function MessagesPage() {
             {/* Mesaj Input (mobil) - Sadece chat sekmesinde */}
             {activeTab === 'chat' && (
             <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  sendMessage()
-                }}
-                className="flex gap-2"
-              >
-                {/* Görsel Yükleme Butonu */}
-                <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                  <ImageIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageSelect}
-                    ref={fileInputRef}
-                    className="hidden"
-                  />
-                </label>
-                {/* Dosya Yükleme Butonu */}
-                <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                  <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                  <input
-                    type="file"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                </label>
-                <input
-                  type="text"
-                  value={messageText}
-                  onChange={handleChange}
-                  placeholder="Mesaj yaz..."
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
-                />
-                <button
-                  type="submit"
-                  disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
-                  className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              {isBlocked ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Bu kullanıcıyı engelledin. Mesaj gönderemezsin.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    sendMessage()
+                  }}
+                  className="flex gap-2"
                 >
-                  {isUploading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Send className="w-5 h-5" />
-                  )}
-                </button>
-              </form>
+                  {/* Görsel Yükleme Butonu */}
+                  <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <ImageIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      ref={fileInputRef}
+                      className="hidden"
+                    />
+                  </label>
+                  {/* Dosya Yükleme Butonu */}
+                  <label className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                    <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <input
+                      type="file"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={handleChange}
+                    placeholder="Mesaj yaz..."
+                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-brand-orange dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={(!messageText.trim() && !selectedImage && !selectedFile) || isUploading}
+                    className="bg-brand-orange text-white p-2 rounded-full hover:bg-brand-orange/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </button>
+                </form>
+              )}
             </div>
             )}
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-            <p>Bir sohbet seçin</p>
+            <div className="text-center">
+              <div className="mb-3">
+                <FeellinkMessageEmptyIcon />
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Bir sohbet seçin</p>
+            </div>
           </div>
         )}
       </div>
@@ -1934,6 +2156,259 @@ export default function MessagesPage() {
           </div>
         </div>
       )}
+
+      {/* Şikayet Modalı */}
+      {showReportModal && activeConversation ? (
+        <ReportModal
+          conversation={activeConversation}
+          onClose={() => {
+            setShowReportModal(false)
+          }}
+        />
+      ) : null}
+
+      {/* Engelleme Modalı */}
+      {showBlockModal && activeConversation ? (
+        <BlockModal
+          conversation={activeConversation}
+          isBlocked={isBlocked}
+          onClose={() => {
+            setShowBlockModal(false)
+          }}
+          onBlockChange={() => {
+            const otherUser = getOtherParticipant(activeConversation)
+            if (otherUser?.user?.id) {
+              checkBlockStatus(otherUser.user.id)
+            }
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// Şikayet Modalı Component
+function ReportModal({ conversation, onClose }: { conversation: Conversation; onClose: () => void }) {
+  const { user } = useAuthStore()
+  const [selectedReason, setSelectedReason] = useState<string>('')
+  const [note, setNote] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const getOtherParticipant = (conv: Conversation) => {
+    const participant = conv.participants?.find((p) => p.userId !== user?.id)
+    return participant ? { ...participant, user: participant.user } : null
+  }
+
+  const otherUser = getOtherParticipant(conversation)
+  
+  if (!otherUser?.user?.id) {
+    return null
+  }
+
+  const reasons = [
+    { value: 'HARASSMENT', label: 'Taciz / Zorbalık' },
+    { value: 'SPAM', label: 'Spam / Dolandırıcılık' },
+    { value: 'HATE_SPEECH', label: 'Nefret Söylemi' },
+    { value: 'IMPERSONATION', label: 'Taklit / Sahte Hesap' },
+    { value: 'INAPPROPRIATE_CONTENT', label: 'Uygunsuz İçerik' },
+  ] as const
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedReason || !otherUser?.user?.id) {
+      toast.error('Lütfen bir şikayet sebebi seçin')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await api.post('/reports', {
+        reportedUserId: otherUser.user.id,
+        conversationId: conversation.id,
+        reason: selectedReason,
+        note: note.trim() || undefined,
+      })
+      toast.success('Şikayetin alındı. İncelenecek.')
+      onClose()
+    } catch (error: any) {
+      console.error('Failed to submit report:', error)
+      toast.error(error?.response?.data?.message || 'Şikayet gönderilirken bir hata oluştu')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 dark:bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="w-[420px] max-w-[90vw] rounded-2xl bg-gradient-to-b from-[#0f172a] to-[#020617] border border-white/10 shadow-2xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-white">
+            Kullanıcıyı Şikayet Et
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">
+            Bu işlem geri alınamaz. Lütfen doğru nedeni seç.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <div className="space-y-2 mt-4">
+              {reasons.map((reason) => (
+                <label
+                  key={reason.value}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedReason === reason.value
+                      ? 'border-orange-500 bg-orange-500/10'
+                      : 'border-white/10 hover:border-white/20 bg-white/5'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reason"
+                    value={reason.value}
+                    checked={selectedReason === reason.value}
+                    onChange={(e) => setSelectedReason(e.target.value)}
+                    className="hidden"
+                  />
+                  <span 
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      selectedReason === reason.value
+                        ? 'bg-orange-500 opacity-100'
+                        : 'bg-white/20 opacity-50'
+                    }`}
+                  />
+                  <span className="text-sm text-white flex-1">{reason.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value.slice(0, 300))}
+              placeholder="İstersen kısaca açıklayabilirsin (opsiyonel)"
+              className="mt-4 w-full rounded-lg bg-black/30 border border-white/10 focus:border-orange-500 focus:ring-0 text-sm text-white placeholder-gray-500 p-3 resize-none transition-colors"
+              rows={3}
+              maxLength={300}
+            />
+            <p className="text-xs text-gray-500 mt-1 text-right">
+              {note.length}/300
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedReason || isSubmitting}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Gönderiliyor...' : 'Şikayeti Gönder'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Engelleme Modalı Component
+function BlockModal({ 
+  conversation, 
+  isBlocked, 
+  onClose, 
+  onBlockChange 
+}: { 
+  conversation: Conversation
+  isBlocked: boolean
+  onClose: () => void
+  onBlockChange: () => void
+}) {
+  const { user } = useAuthStore()
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const getOtherParticipant = (conv: Conversation) => {
+    const participant = conv.participants?.find((p) => p.userId !== user?.id)
+    return participant ? { ...participant, user: participant.user } : null
+  }
+
+  const otherUser = getOtherParticipant(conversation)
+
+  const handleBlock = async () => {
+    if (!otherUser?.user?.id) return
+
+    setIsProcessing(true)
+    try {
+      if (isBlocked) {
+        await api.delete(`/blocks/${otherUser.user.id}`)
+        toast.success('Engel kaldırıldı')
+      } else {
+        await api.post(`/blocks/${otherUser.user.id}`)
+        toast.success('Kullanıcı engellendi')
+      }
+      onBlockChange()
+      onClose()
+    } catch (error: any) {
+      console.error('Failed to block/unblock user:', error)
+      toast.error(error?.response?.data?.message || 'İşlem sırasında bir hata oluştu')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 dark:bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="w-[420px] max-w-[90vw] rounded-2xl bg-gradient-to-b from-[#0f172a] to-[#020617] border border-white/10 shadow-2xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-white">
+            {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">
+            {isBlocked
+              ? 'Bu kullanıcının engelini kaldırmak istediğinize emin misiniz?'
+              : 'Bu kullanıcı sana mesaj gönderemez ve seninle etkileşime geçemez.'}
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Vazgeç
+          </button>
+          <button
+            onClick={handleBlock}
+            disabled={isProcessing}
+            className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              isBlocked
+                ? 'bg-green-600 hover:bg-green-700'
+                : 'bg-red-500 hover:bg-red-600'
+            }`}
+          >
+            {isProcessing ? 'İşleniyor...' : isBlocked ? 'Engeli Kaldır' : 'Engelle'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

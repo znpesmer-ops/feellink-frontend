@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon, FolderPlus } from 'lucide-react'
+import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon, FolderPlus, MoreVertical } from 'lucide-react'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
@@ -25,12 +25,15 @@ const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton')
 interface PostModalProps {
   postId: string
   onClose: () => void
+  highlightCommentId?: string
 }
 
 interface Comment {
   id: string
   content: string
   createdAt: string
+  updatedAt?: string
+  userId?: string
   isPinned?: boolean
   isLikedByCurrentUser?: boolean
   likesCount?: number
@@ -52,6 +55,7 @@ interface Post {
   createdAt: string
   isLiked: boolean
   isSaved: boolean
+  type?: 'post' | 'artwork' | 'article' | 'event'
   user: {
     id: string
     username: string
@@ -73,7 +77,7 @@ interface Post {
   }
 }
 
-export function PostModal({ postId, onClose }: PostModalProps) {
+export function PostModal({ postId, onClose, highlightCommentId }: PostModalProps) {
   const { accessToken, user, capabilities } = useAuthStore()
   const queryClient = useQueryClient()
   const router = useRouter()
@@ -83,6 +87,10 @@ export function PostModal({ postId, onClose }: PostModalProps) {
   const [pingAnimating, setPingAnimating] = useState(false)
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ commentId: string; x: number; y: number } | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editedContent, setEditedContent] = useState<string>('')
+  const [commentMenuOpen, setCommentMenuOpen] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ commentId: string } | null>(null)
   const [currentSlide, setCurrentSlide] = useState(0)
   const sliderRef = useRef<Slider | null>(null)
   const [showAddToCollectionModal, setShowAddToCollectionModal] = useState(false)
@@ -104,6 +112,30 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     }
   }, [postId])
 
+  // Menüyü dışarı tıklanınca kapat
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setCommentMenuOpen(null)
+    }
+    if (commentMenuOpen) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [commentMenuOpen])
+
+  // ESC tuşu ile delete modal'ı kapat
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showDeleteConfirm) {
+        setShowDeleteConfirm(null)
+      }
+    }
+    if (showDeleteConfirm) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showDeleteConfirm])
+
   // Fetch post details
   const { data: post, isLoading } = useQuery<Post>({
     queryKey: ['post', postId],
@@ -113,6 +145,28 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     },
     enabled: !!accessToken && !!postId,
   })
+
+  // Yorum odaklaması - highlightCommentId varsa yorumu scroll et
+  useEffect(() => {
+    if (highlightCommentId && post?.comments) {
+      // Post yüklendikten sonra kısa bir gecikme ile scroll et
+      const timer = setTimeout(() => {
+        const commentElement = document.getElementById(`comment-${highlightCommentId}`)
+        if (commentElement) {
+          commentElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          })
+          // Hafif highlight efekti
+          commentElement.classList.add('ring-2', 'ring-brand-orange', 'ring-opacity-50')
+          setTimeout(() => {
+            commentElement.classList.remove('ring-2', 'ring-brand-orange', 'ring-opacity-50')
+          }, 2000)
+        }
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [highlightCommentId, post?.comments])
 
   // Like mutation
   const likeMutation = useMutation({
@@ -132,19 +186,39 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     },
   })
 
-  // Save mutation
+  // Save mutation (works for both posts and artworks)
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const isArtwork = post?.type === 'artwork'
+      const endpoint = isArtwork ? `/posts/${postId}/save-artwork` : `/posts/${postId}/save`
+      
       if (post?.isSaved) {
-        await api.delete(`/posts/${postId}/save`)
+        await api.delete(endpoint)
         return { saved: false }
       } else {
-        await api.post(`/posts/${postId}/save`)
+        await api.post(endpoint)
         return { saved: true }
       }
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      queryClient.setQueryData(['post', postId], (old: any) => {
+        if (!old) return old
+        return {
+          ...old,
+          isSaved: data.saved,
+        }
+      })
+      
+      // 🔥 KRİTİK: Query'leri invalidate et VE explicit refetch yap
       queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      queryClient.invalidateQueries({ queryKey: ['saved'] })
+      
+      // Explicit refetch to ensure saved items list updates immediately
+      const { user } = useAuthStore.getState()
+      if (user?.id) {
+        await queryClient.refetchQueries({ queryKey: ['saved', user.id] })
+      }
     },
   })
 
@@ -187,6 +261,18 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     commentMutation.mutate({ content: commentText.trim(), parentId: replyingTo || undefined })
   }
 
+  // Update comment mutation
+  const updateCommentMutation = useMutation({
+    mutationFn: async ({ commentId, content }: { commentId: string; content: string }) => {
+      await api.patch(`/posts/${postId}/comments/${commentId}`, { content })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      setEditingCommentId(null)
+      setEditedContent('')
+    },
+  })
+
   // Delete comment mutation
   const deleteCommentMutation = useMutation({
     mutationFn: async (commentId: string) => {
@@ -195,11 +281,36 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['post', postId] })
       queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setCommentMenuOpen(null)
     },
   })
 
+  const handleEditComment = (comment: Comment) => {
+    setEditingCommentId(comment.id)
+    setEditedContent(comment.content)
+    setCommentMenuOpen(null)
+  }
+
+  const handleSaveEdit = (commentId: string) => {
+    if (!editedContent.trim()) return
+    updateCommentMutation.mutate({ commentId, content: editedContent.trim() })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null)
+    setEditedContent('')
+  }
+
   const handleDeleteComment = (commentId: string) => {
-    deleteCommentMutation.mutate(commentId)
+    setShowDeleteConfirm({ commentId })
+    setCommentMenuOpen(null)
+  }
+
+  const confirmDelete = () => {
+    if (showDeleteConfirm) {
+      deleteCommentMutation.mutate(showDeleteConfirm.commentId)
+      setShowDeleteConfirm(null)
+    }
   }
 
   // 🔔 Socket.IO ile real-time beğeni dinleme
@@ -258,6 +369,13 @@ export function PostModal({ postId, onClose }: PostModalProps) {
     commentsSocket.on('commentDeleted', (data: { id: string; postId: string; change?: number }) => {
       if (data.postId === postId) {
         // Query'yi invalidate et ki güncel yorumları çeksin
+        queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      }
+    })
+
+    // Yorum güncelleme dinleme
+    commentsSocket.on('commentUpdated', (data: { id: string; postId: string; content: string; updatedAt: string }) => {
+      if (data.postId === postId) {
         queryClient.invalidateQueries({ queryKey: ['post', postId] })
       }
     })
@@ -431,8 +549,8 @@ export function PostModal({ postId, onClose }: PostModalProps) {
         className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in fade-in slide-in-from-bottom-4 duration-300 transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left side - Media */}
-        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center aspect-square md:aspect-auto md:min-h-[600px] relative w-full overflow-hidden [&_.slick-slider]:pointer-events-auto">
+        {/* Left side - Media - Sabit yükseklik */}
+        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center h-[520px] md:h-[600px] relative w-full overflow-hidden [&_.slick-slider]:pointer-events-auto">
           {mediaArray.length > 0 ? (
             hasMultipleMedia ? (
               /* Çoklu görsel - Slider */
@@ -637,15 +755,20 @@ export function PostModal({ postId, onClose }: PostModalProps) {
           </div>
 
 
-          {/* Comments Section - Instagram Style */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Comments Section - Instagram Style - Sabit yükseklik + scroll */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[420px] comments-scroll pr-2">
             {/* ✅ SABİTLENEN YORUM ALANI - Özel Banner */}
             {(() => {
               const pinnedComment = post.comments?.find((c: any) => c.isPinned);
               if (!pinnedComment) return null;
               
+              const isHighlighted = highlightCommentId === pinnedComment.id
+              
               return (
-                <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-brand-orange/5 dark:bg-brand-orange/10 border border-brand-orange/30 dark:border-brand-orange/40">
+                <div 
+                  id={`comment-${pinnedComment.id}`}
+                  className={`flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-brand-orange/5 dark:bg-brand-orange/10 border border-brand-orange/30 dark:border-brand-orange/40 ${isHighlighted ? 'ring-2 ring-brand-orange ring-opacity-50' : ''}`}
+                >
                   <div className="mt-0.5 flex-shrink-0">
                     <Pin className="w-4 h-4 text-brand-orange fill-brand-orange/80" />
                   </div>
@@ -674,8 +797,18 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                   const normalComments = post.comments.filter((c: any) => !c.isPinned);
                   
                   return normalComments.map((comment: any) => {
+                    const isCommentOwner = comment.userId === user?.id || comment.user.id === user?.id
+                    const isPostOwner = post.user.id === user?.id
+                    const isEdited = comment.updatedAt && new Date(comment.updatedAt).getTime() > new Date(comment.createdAt).getTime()
+                    const isEditing = editingCommentId === comment.id
+                    const isHighlighted = highlightCommentId === comment.id
+
                     return (
-                    <div key={comment.id}>
+                      <div 
+                        key={comment.id}
+                        id={`comment-${comment.id}`}
+                        className={isHighlighted ? 'ring-2 ring-brand-orange ring-opacity-50 rounded-lg p-2 -m-2 transition-all' : ''}
+                      >
                       {/* Ana yorum */}
                       <div
                         className="flex gap-2 items-start group relative"
@@ -725,14 +858,73 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                             <ProRoleBadge roles={(comment.user as any).roles} plan={(comment.user as any).plan} />
                           </div>
                           
-                          {/* Yorum metni */}
+                          {/* Yorum metni - Düzenleme modu */}
                           <div className="flex items-start gap-2">
                             <div className="flex-1">
-                              <span className="text-sm text-black dark:text-white block leading-relaxed">
-                                {comment.content}
-                              </span>
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editedContent}
+                                    onChange={(e) => setEditedContent(e.target.value)}
+                                    className="w-full bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-brand-orange/50"
+                                    rows={3}
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleSaveEdit(comment.id)}
+                                      disabled={updateCommentMutation.isPending || !editedContent.trim()}
+                                      className="px-3 py-1 text-xs font-medium bg-brand-orange text-white rounded-lg hover:bg-brand-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                      Kaydet
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEdit}
+                                      disabled={updateCommentMutation.isPending}
+                                      className="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                                    >
+                                      İptal
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-black dark:text-white block leading-relaxed">
+                                  {comment.content}
+                                </span>
+                              )}
                             </div>
-                            {/* Beğeni butonu - her zaman görünür */}
+                          </div>
+                          
+                          {/* Alt satır - tarih, (düzenlendi) ve yanıtla */}
+                          {!isEditing && (
+                            <div className="flex items-center gap-3 mt-1">
+                              <p className="text-xs text-[#444] dark:text-gray-400">
+                                {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                                {isEdited && (
+                                  <span className="ml-1 opacity-60">(düzenlendi)</span>
+                                )}
+                              </p>
+                              <button
+                                onClick={() => {
+                                  setReplyingTo(comment.id)
+                                  // Input'a focus
+                                  setTimeout(() => {
+                                    const input = document.querySelector('input[placeholder*="Yorum"]') as HTMLInputElement
+                                    input?.focus()
+                                  }, 100)
+                                }}
+                                className="text-xs text-brand-orange hover:underline font-medium transition-colors"
+                              >
+                                Yanıtla
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Kalp + 3 Nokta Menü - Sağ üst köşede, yan yana */}
+                        {!isEditing && (
+                          <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* Beğeni butonu */}
                             <div className="flex-shrink-0">
                               <CommentLikeButton
                                 commentId={comment.id}
@@ -741,28 +933,53 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                                 type="post"
                               />
                             </div>
+                            
+                            {/* 3 Nokta Menü - Sadece yetkisi olanlara görünür */}
+                            {(isCommentOwner || isPostOwner) && (
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCommentMenuOpen(commentMenuOpen === comment.id ? null : comment.id)
+                                  }}
+                                  className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                >
+                                  <MoreVertical size={16} className="text-gray-600 dark:text-gray-400" />
+                                </button>
+
+                                {/* Menü Dropdown */}
+                                {commentMenuOpen === comment.id && (
+                                  <div className="absolute top-8 right-0 z-50 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 min-w-[160px] animate-in fade-in zoom-in-95 duration-150">
+                                    {isCommentOwner && (
+                                      <>
+                                        <button
+                                          onClick={() => handleEditComment(comment)}
+                                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg transition-colors"
+                                        >
+                                          Düzenle
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteComment(comment.id)}
+                                          className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                        >
+                                          Sil
+                                        </button>
+                                      </>
+                                    )}
+                                    {!isCommentOwner && isPostOwner && (
+                                      <button
+                                        onClick={() => handleDeleteComment(comment.id)}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                      >
+                                        Yorumu Sil
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          
-                          {/* Alt satır - tarih ve yanıtla */}
-                          <div className="flex items-center gap-3 mt-1">
-                            <p className="text-xs text-[#444] dark:text-gray-400">
-                              {new Date(comment.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <button
-                              onClick={() => {
-                                setReplyingTo(comment.id)
-                                // Input'a focus
-                                setTimeout(() => {
-                                  const input = document.querySelector('input[placeholder*="Yorum"]') as HTMLInputElement
-                                  input?.focus()
-                                }, 100)
-                              }}
-                              className="text-xs text-brand-orange hover:underline font-medium transition-colors"
-                            >
-                              Yanıtla
-                            </button>
-                          </div>
-                        </div>
+                        )}
                       
                       {/* Context Menu - Sadece gönderi sahibine göster */}
                       {contextMenu?.commentId === comment.id && user?.id === post.user.id && contextMenu && (
@@ -802,8 +1019,14 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                     {/* Yanıtlar (Replies) */}
                     {comment.replies && comment.replies.length > 0 && (
                       <div className="ml-10 mt-2 space-y-2">
-                        {comment.replies.map((reply: any) => (
-                          <div key={reply.id}>
+                        {comment.replies.map((reply: any) => {
+                          const isReplyHighlighted = highlightCommentId === reply.id
+                          return (
+                            <div 
+                              key={reply.id}
+                              id={`comment-${reply.id}`}
+                              className={isReplyHighlighted ? 'ring-2 ring-brand-orange ring-opacity-50 rounded-lg p-2 -m-2 transition-all' : ''}
+                            >
                             <div className="flex gap-2">
                               <CornerUpRight size={12} className="text-gray-400 dark:text-gray-500 mt-1 flex-shrink-0" />
                               <Link
@@ -858,7 +1081,8 @@ export function PostModal({ postId, onClose }: PostModalProps) {
                               <CommentReactions commentId={reply.id} postId={postId} />
                             </div> */}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -919,6 +1143,44 @@ export function PostModal({ postId, onClose }: PostModalProps) {
           open={showAddToCollectionModal}
           onClose={() => setShowAddToCollectionModal(false)}
         />
+      )}
+
+      {/* Delete Comment Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowDeleteConfirm(null)}
+        >
+          <div
+            className="bg-white dark:bg-[#0f172a] rounded-xl w-[360px] max-w-[90vw] p-6 shadow-xl border border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-black dark:text-white text-base font-semibold mb-2">
+              Yorumu sil?
+            </h3>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Bu yorumu sildiğinizde geri alınamaz.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+              >
+                İptal
+              </button>
+
+              <button
+                onClick={confirmDelete}
+                disabled={deleteCommentMutation.isPending}
+                className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {deleteCommentMutation.isPending ? 'Siliniyor...' : 'Sil'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

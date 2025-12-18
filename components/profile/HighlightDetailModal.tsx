@@ -45,8 +45,16 @@ export function HighlightDetailModal({ highlight, onClose }: HighlightDetailModa
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto pr-1 custom-scrollbar">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
-            {highlight.items?.map((item) => {
+          {/* 🔥 DEBUG: Highlight items kontrolü */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-2 text-xs text-neutral-500">
+              Items count: {highlight.items?.length || 0}
+            </div>
+          )}
+          
+          {highlight.items && highlight.items.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-1">
+              {highlight.items.map((item) => {
               const imageUrl = item.post.imageUrl
               // Güvenli başlık çıkarma - title öncelikli, sonra caption
               const artworkTitle = (
@@ -100,14 +108,18 @@ export function HighlightDetailModal({ highlight, onClose }: HighlightDetailModa
                 </Link>
               )
             })}
-          </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
+              <p className="text-sm mb-2">Bu temada henüz eser bulunmuyor.</p>
+              {process.env.NODE_ENV === 'development' && (
+                <p className="text-xs text-neutral-600">
+                  Debug: highlight.items = {highlight.items ? 'array (empty)' : 'undefined/null'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
-
-        {highlight.items?.length === 0 && (
-          <div className="text-center py-8 text-neutral-400 dark:text-neutral-500">
-            Bu temada henüz eser bulunmuyor.
-          </div>
-        )}
       </div>
     </div>
   )

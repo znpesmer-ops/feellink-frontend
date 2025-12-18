@@ -19,6 +19,7 @@ import {
   Activity,
   MessageCircle,
   Palette,
+  AlertTriangle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
@@ -99,6 +100,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/events', icon: Calendar, label: 'Etkinlikler' },
     { href: '/admin/tickets', icon: Ticket, label: 'Biletler' },
     { href: '/admin/moderation', icon: Shield, label: 'Moderasyon' },
+    { href: '/admin/reports', icon: AlertTriangle, label: 'Şikayetler' },
     { href: '/admin/analytics', icon: BarChart3, label: 'Analitik' },
     { href: '/admin/feature-flags', icon: Flag, label: 'Feature Flags' },
     { href: '/admin/audit-logs', icon: Activity, label: 'Audit Logs' },

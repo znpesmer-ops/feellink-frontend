@@ -107,7 +107,7 @@ export default function PublishedArticlesPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="w-full max-w-[720px] mx-auto px-4 py-6">
         <div className="flex items-center justify-center py-12">
           <div className="w-6 h-6 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
         </div>
@@ -116,10 +116,10 @@ export default function PublishedArticlesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6">
+      <h2 className="text-center text-lg font-semibold mb-6 text-gray-900 dark:text-white">
         Tüm Yayınlanan Yazılar
-      </h1>
+      </h2>
 
       {articles.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-gray-100 dark:border-gray-900 shadow-sm">
@@ -128,13 +128,13 @@ export default function PublishedArticlesPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {articles.map((article) => {
             const isOwner = user?.id === article.author.id
             return (
               <div
                 key={article.id}
-                className="relative border border-gray-200 dark:border-gray-800 rounded-xl p-5 bg-white dark:bg-[#1a1a1a] hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all shadow-sm hover:shadow-md"
+                className="relative w-full min-w-[320px] rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-[#1a1a1a] hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all shadow-sm hover:shadow-md overflow-hidden"
               >
                 {/* Menü butonu - Sadece yazı sahibi görür */}
                 {isOwner && (
@@ -224,7 +224,7 @@ export default function PublishedArticlesPage() {
                   <img
                     src={article.coverImage}
                     alt={article.title}
-                    className="w-full h-48 object-cover"
+                    className="w-full h-full aspect-[4/3] object-cover"
                   />
                 </div>
               )}

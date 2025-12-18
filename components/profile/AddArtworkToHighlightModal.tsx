@@ -154,7 +154,9 @@ export function AddArtworkToHighlightModal({
 
       // 🔥 KRİTİK: Query'yi refetch et ama await etme (background'da çalışır)
       // invalidateQueries yerine refetchQueries kullan - daha güvenli, placeholderData ile UI kaybolmaz
-      queryClient.refetchQueries({ queryKey: ['highlights', username] }).catch(() => {
+      // userId varsa query key'e ekle (daha stabil cache)
+      const queryKey = userId ? ['highlights', userId, username] : ['highlights', username]
+      queryClient.refetchQueries({ queryKey }).catch(() => {
         // Refetch hatası olsa bile UI kaybolmasın
       })
       

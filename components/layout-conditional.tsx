@@ -25,6 +25,7 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
   const mobileProfileMenuRef = useRef<HTMLDivElement>(null)
 
   const isFeed = pathname.startsWith('/feed')
+  const isExplore = pathname === '/explore'
   const isRoleSelection = pathname === '/select-role'
 
   useEffect(() => {
@@ -71,14 +72,14 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
       </div>
 
       {/* ANA İÇERİK */}
-      <div className="pt-[64px] lg:pl-64">
+      <div className="pt-[72px] lg:pl-64">
         <div className="flex">
           <main className="flex-1 px-4 md:px-10 pb-20 max-w-[900px] xl:max-w-[1100px] mx-auto">
             {children}
           </main>
-          {isFeed && (
+          {(isFeed || isExplore) && (
             <aside className="hidden xl:block w-[380px] flex-shrink-0 pt-4 pr-6">
-              <RightSidebar />
+              <RightSidebar mode={isExplore ? 'explore' : 'feed'} />
             </aside>
           )}
         </div>
@@ -109,7 +110,7 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
       )}
 
       {/* Mobil Sağ Sidebar */}
-      {isFeed && rightSidebarOpen && (
+      {(isFeed || isExplore) && rightSidebarOpen && (
         <div 
           className="lg:hidden fixed inset-0 bg-black/70 z-40"
           onClick={() => setRightSidebarOpen(false)}
@@ -147,8 +148,8 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
               <button onClick={toggleTheme} className="p-2 rounded-lg">
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
-              {isFeed && (
-                <button onClick={() => { setRightSidebarOpen(true); setRightSidebarTitle('Keşfet'); }}>
+              {(isFeed || isExplore) && (
+                <button onClick={() => { setRightSidebarOpen(true); setRightSidebarTitle(isExplore ? 'Keşfet' : 'Keşfet'); }}>
                   <User size={20} />
                 </button>
               )}
@@ -164,7 +165,7 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
                 </button>
                 {mobileProfileMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border z-50">
-                    <Link href={`/profile/${user.username || ''}`} onClick={() => setMobileProfileMenuOpen(false)} className="block px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-b">
+                    <Link href="/profile/me" onClick={() => setMobileProfileMenuOpen(false)} className="block px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-b">
                       <div className="flex items-center gap-2">
                         <User size={18} />
                         <span>Profilim</span>

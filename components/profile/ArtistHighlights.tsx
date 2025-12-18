@@ -24,6 +24,7 @@ interface Highlight {
       id: string
       imageUrl: string | null
       caption: string | null
+      title: string | null
     }
   }>
 }
@@ -113,27 +114,77 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
     carouselRef.current.scrollBy({ left: cardWidth * 3, behavior: 'smooth' })
   }
 
+  // 🔥 KRİTİK: Query key'e userId de ekle - username değişse bile aynı kullanıcı için cache korunur
+  const queryKey = userId ? ['highlights', userId, username] : ['highlights', username]
+  
   const { data: highlights, isLoading, isRefetching } = useQuery({
-    queryKey: ['highlights', username],
+    queryKey,
     queryFn: async () => {
+      // 🔥 DEBUG: Query başladığında logla
+      console.log('🔍 Fetching highlights:', { username, userId, queryKey })
+      
       try {
-        const response = await api.get(`/highlights/${username}`)
+        // 🔥 KRİTİK: userId varsa önce userId ile dene, yoksa username ile
+        // Bu sayede username değişse bile highlights bulunur
+        let response
+        if (userId) {
+          // Önce userId ile dene (daha güvenilir)
+          console.log(`📤 Trying /highlights/user/${userId}`)
+          try {
+            response = await api.get(`/highlights/user/${userId}`)
+            console.log(`✅ Got response from /highlights/user/${userId}:`, response.data?.length || 0, 'highlights')
+          } catch (err: any) {
+            console.warn(`⚠️ /highlights/user/${userId} failed:`, err?.response?.status || err?.message)
+            // userId endpoint'i yoksa username ile dene
+            if (err?.response?.status === 404 && username) {
+              console.log(`📤 Fallback to /highlights/${username}`)
+              response = await api.get(`/highlights/${username}`)
+              console.log(`✅ Got response from /highlights/${username}:`, response.data?.length || 0, 'highlights')
+            } else {
+              throw err
+            }
+          }
+        } else if (username) {
+          console.log(`📤 Trying /highlights/${username}`)
+          response = await api.get(`/highlights/${username}`)
+          console.log(`✅ Got response from /highlights/${username}:`, response.data?.length || 0, 'highlights')
+        } else {
+          console.warn('⚠️ No username or userId provided')
+          return []
+        }
+        
         // API'den gelen data her zaman array olmalı
         const data = response.data
-        return Array.isArray(data) ? data : []
-      } catch (error) {
-        console.error('Highlights yüklenemedi:', error)
+        const highlightsArray = Array.isArray(data) ? data : []
+        console.log(`📦 Returning ${highlightsArray.length} highlights`)
+        return highlightsArray
+      } catch (error: any) {
+        // 404 hatası normal (kullanıcının highlights'ı olmayabilir), sessizce handle et
+        if (error?.response?.status === 404) {
+          console.log('ℹ️ 404 - No highlights found (this is normal)')
+          return []
+        }
+        // Diğer hatalar için console'a log at (sadece development'ta)
+        console.error('❌ Highlights yüklenemedi:', {
+          status: error?.response?.status,
+          message: error?.response?.data?.message || error?.message,
+          username,
+          userId,
+        })
         return []
       }
     },
-    enabled: !!username,
+    enabled: !!(username || userId),
     // 🔥 KRİTİK: Stale data'yı göster (refetch sırasında highlights kaybolmasın)
     // previousData undefined olsa bile boş array döndür (UI kaybolmasın)
     placeholderData: (previousData) => previousData ?? [],
+    // 🔥 KRİTİK: Stale time'ı düşür - yeni tema oluşturulduğunda hemen görünsün
+    staleTime: 0, // Her zaman fresh data iste
     // Refetch sırasında da stale data'yı göster
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 0, // Her zaman fresh data iste
+    refetchOnMount: true, // Mount olduğunda refetch et
+    // 🔥 KRİTİK: Query cache'ini koru
+    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection time
   })
 
   // highlights her zaman array olmalı
@@ -193,7 +244,7 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
 
   return (
     <div className="w-full mb-6 relative group" onMouseEnter={() => {}}>
-      <h3 className="text-sm text-neutral-400 mb-2 dark:text-neutral-500">Öne Çıkan Temalar</h3>
+      <h3 className="text-sm text-neutral-400 mb-4 dark:text-neutral-500">Öne Çıkan Temalar</h3>
       {/* Carousel Container with snap scroll */}
       <div className="relative">
         {/* Left Arrow - Desktop only, hover visible */}
@@ -214,7 +265,7 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          className="flex gap-3 overflow-x-auto overflow-y-visible pb-2 scrollbar-hide"
+          className="flex gap-3 overflow-x-auto overflow-y-visible pt-6 pb-2 px-6 scrollbar-hide"
           style={{
             scrollBehavior: 'smooth',
             scrollSnapType: 'x mandatory',
@@ -224,6 +275,17 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
             cursor: isDragging ? 'grabbing' : 'grab',
           }}
         >
+          {/* Sadece kendi profilimizde "Yeni Tema" butonu göster - EN BAŞTA */}
+          {isOwnProfile && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex-shrink-0 w-32 h-40 rounded-2xl border border-dashed border-neutral-700 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 hover:border-orange-500 hover:text-orange-400 dark:hover:border-orange-500 dark:hover:text-orange-400 flex flex-col items-center justify-center gap-2 transition-all duration-300 hover:scale-105 snap-start"
+            >
+              <span className="text-2xl">＋</span>
+              <span className="text-xs font-medium text-center">Yeni Tema</span>
+            </button>
+          )}
+
           {highlightsArray.map((hl) => (
             <div
               key={hl.id}
@@ -292,17 +354,6 @@ export function ArtistHighlights({ username, userId, isOwnProfile = false }: Art
             )}
           </div>
         ))}
-
-          {/* Sadece kendi profilimizde "Yeni Tema" butonu göster */}
-          {isOwnProfile && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex-shrink-0 w-32 h-40 rounded-2xl border border-dashed border-neutral-700 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 hover:border-orange-500 hover:text-orange-400 dark:hover:border-orange-500 dark:hover:text-orange-400 flex flex-col items-center justify-center gap-2 transition-all duration-300 hover:scale-105 snap-start"
-            >
-              <span className="text-2xl">＋</span>
-              <span className="text-xs font-medium text-center">Yeni Tema</span>
-            </button>
-          )}
         </div>
 
         {/* Right Arrow - Desktop only, hover visible */}

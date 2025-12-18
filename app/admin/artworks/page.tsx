@@ -234,9 +234,6 @@ export default function AdminArtworksPage() {
                       <span className="text-sm font-semibold text-[var(--text)]">
                         {artwork.user.fullName || artwork.user.username}
                       </span>
-                      {artwork.code && (
-                        <span className="text-xs text-[var(--sub)]">Kod: {artwork.code}</span>
-                      )}
                     </div>
                   </div>
                   <button
@@ -247,6 +244,18 @@ export default function AdminArtworksPage() {
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
+
+                {/* Eser Kodu - Belirgin Gösterim */}
+                {artwork.code && (
+                  <div className="mb-2 px-3 py-1.5 bg-[var(--muted)] border border-[var(--border)] rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-[var(--sub)]">Kod:</span>
+                      <span className="text-sm font-mono font-semibold text-[var(--text)]">
+                        {artwork.code}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {artwork.title && (
                   <h3 className="text-lg font-bold text-[var(--text)] mb-2">{artwork.title}</h3>

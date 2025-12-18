@@ -4,50 +4,78 @@ import { useState, useEffect } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Heart, MessageCircle } from 'lucide-react'
+import { Heart, MessageCircle, Pin } from 'lucide-react'
 import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { ProRoleBadge } from '@/components/ProRoleBadge'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import PostCard from '@/components/PostCard'
 
-// ✅ Pinned Comment Component (Statik)
-function PinnedComment({ text }: { text: string }) {
+// ✅ Pinned Comment Component (Statik - Pin ikonu ile - Overlay için beyaz metin + kullanıcı adı)
+function PinnedComment({ user, text }: { user: string; text: string }) {
   return (
-    <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1 pinned-comment">
-      {text}
-    </p>
+    <div className="flex items-start justify-center gap-2">
+      <Pin className="w-4 h-4 text-brand-orange mt-1 shrink-0 drop-shadow" fill="currentColor" />
+      <div className="text-left">
+        <span className="block font-medium text-white/90 mb-0.5 drop-shadow-sm">
+          @{user}
+        </span>
+        <p className="line-clamp-2 text-white/85 leading-relaxed font-medium">
+          {text}
+        </p>
+      </div>
+    </div>
   )
 }
 
-// ✅ Rotating Comments Component (Slayt)
-function RotatingComments({ comments }: { comments: Array<{ id: string; content: string }> }) {
+// ✅ Rotating Comments Component (Slayt - Fade animasyonlu - Overlay için beyaz metin + kullanıcı adı)
+function RotatingComments({ comments }: { comments: Array<{ id: string; content: string; user?: { username: string } }> }) {
   const [index, setIndex] = useState(0)
+  const [fade, setFade] = useState(true)
 
   useEffect(() => {
     if (!comments.length || comments.length === 1) return
 
     const interval = setInterval(() => {
-      setIndex((prev) => (prev + 1) % comments.length)
-    }, 3500) // 3.5 saniye
+      setFade(false)
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % comments.length)
+        setFade(true)
+      }, 150) // Fade out süresi
+    }, 2500) // 2.5 saniye (ideal)
 
     return () => clearInterval(interval)
   }, [comments.length])
 
   if (!comments.length) return null
+  
+  const currentComment = comments[index] || comments[0]
+  const username = currentComment.user?.username || 'Kullanıcı'
+
   if (comments.length === 1) {
     return (
-      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">
-        {comments[0].content}
-      </p>
+      <div>
+        <span className="block font-medium text-white/90 mb-0.5 drop-shadow-sm">
+          @{username}
+        </span>
+        <p className="text-white/85 line-clamp-2 transition-opacity duration-300 leading-relaxed font-medium">
+          {currentComment.content}
+        </p>
+      </div>
     )
   }
 
   return (
-    <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1 rotating-comment">
-      {comments[index]?.content}
-    </p>
+    <div className={`transition-opacity duration-300 ${fade ? 'opacity-100' : 'opacity-0'}`}>
+      <span className="block font-medium text-white/90 mb-0.5 drop-shadow-sm">
+        @{username}
+      </span>
+      <p className="text-white/85 line-clamp-2 leading-relaxed font-medium">
+        {currentComment.content}
+      </p>
+    </div>
   )
 }
 
@@ -57,16 +85,17 @@ function CommentPreview({
   recentComments 
 }: { 
   pinnedComment: { user: string; text: string } | null
-  recentComments: Array<{ id: string; content: string; isPinned: boolean; createdAt: string }>
+  recentComments: Array<{ id: string; content: string; isPinned: boolean; createdAt: string; user?: { username: string } }>
 }) {
-  // Pinned comment varsa sadece onu göster
+  // 1️⃣ Sabitlenmiş yorum VARSA → Pin ikonu + metin göster
   if (pinnedComment) {
-    return <PinnedComment text={pinnedComment.text} />
+    return <PinnedComment user={pinnedComment.user} text={pinnedComment.text} />
   }
 
-  // Pinned yoksa rotating comments göster
-  if (recentComments.length > 0) {
-    return <RotatingComments comments={recentComments} />
+  // 2️⃣ Sabitlenmiş yorum YOKSA → Tüm yorumlar slayt (sabitlenmiş olmayanlar)
+  const normalComments = recentComments.filter(c => !c.isPinned)
+  if (normalComments.length > 0) {
+    return <RotatingComments comments={normalComments} />
   }
 
   return null
@@ -78,6 +107,17 @@ function ExploreContent() {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tümü')
   const [hoveredPostId, setHoveredPostId] = useState<string | null>(null)
+
+  // URL'den post ID'sini oku (sidebar'dan tıklanınca modal açılması için)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const postId = params.get('post')
+    if (postId) {
+      setSelectedPostId(postId)
+      // URL'yi temizle (modal kapandığında geri dönmemek için)
+      router.replace('/explore', { scroll: false })
+    }
+  }, [router])
 
   // Infinite scroll explore query
   const {
@@ -151,7 +191,7 @@ function ExploreContent() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto py-8 px-4">
+      <div className="w-full">
         {/* Filtre Barı - KALDIRILDI */}
         {/* 
         <div className="flex items-center justify-center gap-4 mt-6 mb-8">
@@ -171,147 +211,46 @@ function ExploreContent() {
         </div>
         */}
 
-        {/* Düzenli Grid View */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 p-3 md:p-6">
-          {posts.map((post: any, index: number) => (
-            <motion.div
-              key={post.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.05 }}
-              className="relative group bg-white/50 dark:bg-black/20 rounded-xl border border-brand-blue/30 hover:border-brand-orange transition-all duration-200 shadow-sm backdrop-blur-md cursor-pointer overflow-hidden hover:scale-[1.02] hover:shadow-brand-orange/30"
-              onClick={() => setSelectedPostId(post.id)}
-              onMouseEnter={() => setHoveredPostId(post.id)}
-              onMouseLeave={() => setHoveredPostId(null)}
-            >
-              {/* Media Container */}
-              <div className="relative w-full overflow-hidden">
-                {post.media && post.media.length > 0 && (
-                  <>
-                    {post.media[0].type === 'video' ? (
-                      <video
-                        src={resolveImageUrl(post.media[0].url)}
-                        className="w-full h-[380px] object-cover rounded-t-2xl"
-                        muted
-                      />
-                    ) : (
-                      (() => {
-                        const imageUrl = resolveImageUrl(post.media[0].url)
-                        console.log('Explore IMAGE URL:', imageUrl, 'Original:', post.media[0].url)
-                        return (
-                          <img
-                            src={imageUrl}
-                            alt={post.caption || 'Post'}
-                            className="w-full h-[380px] object-cover rounded-t-2xl"
-                            onError={(e) => {
-                              console.error('Explore Image Error:', imageUrl)
-                              ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                            }}
-                          />
-                        )
-                      })()
-                    )}
+        {/* Düzenli Grid View - PostCard explore variant kullanıyor */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 py-8 px-4">
+          {posts.map((post: any, index: number) => {
+            // PostCard için uygun formata dönüştür
+            const postCardData = {
+              id: post.id,
+              title: post.caption || 'Gönderi',
+              content: post.caption || '',
+              cover: post.media?.[0]?.url || null,
+              author: post.user?.fullName || post.user?.username || 'Kullanıcı',
+              authorUsername: post.user?.username,
+              authorAvatar: post.user?.avatar,
+              authorId: post.user?.id,
+              userId: post.userId || post.user?.id,
+              likes: post._count?.likes || 0,
+              likedBy: post.isLiked ? [post.user?.id] : [],
+              date: post.createdAt,
+              createdAt: post.createdAt,
+              _count: post._count,
+              type: post.type,
+            }
 
-                    {/* Pinned Icon - Top Right */}
-                    {post.pinnedComment && (
-                      <div className="absolute top-3 right-3 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center z-30">
-                        <span className="text-brand-orange text-xs">📌</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* 🔥 KRİTİK: Modern hover overlay - tüm kartı kaplayan blur + yorum gösterimi */}
-              {/* Pinned comment varsa onu göster, yoksa stats göster */}
-              {/* Mobilde hover yok, sadece desktop'ta göster */}
-              <div className="hidden md:flex absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex-col justify-center items-center text-white p-4 text-center rounded-2xl z-20 pointer-events-none">
-                {post.pinnedComment ? (
-                  <>
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageCircle className="w-5 h-5 text-brand-orange" />
-                      <span className="text-xs font-semibold text-brand-orange">Sabitlenmiş Yorum</span>
-                    </div>
-                    <p className="text-sm italic mb-3 leading-relaxed max-w-[90%]">
-                      "{post.pinnedComment.text}"
-                    </p>
-                    <span className="text-xs opacity-80">@{post.pinnedComment.user}</span>
-                  </>
-                ) : post._count.comments > 0 ? (
-                  <>
-                    <div className="flex items-center gap-2 mb-3">
-                      <MessageCircle className="w-5 h-5 text-brand-orange" />
-                      <span className="text-sm font-semibold">{post._count.comments} yorum</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-brand-orange' : ''}`} />
-                        <span>{post._count.likes}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <MessageCircle className="w-4 h-4" />
-                        <span>{post._count.comments}</span>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current text-brand-orange' : ''}`} />
-                      <span className="text-sm font-semibold">{post._count.likes} beğeni</span>
-                    </div>
-                    <p className="text-xs opacity-80">Henüz yorum yok</p>
-                  </>
-                )}
-              </div>
-
-              {/* Card Content */}
-              <div className="p-3 md:p-4">
-                {post.user && (
-                  <div className="flex items-center gap-2 mb-2">
-                    {post.user.avatar ? (
-                      <img
-                        src={resolveImageUrl(post.user.avatar)}
-                        alt={post.user.username}
-                        className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-700"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                        }}
-                      />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-brand-orange/10 dark:bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-xs">
-                        {post.user.username?.[0]?.toUpperCase() || 'U'}
-                      </div>
-                    )}
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">
-                      {post.user.username}
-                      <ProRoleBadge roles={(post.user as any).roles} plan={(post.user as any).plan} />
-                    </p>
-                  </div>
-                )}
-                {post.caption && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
-                    {post.caption}
-                  </p>
-                )}
-                
-                {/* ✅ Yorum Önizleme - Pinned veya Rotating */}
-                {post._count.comments > 0 && (
-                  <div className="flex items-center gap-2 mt-2 mb-2">
-                    <MessageCircle className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <CommentPreview 
-                      pinnedComment={post.pinnedComment}
-                      recentComments={post.recentComments || []}
-                    />
-                  </div>
-                )}
-                
-                <button className="text-brand-orange text-xs font-medium hover:text-brand-blue transition">
-                  Gönderiyi Gör
-                </button>
-              </div>
-            </motion.div>
-          ))}
+            return (
+              <motion.div
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.05 }}
+                onClick={() => setSelectedPostId(post.id)}
+              >
+                <PostCard
+                  post={postCardData}
+                  variant="explore"
+                  pinnedComment={post.pinnedComment}
+                  recentComments={post.recentComments || []}
+                  index={index}
+                />
+              </motion.div>
+            )
+          })}
         </div>
 
         {/* Load More */}

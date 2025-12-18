@@ -286,7 +286,7 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
             {isMenuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#151b2d] rounded-2xl shadow-lg border border-gray-100 dark:border-brand-blue/30 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                 <Link
-                  href={`/profile/${user?.username || ''}`}
+                  href="/profile/me"
                   onClick={() => setIsMenuOpen(false)}
                   className="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#1a2342] transition-colors border-b border-gray-100 dark:border-brand-blue/20"
                 >

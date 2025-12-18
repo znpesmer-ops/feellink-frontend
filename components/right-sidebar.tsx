@@ -39,18 +39,27 @@ const DEFAULT_AUTHOR_AVATAR =
 const DEFAULT_ARTICLE_IMAGE =
   'https://images.unsplash.com/photo-1526481280695-3c469b8c66b4?auto=format&fit=crop&w=960&q=80'
 
-export default function RightSidebar() {
+interface RightSidebarProps {
+  mode?: 'feed' | 'explore'
+}
+
+export default function RightSidebar({ mode }: RightSidebarProps = {}) {
   const pathname = usePathname()
   
-  // 🔥 KRİTİK: Sağ sidebar sadece ana sayfada görünsün
+  // 🔥 KRİTİK: Sağ sidebar feed ve explore sayfalarında görünsün
   // Ana sayfa: /feed veya / (root)
+  // Keşfet: /explore
   // Koleksiyonlar sayfasında görünmesin
   const isHomePage = pathname === '/feed' || pathname === '/'
+  const isExplore = pathname === '/explore'
   const isFeed = pathname === '/feed'
   const isCollections = pathname === '/collections'
   
-  // Ana sayfa değilse veya koleksiyonlar sayfasındaysa hiçbir şey render etme
-  if (!isHomePage || isCollections) {
+  // Mode prop'u yoksa pathname'den otomatik belirle
+  const sidebarMode = mode || (isExplore ? 'explore' : isHomePage ? 'feed' : null)
+  
+  // Ana sayfa veya explore değilse veya koleksiyonlar sayfasındaysa hiçbir şey render etme
+  if ((!isHomePage && !isExplore) || isCollections) {
     return null
   }
   
@@ -59,11 +68,29 @@ export default function RightSidebar() {
   const [topLikedArticles, setTopLikedArticles] = useState<any[]>([])
   const [museums, setMuseums] = useState<any[]>([])
   const [authors, setAuthors] = useState<Author[]>([])
+  const [explorePosts, setExplorePosts] = useState<Author[]>([])
 
-  // 📊 Global sidebar verilerini yükle - sadece ana sayfada
+  // 📊 Global sidebar verilerini yükle - feed ve explore sayfalarında
   useEffect(() => {
-    // Ana sayfa değilse hiçbir şey yapma
-    if (!isHomePage) return
+    // Ana sayfa veya explore değilse hiçbir şey yapma
+    if (!isHomePage && !isExplore) return
+
+    // 🔥 Explore modunda sadece güncel yazıları yükle
+    if (sidebarMode === 'explore') {
+      const fetchExplorePosts = async () => {
+        try {
+          // Her fetch'te farklı sonuç için timestamp ekle (cache bypass)
+          const res = await api.get(`/sidebar/explore/posts?limit=5&_t=${Date.now()}`)
+          const posts = res.data || []
+          setExplorePosts(posts)
+        } catch (err) {
+          console.error('Explore yazıları alınamadı', err)
+          setExplorePosts([])
+        }
+      }
+      fetchExplorePosts()
+      return // Explore modunda global veri yükleme
+    }
     
     const ensureAbsoluteUrl = (url?: string | null, fallback?: string) => {
       if (!url || url.trim() === '') return fallback ?? DEFAULT_ARTICLE_IMAGE
@@ -153,10 +180,10 @@ export default function RightSidebar() {
 
     fetchGlobalData()
 
-    // 🔥 Socket.IO bağlantısı - gerçek zamanlı güncelleme (sadece ana sayfada)
+    // 🔥 Socket.IO bağlantısı - gerçek zamanlı güncelleme (sadece feed sayfasında)
     let socket: Socket | null = null
     
-    if (isHomePage) {
+    if (isHomePage && sidebarMode === 'feed') {
       const baseURL = getApiBaseURL()
       socket = io(baseURL, {
         transports: ['websocket'],
@@ -183,7 +210,7 @@ export default function RightSidebar() {
         socket.disconnect()
       }
     }
-  }, [isHomePage])
+  }, [isHomePage, isExplore, sidebarMode])
 
   return (
     <>
@@ -193,45 +220,124 @@ export default function RightSidebar() {
                  pb-8
                  text-[#111] dark:text-gray-100`}
     >
-      {/* İçerik wrapper - feed için üstten boşluk, orta içerik ile aynı hizada başlamalı */}
-      <div className={`w-full flex flex-col ${isFeed ? 'mt-0 pt-4' : 'pt-4'}`}>
-        {/* 🏛️ Ayın Müzeleri - En üstte, en sağda */}
-        <div className="w-full">
-          {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-          <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-wide">
-          Ayın Müzeleri
-        </h3>
-        <div className="grid grid-cols-2 gap-4">
-          {museums.map((m) => (
-            <div
-              key={m.id}
-              className="relative rounded-2xl overflow-hidden shadow-sm hover:shadow-md cursor-pointer group transition-all duration-200"
-            >
-              {/* Background gradient fallback */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${m.color} opacity-90 z-0`} />
-              <div className="relative w-full h-[110px] overflow-hidden z-10">
-                {!imageErrors[`museum-${m.id}`] ? (
-                  <img
-                    src={resolveImageUrl(m.image)}
-                    alt={m.name}
-                    className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200 relative z-10"
-                    onError={() => {
-                      setImageErrors((prev) => ({ ...prev, [`museum-${m.id}`]: true }))
-                    }}
-                  />
+      {/* İçerik wrapper - feed ve explore için üstten boşluk, orta içerik ile aynı hizada başlamalı */}
+      <div className={`w-full flex flex-col ${(isFeed || isExplore) ? 'mt-0 pt-4' : 'pt-4'}`}>
+        {/* 🔥 Explore modunda sadece yazarlar gösterilir */}
+        {sidebarMode === 'explore' ? (
+          <>
+            {/* ✍️ Keşfet Yazıları */}
+            <div className="w-full">
+              <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
+                Keşfet Yazıları
+              </h3>
+              <div className="space-y-4">
+                {explorePosts.length > 0 ? (
+                  explorePosts.map((post) => (
+                    <Link
+                      key={post.id}
+                      href={
+                        post.lastPost?.link?.includes('feed?post=')
+                          ? `/explore?post=${post.id}`
+                          : post.lastPost?.link || `/articles/${post.id}`
+                      }
+                      className="flex items-start gap-3 p-3 rounded-xl
+                                 bg-gray-50 dark:bg-gray-800/50
+                                 border border-[rgba(40,120,255,0.25)] dark:border-[rgba(40,120,255,0.15)]
+                                 shadow-sm hover:shadow-md hover:-translate-y-[2px]
+                                 transition-all cursor-pointer group"
+                    >
+                      {/* Profil resmi */}
+                      <div className="relative w-[42px] h-[42px] rounded-full overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
+                        {!imageErrors[`author-${post.id}`] ? (
+                          <img
+                            src={resolveImageUrl(post.avatar)}
+                            alt={post.name}
+                            className="object-cover w-full h-full"
+                            onError={() => {
+                              setImageErrors((prev) => ({ ...prev, [`author-${post.id}`]: true }))
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <span className="text-gray-500 dark:text-gray-400 text-sm font-semibold">
+                              {post.name[0]}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Yazı başlığı ve yazar adı */}
+                      <div className="flex flex-col min-w-0">
+                        <p className="text-sm font-semibold text-[#222] dark:text-gray-100 mb-1">
+                          {post.lastPost?.title || 'Yazı'}
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug">
+                          {post.name}
+                        </p>
+                        {post.preview && (
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-1">
+                            "{post.preview}"
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+                  ))
                 ) : (
-                  <div className={`w-full h-full bg-gradient-to-br ${m.color} opacity-90`} />
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+                    Henüz yeni yazı yok
+                  </div>
                 )}
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end justify-center p-2 z-20">
-                <p className="text-white text-xs font-medium text-center drop-shadow-sm">
-                  {m.name}
-                </p>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* 🏛️ Ayın Müzeleri - Her zaman 2x2 grid (4 slot) - Kurumsal hesaplar otomatik hesaplanan */}
+            <div className="w-full">
+              {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
+              <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-wide">
+                Ayın Müzeleri
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 4 }, (_, i) => {
+                  const museum = museums[i] || null;
+                  return museum ? (
+                    <Link
+                      key={museum.id}
+                      href={`/profile/${museum.username || museum.id}`}
+                      className="relative rounded-2xl overflow-hidden border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] shadow-sm hover:shadow-md cursor-pointer group transition-all duration-200"
+                    >
+                      {/* Background gradient fallback */}
+                      <div className={`absolute inset-0 bg-gradient-to-br ${museum.color} opacity-90 z-0`} />
+                      <div className="relative w-full h-[110px] overflow-hidden z-10">
+                        {!imageErrors[`museum-${museum.id}`] ? (
+                          <img
+                            src={resolveImageUrl(museum.image)}
+                            alt={museum.name}
+                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200 relative z-10"
+                            onError={() => {
+                              setImageErrors((prev) => ({ ...prev, [`museum-${museum.id}`]: true }))
+                            }}
+                          />
+                        ) : (
+                          <div className={`w-full h-full bg-gradient-to-br ${museum.color} opacity-90`} />
+                        )}
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end justify-center p-2 z-20">
+                        <p className="text-white text-xs font-medium text-center drop-shadow-sm">
+                          {museum.name}
+                        </p>
+                      </div>
+                    </Link>
+                  ) : (
+                    <div
+                      key={`empty-${i}`}
+                      className="relative rounded-2xl border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] bg-gray-50 dark:bg-white/5 h-[110px]"
+                    />
+                  );
+                })}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
         {/* 🔥 En Çok Beğenilenler */}
         {topLikedArticles.length > 0 && (
@@ -247,9 +353,9 @@ export default function RightSidebar() {
                 href={`/articles/${article.id}`}
                 className="block p-3 rounded-xl
                          bg-gray-50 dark:bg-gray-800/50
-                         border border-gray-200 dark:border-gray-700/40
+                         border border-[rgba(40,120,255,0.25)] dark:border-[rgba(40,120,255,0.15)]
                          hover:bg-orange-50/70 dark:hover:bg-orange-500/10
-                         hover:border-[#ff7b00]/30 dark:hover:border-[#ff7b00]/30
+                         hover:border-[rgba(40,120,255,0.4)] dark:hover:border-[rgba(40,120,255,0.25)]
                          transition-all cursor-pointer group"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -280,73 +386,77 @@ export default function RightSidebar() {
           </div>
         )}
 
-        {/* ✍️ Ayın Yazarları */}
+        {/* ✍️ Aktif Yazarlar - 2x2 Grid (Ayın Müzeleri ile aynı yapı) */}
         <div className="mt-10">
         {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-        <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
-          Ayın Yazarları
+        <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-wide">
+          Aktif Yazarlar
         </h3>
-        <div className="space-y-4">
-          {authors.map((a) => (
-            <div
-              key={a.id}
-              onClick={() => setSelectedWriter(a)}
-              className="flex items-start gap-3 p-3 rounded-xl
-                         bg-gray-50 dark:bg-gray-800/50
-                         border border-gray-200 dark:border-white/10
-                         shadow-sm hover:shadow-md hover:-translate-y-[2px]
-                         transition-all cursor-pointer group"
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }, (_, i) => {
+            const author = authors[i] || null;
+            return author ? (
+              <Link
+                key={author.id}
+                href={`/profile/${author.slug || author.id}`}
+                className="relative rounded-2xl overflow-hidden border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] shadow-sm hover:shadow-md cursor-pointer group transition-all duration-200"
+              >
+                {/* Profil görseli - Kartın tamamını doldurur */}
+                <div className="relative w-full h-[110px] overflow-hidden">
+                  {!imageErrors[`author-${author.id}`] ? (
+                    <img
+                      src={resolveImageUrl(author.avatar)}
+                      alt={author.name}
+                      className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200"
+                      onError={() => {
+                        setImageErrors((prev) => ({ ...prev, [`author-${author.id}`]: true }))
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500/20 to-orange-500/20 flex items-center justify-center">
+                      <span className="text-gray-600 dark:text-gray-400 text-2xl font-semibold">
+                        {author.name[0]?.toUpperCase() || '?'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {/* Gradient overlay ve isim */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end justify-center p-2">
+                  <p className="text-white text-xs font-medium text-center drop-shadow-sm">
+                    {author.name}
+                  </p>
+                </div>
+              </Link>
+            ) : (
+              <div
+                key={`empty-author-${i}`}
+                className="relative rounded-2xl border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] bg-gray-50 dark:bg-white/5 h-[110px] opacity-50"
+              />
+            );
+          })}
+        </div>
+        </div>
+
+        {/* 📚 Tüm Yayınlanan Yazıları Gör Butonu - Modern Tasarım (sadece feed modunda) */}
+        {sidebarMode === 'feed' && (
+          <div className="mt-10 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-center">
+            <Link
+              href="/articles/published"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 
+                         bg-[#ff7b00] text-white font-medium text-sm rounded-xl 
+                         shadow-sm hover:bg-[#e36f00] hover:shadow-md 
+                         transition-all duration-300 ease-out
+                         dark:bg-[#ff7b00]/90 dark:hover:bg-[#ff7b00] 
+                         focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50
+                         group"
             >
-              {/* Profil resmi */}
-              <div className="relative w-[42px] h-[42px] rounded-full overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
-                {!imageErrors[`author-${a.id}`] ? (
-                  <img
-                    src={resolveImageUrl(a.avatar)}
-                    alt={a.name}
-                    className="object-cover w-full h-full"
-                    onError={() => {
-                      setImageErrors((prev) => ({ ...prev, [`author-${a.id}`]: true }))
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-gray-500 dark:text-gray-400 text-sm font-semibold">
-                      {a.name[0]}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* İsim ve alıntı */}
-              <div className="flex flex-col min-w-0">
-                <p className="text-sm font-semibold text-[#222] dark:text-gray-100 mb-1">
-                  {a.name}
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug">
-                  "{a.preview}"
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-        </div>
-
-        {/* 📚 Tüm Yayınlanan Yazıları Gör Butonu - Modern Tasarım */}
-        <div className="mt-10 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 flex justify-center">
-          <Link
-            href="/articles/published"
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 
-                       bg-[#ff7b00] text-white font-medium text-sm rounded-xl 
-                       shadow-sm hover:bg-[#e36f00] hover:shadow-md 
-                       transition-all duration-300 ease-out
-                       dark:bg-[#ff7b00]/90 dark:hover:bg-[#ff7b00] 
-                       focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/50
-                       group"
-          >
-            <span>Tüm Yayınlanan Yazıları Gör</span>
-            <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-          </Link>
-        </div>
+              <span>Tüm Yayınlanan Yazıları Gör</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </Link>
+          </div>
+        )}
+          </>
+        )}
       </div>
     </aside>
 

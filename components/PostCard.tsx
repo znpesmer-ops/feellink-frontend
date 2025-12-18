@@ -27,12 +27,22 @@ interface PostCardProps {
     likedBy?: string[]
     date: string
     createdAt: string
+    _count?: {
+      comments: number
+      likes: number
+    }
+    type?: string
   }
   onLike?: (id: string) => void
   onDelete?: (id: string) => void
+  variant?: 'default' | 'explore'
+  pinnedComment?: { user: string; text: string } | null
+  recentComments?: Array<{ id: string; content: string; isPinned: boolean; createdAt: string; user?: { username: string } }>
+  index?: number
+  showLike?: boolean // Ana sayfa için beğeni butonunu gizlemek için
 }
 
-export default function PostCard({ post, onLike, onDelete }: PostCardProps) {
+export default function PostCard({ post, onLike, onDelete, variant = 'default', pinnedComment, recentComments, index, showLike = true }: PostCardProps) {
   const router = useRouter()
   const { user, accessToken } = useAuthStore()
   const queryClient = useQueryClient()
@@ -45,6 +55,10 @@ export default function PostCard({ post, onLike, onDelete }: PostCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  
+  // Explore variant için hover ve yorum döngüsü state'leri
+  const [isHovered, setIsHovered] = useState(false)
+  const [activeCommentIndex, setActiveCommentIndex] = useState(0)
 
   // Check if current user is the post owner
   const isOwner = user?.id === post.userId || user?.id === post.authorId || user?.username === post.authorUsername
@@ -90,6 +104,21 @@ export default function PostCard({ post, onLike, onDelete }: PostCardProps) {
       postsSocket.off('postLikeUpdated')
     }
   }, [accessToken, post.id, user?.id])
+
+  // Explore variant için hover durumunda yorum döngüsü
+  useEffect(() => {
+    if (variant !== 'explore' || !isHovered || !recentComments || recentComments.length === 0) {
+      return
+    }
+
+    const interval = setInterval(() => {
+      setActiveCommentIndex((prev) =>
+        prev === recentComments.length - 1 ? 0 : prev + 1
+      )
+    }, 2500) // 2.5 saniye → ideal, acele etmiyor
+
+    return () => clearInterval(interval)
+  }, [isHovered, recentComments, variant])
 
   // Like mutation - Backend API
   const likeMutation = useMutation({
@@ -209,6 +238,226 @@ export default function PostCard({ post, onLike, onDelete }: PostCardProps) {
     }
   }, [menuOpen])
 
+  // Explore variant için özel render
+  if (variant === 'explore') {
+    const commentsCount = post._count?.comments || 0
+    const likesCount = post.likes || post._count?.likes || 0
+    
+    // Deterministic renk seçimi - index'e göre alternatif turuncu/mavi
+    const cardIndex = index ?? 0
+    const isOrange = cardIndex % 2 === 0
+    const borderColor = isOrange 
+      ? 'border-[rgba(255,140,0,0.3)] dark:border-[rgba(255,140,0,0.15)]'
+      : 'border-[rgba(40,120,255,0.3)] dark:border-[rgba(40,120,255,0.15)]'
+    
+    return (
+      <div
+        onClick={handleCardClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false)
+          setActiveCommentIndex(0) // Hover çıkınca başa dön
+        }}
+        className={`relative w-full max-w-[320px] mx-auto bg-gray-900 dark:bg-[#111] rounded-[16px] overflow-hidden border ${borderColor} shadow-sm hover:shadow-lg hover:shadow-brand-orange/20 transition-all hover:-translate-y-1 group cursor-pointer`}
+      >
+        {/* Keşfet Etiketi - Sol üst */}
+        <div className="absolute top-3 left-3 z-10 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-white/20">
+          <p className="text-xs font-medium text-white/80">
+            Keşfet {post.type && <span className="text-white/60">• {post.type === 'artwork' ? 'Eser' : post.type === 'event' ? 'Etkinlik' : 'Gönderi'}</span>}
+          </p>
+        </div>
+
+        {/* Görsel - Kartın %70-75'ini kaplar */}
+        {post.cover && (
+          <div className="relative w-full" style={{ height: '70%', minHeight: '280px' }}>
+            <img
+              src={resolveImageUrl(post.cover)}
+              alt={post.title}
+              className={`w-full h-full object-cover transition-all duration-300 ${
+                isHovered ? 'blur-sm scale-105' : ''
+              }`}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+              }}
+            />
+            {/* Gradient Overlay - En altta yazı okunurluğu için */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+            
+            {/* Hover Overlay - Blur + Dark + Yorum Döngüsü (Sadece yorum varsa) */}
+            {isHovered && recentComments && recentComments.length > 0 && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20 transition-opacity duration-300">
+                {/* Üstte - Beğeni ve Yorum Sayıları (Sadece Bilgi, Tıklanamaz) */}
+                <div className="absolute top-3 right-3 flex items-center gap-3 text-white/90 text-xs font-medium pointer-events-none">
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-4 h-4" />
+                    {likesCount}
+                  </span>
+                  {commentsCount > 0 && (
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="w-4 h-4" />
+                      {commentsCount}
+                    </span>
+                  )}
+                </div>
+
+                {/* Ortada/Altta - Yorum Metinleri Döngü Halinde */}
+                <div className="absolute bottom-4 left-4 right-4">
+                  <p className="text-sm text-white/90 line-clamp-2 transition-opacity duration-500 font-medium italic">
+                    "{(() => {
+                      const comment = recentComments[activeCommentIndex]?.content || ''
+                      // İlk 2-3 kelimeyi al, maksimum 50 karakter
+                      const words = comment.split(' ').slice(0, 3).join(' ')
+                      if (words.length > 50) {
+                        return comment.substring(0, 50) + '...'
+                      }
+                      return comment.length > words.length ? words + '...' : words
+                    })()}"
+                  </p>
+                  {recentComments.length > 1 && (
+                    <p className="text-xs text-white/60 mt-1">
+                      {activeCommentIndex + 1} / {recentComments.length}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Alt Bilgi Alanı - Yarı transparan overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/70 to-transparent">
+          {/* Başlık */}
+          <h3 className="text-base font-semibold text-white mb-2 line-clamp-1">
+            {post.title}
+          </h3>
+
+          {/* Alt açıklama - Kullanıcı + etkileşim */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {post.authorAvatar ? (
+                <img
+                  src={resolveImageUrl(post.authorAvatar)}
+                  alt={post.author}
+                  className="w-5 h-5 rounded-full object-cover border border-white/20"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                  }}
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-white">
+                    {post.author[0]?.toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <p className="text-xs text-white/80 font-medium">
+                {post.authorUsername || post.author}
+              </p>
+              {commentsCount > 0 && (
+                <span className="text-xs text-white/60">• {commentsCount} yorum</span>
+              )}
+            </div>
+
+            {/* Minimal etkileşim ikonu - Alt sağ */}
+            <div className="flex items-center gap-1.5 text-white/70">
+              {commentsCount > 0 ? (
+                <>
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="text-xs font-medium">{commentsCount}</span>
+                </>
+              ) : (
+                <>
+                  <Heart 
+                    className={`w-4 h-4 ${isLiked ? 'fill-brand-orange text-brand-orange' : ''}`}
+                  />
+                  <span className="text-xs font-medium">{likesCount}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CTA - Gönderiyi keşfet */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleCardClick()
+            }}
+            className="mt-3 w-full text-xs font-medium text-brand-orange hover:text-brand-blue transition-colors text-left"
+          >
+            Gönderiyi keşfet →
+          </button>
+        </div>
+
+        {/* Menü butonu - Sadece sahip görür */}
+        {isOwner && (
+          <div ref={menuRef} className="absolute top-3 right-3 z-20">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(!menuOpen)
+              }}
+              className="p-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors pointer-events-auto"
+            >
+              <MoreVertical size={16} />
+            </button>
+            
+            {menuOpen && (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-10 right-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[120px] z-30"
+              >
+                <button
+                  onClick={handleDeleteClick}
+                  disabled={deleteMutation.isPending}
+                  className="w-full px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={16} />
+                  Sil
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Silme onay modalı */}
+        {confirmDelete && (
+          <div 
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            onClick={handleCancelDelete}
+          >
+            <div 
+              className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Gönderiyi Sil
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                Bu gönderiyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelDelete}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleteMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleteMutation.isPending ? 'Siliniyor...' : 'Sil'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Default variant (mevcut tasarım)
   return (
     <div
       onClick={handleCardClick}
@@ -368,28 +617,30 @@ export default function PostCard({ post, onLike, onDelete }: PostCardProps) {
           </div>
         </Link>
 
-        {/* Beğeni butonu - Animasyonlu */}
-        <button
-          onClick={handleLike}
-          disabled={likeMutation.isPending}
-          className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${
-            isLiked
-              ? 'text-brand-orange bg-brand-blue/10 dark:bg-brand-blue/20'
-              : 'text-gray-600 dark:text-gray-400 hover:text-brand-orange'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <Heart
-            size={18}
-            className={`transition-all duration-300 ${animateLike ? 'scale-125' : 'scale-100'} ${
-              isLiked ? 'fill-brand-orange text-brand-orange' : ''
-            }`}
-            strokeWidth={isLiked ? 0 : 2}
-          />
-          {(animateLike || pingAnimating) && (
-            <span className="absolute inset-0 animate-ping bg-brand-orange/40 rounded-lg"></span>
-          )}
-          <span className="text-sm font-medium">{likesCount}</span>
-        </button>
+        {/* Beğeni butonu - Sadece showLike=true ise göster (ana sayfa için false) */}
+        {showLike && (
+          <button
+            onClick={handleLike}
+            disabled={likeMutation.isPending}
+            className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${
+              isLiked
+                ? 'text-brand-orange bg-brand-blue/10 dark:bg-brand-blue/20'
+                : 'text-gray-600 dark:text-gray-400 hover:text-brand-orange'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <Heart
+              size={18}
+              className={`transition-all duration-300 ${animateLike ? 'scale-125' : 'scale-100'} ${
+                isLiked ? 'fill-brand-orange text-brand-orange' : ''
+              }`}
+              strokeWidth={isLiked ? 0 : 2}
+            />
+            {(animateLike || pingAnimating) && (
+              <span className="absolute inset-0 animate-ping bg-brand-orange/40 rounded-lg"></span>
+            )}
+            <span className="text-sm font-medium">{likesCount}</span>
+          </button>
+        )}
       </div>
     </div>
   )

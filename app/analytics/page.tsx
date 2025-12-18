@@ -166,6 +166,12 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [isHydrated, setIsHydrated] = useState(false);
   const [openEvent, setOpenEvent] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<'today' | '7d' | '30d'>('30d');
+  const [topPerforming, setTopPerforming] = useState<any>(null);
+  const [saveAnalytics, setSaveAnalytics] = useState<any>(null);
+  const [sourceDistribution, setSourceDistribution] = useState<any>(null);
+  const [comparison, setComparison] = useState<any>(null);
+  const [lowEngagement, setLowEngagement] = useState<any>(null);
 
   const resolveAvatarUrl = (avatar?: string | null) => {
     if (!avatar || avatar.trim() === "") {
@@ -263,12 +269,17 @@ export default function AnalyticsPage() {
     async function fetchAnalytics() {
       try {
         setLoading(true);
-        const [visitsRes, wordsRes, usersRes, eventsRes, colorPaletteRes] = await Promise.all([
-          api.get("/analytics/visits"),
+        const [visitsRes, wordsRes, usersRes, eventsRes, colorPaletteRes, topPerformingRes, saveAnalyticsRes, sourceRes, comparisonRes, lowEngagementRes] = await Promise.all([
+          api.get(`/analytics/visits?range=${dateRange}`),
           api.get("/analytics/words"),
           api.get("/analytics/top-users"),
           api.get("/analytics/event-stats"),
           api.get("/analytics/color-palette").catch(() => ({ data: [] })), // Renk paleti yoksa boş array
+          api.get(`/analytics/top-performing?range=${dateRange}`).catch(() => ({ data: null })),
+          api.get(`/analytics/saves?range=${dateRange}`).catch(() => ({ data: null })),
+          api.get(`/analytics/sources?range=${dateRange}`).catch(() => ({ data: null })),
+          api.get(`/analytics/comparison?range=${dateRange}`).catch(() => ({ data: null })),
+          api.get("/analytics/low-engagement").catch(() => ({ data: null })),
         ]);
 
         setVisits(visitsRes.data);
@@ -280,6 +291,11 @@ export default function AnalyticsPage() {
         setTopUsers(filteredUsers);
         setEventStats(eventsRes.data);
         setColorPalette(colorPaletteRes.data || []);
+        setTopPerforming(topPerformingRes.data);
+        setSaveAnalytics(saveAnalyticsRes.data);
+        setSourceDistribution(sourceRes.data);
+        setComparison(comparisonRes.data);
+        setLowEngagement(lowEngagementRes.data);
       } catch (err: any) {
         console.error("Analiz verileri alınamadı:", err);
         toast.error(err.response?.data?.message || "Analiz verileri yüklenemedi");
@@ -289,7 +305,7 @@ export default function AnalyticsPage() {
     }
 
     fetchAnalytics();
-  }, [user, capabilities, pro, isHydrated]);
+  }, [user, capabilities, pro, isHydrated, dateRange]);
 
   // 🎟️ Gerçek zamanlı bilet güncellemeleri için socket bağlantısı
   useEffect(() => {
@@ -517,10 +533,28 @@ export default function AnalyticsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Başlık */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#FF8A00] flex items-center gap-3 mb-2">
-            <TrendingUp className="w-8 h-8" />
-            Analizlerim
-          </h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-[#FF8A00] flex items-center gap-3">
+              <TrendingUp className="w-8 h-8" />
+              Analizlerim
+            </h1>
+            {/* Zaman Kırılımı Toggle */}
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+              {(['today', '7d', '30d'] as const).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setDateRange(range)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    dateRange === range
+                      ? 'bg-[#FF8A00] text-white'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {range === 'today' ? 'Bugün' : range === '7d' ? '7g' : '30g'}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="text-gray-500 dark:text-gray-400">
             İçeriğinizin performansını ve etkileşimlerini takip edin
           </p>
@@ -536,10 +570,30 @@ export default function AnalyticsPage() {
           <div className="w-full mt-10 grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-8">
           {/* Etkileşim Trendi */}
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
-            <h3 className="text-[#FF8A00] font-semibold mb-4">Etkileşim Trendi (Son 30 Gün)</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#FF8A00] font-semibold">
+                Etkileşim Trendi
+                {dateRange === 'today' && ' (Bugün)'}
+                {dateRange === '7d' && ' (Son 7 Gün)'}
+                {dateRange === '30d' && ' (Son 30 Gün)'}
+              </h3>
+            </div>
             <div className="h-[300px]">
               <Line data={visitsChartData} options={lineChartOptions} />
             </div>
+            {comparison && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {comparison.likes.change > 0 ? '↑' : comparison.likes.change < 0 ? '↓' : '→'} 
+                  {' '}Beğeni: {comparison.likes.change > 0 ? '+' : ''}{comparison.likes.change}% (geçen döneme göre)
+                </p>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+              {dateRange === 'today' 
+                ? 'Günlük etkileşimleriniz saatlik olarak gösterilmektedir.'
+                : 'Bu tür içerikler daha çok etkileşim alıyor.'}
+            </p>
           </div>
 
           {/* En Çok Kullanılan Kelimeler */}
@@ -685,6 +739,176 @@ export default function AnalyticsPage() {
               </div>
             )}
           </div>
+
+          {/* Top Performing Content */}
+          {topPerforming && (
+            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+              <h3 className="text-[#FF8A00] font-semibold mb-4">Bu Dönemin Öne Çıkanları</h3>
+              <div className="space-y-4">
+                {topPerforming.mostViewed && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40">
+                    {topPerforming.mostViewed.thumbnail && (
+                      <img
+                        src={topPerforming.mostViewed.thumbnail}
+                        alt={topPerforming.mostViewed.title}
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                        {topPerforming.mostViewed.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        ↑ En çok görüntülenen
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {topPerforming.mostCommented && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40">
+                    {topPerforming.mostCommented.thumbnail && (
+                      <img
+                        src={topPerforming.mostCommented.thumbnail}
+                        alt={topPerforming.mostCommented.title}
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                        {topPerforming.mostCommented.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        ↑ En çok yorum alan
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {topPerforming.mostSaved && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/40">
+                    {topPerforming.mostSaved.thumbnail && (
+                      <img
+                        src={topPerforming.mostSaved.thumbnail}
+                        alt={topPerforming.mostSaved.title}
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                        {topPerforming.mostSaved.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        ↑ En çok kaydedilen
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 italic">
+                Yorum alan içerikler daha uzun süre öne çıkıyor.
+              </p>
+            </div>
+          )}
+
+          {/* Kaydedilme Analizi */}
+          {saveAnalytics && (
+            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+              <h3 className="text-[#FF8A00] font-semibold mb-4">Kaydedilme Etkisi</h3>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-2xl font-bold text-[#1E88E5]">{saveAnalytics.totalSaves}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Toplam Kaydedilme</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[#FF8A00]">%{saveAnalytics.saveRate}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Kaydetme Oranı</p>
+                </div>
+                {saveAnalytics.mostSaved && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                      En Çok Kaydedilen
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {saveAnalytics.mostSaved.thumbnail && (
+                        <img
+                          src={saveAnalytics.mostSaved.thumbnail}
+                          alt={saveAnalytics.mostSaved.title}
+                          className="w-12 h-12 rounded-lg object-cover"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {saveAnalytics.mostSaved.title}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {saveAnalytics.mostSaved.saves} kaydetme
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 italic">
+                Kaydedilen içerikler uzun vadeli etki gösterir.
+              </p>
+            </div>
+          )}
+
+          {/* Keşfet Kaynak Dağılımı */}
+          {sourceDistribution && (
+            <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm">
+              <h3 className="text-[#FF8A00] font-semibold mb-4">Keşfet Kaynak Dağılımı</h3>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Keşfet</span>
+                    <span className="text-sm font-semibold text-[#1E88E5]">%{sourceDistribution.explore}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-[#1E88E5] h-2 rounded-full"
+                      style={{ width: `${sourceDistribution.explore}%` }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Profil</span>
+                    <span className="text-sm font-semibold text-[#FF8A00]">%{sourceDistribution.profile}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-[#FF8A00] h-2 rounded-full"
+                      style={{ width: `${sourceDistribution.profile}%` }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Ana Sayfa</span>
+                    <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">%{sourceDistribution.home}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-gray-400 dark:bg-gray-500 h-2 rounded-full"
+                      style={{ width: `${sourceDistribution.home}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 italic">
+                Keşfette görünürlük artıyor.
+              </p>
+            </div>
+          )}
+
+          {/* Pasif Uyarı Sistemi */}
+          {lowEngagement && lowEngagement.hasWarning && (
+            <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-300 dark:border-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                ⚠️ Bazı içerikler son 14 günde daha az etkileşim alıyor ({lowEngagement.count} içerik).
+              </p>
+            </div>
+          )}
 
           {/* 🎨 Renk Analizi Kartı — TOP COLORS CLOUD */}
           {(() => {
