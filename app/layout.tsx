@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Providers } from './providers'
 import { LayoutConditional } from '@/components/layout-conditional'
+// import { Onboarding } from '@/components/Onboarding' // Kaldırıldı - ürün seviyesi için gereksiz
 
 export const metadata: Metadata = {
   title: 'Feellink',
@@ -14,13 +15,17 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="tr" suppressHydrationWarning>
+    <html lang="tr">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body className="font-sans antialiased bg-white dark:bg-gray-950 text-[#1f1f1f] dark:text-gray-100 transition-colors min-h-screen">
+      <body
+        suppressHydrationWarning
+        className="font-sans antialiased bg-[#f7f8fa] dark:bg-gray-950 text-[#1f1f1f] dark:text-gray-100 transition-colors min-h-screen"
+      >
         <Providers>
           {children}
+          {/* <Onboarding /> */}
         </Providers>
       </body>
     </html>

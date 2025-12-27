@@ -18,19 +18,11 @@ export default function ForgotPasswordPage() {
 
     try {
       const res = await api.post('/auth/forgot-password', { email });
+      // ✅ Sadece success mesajı göster (reset URL kullanıcıya gösterilmez)
       setMessage(
         res.data?.message ||
           'Eğer bu e-posta ile kayıtlı bir hesabınız varsa, şifre sıfırlama bağlantısı e-posta adresinize gönderildi.'
       );
-      
-      // Development modunda mail gönderimi başarısız olduğunda kullanıcıya bilgi ver
-      if (res.data?.developmentMode && res.data?.resetUrl) {
-        setMessage(
-          `⚠️ Development Modu: Mail gönderimi başarısız oldu. SMTP ayarlarını kontrol edin.\n\n` +
-          `Şifre sıfırlama linki:\n${res.data.resetUrl}\n\n` +
-          `Bu linki kopyalayıp tarayıcıda açabilirsiniz.`
-        );
-      }
     } catch (err: any) {
       setError('İşlem sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
       console.error(err);

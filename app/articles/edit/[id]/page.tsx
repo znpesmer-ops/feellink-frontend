@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { Upload, X } from 'lucide-react'
 import ArticleImageCropper from '@/components/articles/ArticleImageCropper'
+import RichTextEditor from '@/components/articles/RichTextEditor'
 
 function EditArticleContent() {
   const params = useParams()
@@ -189,8 +190,7 @@ function EditArticleContent() {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-900 p-6 md:p-8 transition-colors">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-          <span>✏️</span>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Yazıyı Düzenle
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
@@ -274,17 +274,15 @@ function EditArticleContent() {
             </p>
           </div>
 
-          {/* İçerik */}
+          {/* İçerik - Rich Text Editor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               İçerik *
             </label>
-            <textarea
+            <RichTextEditor
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={setContent}
               placeholder="Yazının içeriğini buraya yaz..."
-              rows={12}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-xl bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ff7b00] transition-all resize-none"
             />
           </div>
 

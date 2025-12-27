@@ -11,6 +11,7 @@ import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import toast from 'react-hot-toast'
 import { PostModal } from '@/components/post-modal'
 import { AddItemModal } from '@/components/collections/AddItemModal'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface CollectionItem {
   id: string
@@ -186,43 +187,68 @@ export default function CollectionDetailPage() {
               </div>
             </div>
 
-            {isOwner && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md flex items-center gap-2"
-                >
-                  <Plus size={18} />
-                  Eser Ekle
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Items Grid */}
-        {collection.items.length === 0 ? (
-          <div className="w-full py-20 flex flex-col items-center text-center opacity-70">
-            <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-2">
-              Bu koleksiyonda henüz eser yok
-            </p>
-            {isOwner && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="mt-4 px-4 py-2 rounded-lg bg-[#ff7b00] hover:bg-[#e36f00] text-white font-medium transition shadow-md"
-              >
-                İlk Eseri Ekle
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-            {collection.items.map((item) => (
-              <div
-                key={item.id}
-                className="group relative rounded-xl overflow-hidden bg-white dark:bg-[#0f0f0f] border border-gray-200 dark:border-white/5 hover:scale-[1.02] transition-all duration-300 shadow-sm hover:shadow-lg cursor-pointer"
-                onClick={() => setSelectedPostId(item.post.id)}
-              >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+          {/* ✅ "+ Eser Ekle" kartı - Grid'in ilk elemanı (sadece owner için) */}
+          {isOwner && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              onClick={() => setShowAddModal(true)}
+              className="group relative rounded-xl overflow-hidden bg-white dark:bg-[#0f0f0f] border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#ff7b00] dark:hover:border-[#ff7b00] hover:bg-[#ff7b00]/5 dark:hover:bg-[#ff7b00]/10 transition-all duration-300 shadow-sm hover:shadow-lg hover:scale-[1.02] flex flex-col items-center justify-center aspect-[3/4] min-h-[200px]"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="flex flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500 group-hover:text-[#ff7b00] transition-colors">
+                <motion.div 
+                  className="w-12 h-12 rounded-full border-2 border-current flex items-center justify-center"
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Plus size={24} className="stroke-[2.5]" />
+                </motion.div>
+                <div className="text-center">
+                  <p className="font-semibold text-sm mb-1">Eser Ekle</p>
+                  <p className="text-xs opacity-70">Koleksiyona eser ekle</p>
+                </div>
+              </div>
+              {/* Hover glow effect */}
+              <motion.div 
+                className="absolute inset-0 bg-[#ff7b00]/0 group-hover:bg-[#ff7b00]/5 dark:group-hover:bg-[#ff7b00]/10 transition-colors rounded-xl pointer-events-none"
+                whileHover={{ opacity: 1 }}
+              />
+            </motion.button>
+          )}
+
+          {/* Koleksiyon eserleri */}
+          {collection.items.length === 0 ? (
+            isOwner ? null : (
+              <div className="col-span-full w-full py-20 flex flex-col items-center text-center opacity-70">
+                <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-2">
+                  Bu koleksiyonda henüz eser yok
+                </p>
+              </div>
+            )
+          ) : (
+            <AnimatePresence>
+              {collection.items.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ 
+                    duration: 0.3,
+                    delay: index * 0.05, // Stagger effect
+                    ease: [0.4, 0, 0.2, 1]
+                  }}
+                  className="group relative rounded-xl overflow-hidden bg-white dark:bg-[#0f0f0f] border border-gray-200 dark:border-white/5 hover:scale-[1.02] transition-all duration-300 shadow-sm hover:shadow-lg cursor-pointer"
+                  onClick={() => setSelectedPostId(item.post.id)}
+                >
                 {/* Media */}
                 <div className="relative w-full h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
                   {item.post.media && item.post.media.length > 0 ? (
@@ -282,10 +308,11 @@ export default function CollectionDetailPage() {
                     <span>@{item.post.user.username || 'bilinmeyen'}</span>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        )}
+            </AnimatePresence>
+          )}
+        </div>
       </div>
 
       {/* Post Modal */}
@@ -299,9 +326,13 @@ export default function CollectionDetailPage() {
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSuccess={() => {
-          // Refresh collection data
+          // Refresh collection data with animation
           api.get<Collection>(`/collections/${collectionId}`).then((res) => {
             setCollection(res.data)
+            toast.success('Eser koleksiyona eklendi', {
+              icon: '✨',
+              duration: 2000,
+            })
           })
         }}
       />

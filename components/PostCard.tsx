@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Heart, MoreVertical, Trash2, MessageCircle } from 'lucide-react'
+import { Heart, MoreVertical, Trash2, MessageCircle, FolderPlus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
@@ -11,6 +11,7 @@ import { initPostsSocket } from '@/lib/socket'
 import { ProRoleBadge } from './ProRoleBadge'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import toast from 'react-hot-toast'
+import { AddToCollectionModal } from './collections/AddToCollectionModal'
 
 interface PostCardProps {
   post: {
@@ -44,16 +45,18 @@ interface PostCardProps {
 
 export default function PostCard({ post, onLike, onDelete, variant = 'default', pinnedComment, recentComments, index, showLike = true }: PostCardProps) {
   const router = useRouter()
-  const { user, accessToken } = useAuthStore()
+  const { user, accessToken, capabilities } = useAuthStore()
   const queryClient = useQueryClient()
   const [isLiked, setIsLiked] = useState(
     post.likedBy?.includes(user?.id || '') || false
   )
-  const [likesCount, setLikesCount] = useState(post.likes || 0)
+  const [likesCount, setLikesCount] = useState(post.likes || post._count?.likes || 0)
+  const [commentsCount, setCommentsCount] = useState(post._count?.comments || 0)
   const [animateLike, setAnimateLike] = useState(false)
   const [pingAnimating, setPingAnimating] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showAddToCollectionModal, setShowAddToCollectionModal] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   
   // Explore variant için hover ve yorum döngüsü state'leri
@@ -62,6 +65,11 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
 
   // Check if current user is the post owner
   const isOwner = user?.id === post.userId || user?.id === post.authorId || user?.username === post.authorUsername
+  
+  // ✅ Tüm kullanıcılar koleksiyona eser ekleyebilir
+  const roles = capabilities?.roles ?? user?.roles ?? []
+  const canManageCollections = true // Herkes koleksiyona eser ekleyebilir
+  const isArtwork = post.type === 'artwork'
 
   // 🔔 Socket.IO ile real-time beğeni dinleme
   useEffect(() => {
@@ -100,8 +108,18 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
       }
     })
 
+    // 🔔 Socket.IO ile real-time yorum sayısı dinleme
+    postsSocket.on('post:comment', (data: { postId: string; comments: number }) => {
+      if (data.postId === post.id) {
+        console.log(`💬 [PostCard] Yorum sayısı güncellendi - postId: ${post.id}, comments: ${data.comments}`)
+        // ✅ KRİTİK: State'i hemen güncelle (explore variant hover overlay için)
+        setCommentsCount(data.comments)
+      }
+    })
+
     return () => {
       postsSocket.off('postLikeUpdated')
+      postsSocket.off('post:comment')
     }
   }, [accessToken, post.id, user?.id])
 
@@ -132,18 +150,27 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
       }
     },
     onSuccess: (data) => {
-      setIsLiked(data.liked)
-      // Optimistic update - Socket.IO'dan gelen güncelleme gerçek değeri ayarlayacak
-      if (data.liked) {
-        setLikesCount((prev) => prev + 1)
-      } else {
-        setLikesCount((prev) => Math.max(0, prev - 1))
+      // ✅ Optimistic update zaten handleLike'da yapıldı
+      // Socket.IO'dan gelen güncelleme gerçek değeri ayarlayacak
+      // Burada sadece doğrulama yapıyoruz
+      if (data.liked !== isLiked) {
+        setIsLiked(data.liked)
+        if (data.liked) {
+          setLikesCount((prev) => prev + 1)
+        } else {
+          setLikesCount((prev) => Math.max(0, prev - 1))
+        }
       }
     },
     onError: (error) => {
       console.error('Like error:', error)
       // Hata durumunda state'i geri al
       setIsLiked((prev) => !prev)
+      if (isLiked) {
+        setLikesCount((prev) => Math.max(0, prev - 1))
+      } else {
+        setLikesCount((prev) => prev + 1)
+      }
     },
   })
 
@@ -238,17 +265,28 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
     }
   }, [menuOpen])
 
+  // Sayı formatlama fonksiyonu
+  const formatCount = (count: number): string => {
+    if (count >= 1_000_000) {
+      const formatted = (count / 1_000_000).toFixed(1)
+      return formatted.replace('.0', '') + 'M'
+    }
+    if (count >= 1_000) {
+      const formatted = (count / 1_000).toFixed(1)
+      return formatted.replace('.0', '') + 'k'
+    }
+    return count.toString()
+  }
+
   // Explore variant için özel render
   if (variant === 'explore') {
-    const commentsCount = post._count?.comments || 0
-    const likesCount = post.likes || post._count?.likes || 0
+    // State'ten yorum sayısını al (socket event'leri ile güncelleniyor)
+    const displayCommentsCount = commentsCount || post._count?.comments || 0
+    const displayLikesCount = likesCount || post.likes || post._count?.likes || 0
     
-    // Deterministic renk seçimi - index'e göre alternatif turuncu/mavi
+    // Deterministic renk seçimi - index'e göre alternatif turuncu/mavi (sadece renk şeridi için)
     const cardIndex = index ?? 0
     const isOrange = cardIndex % 2 === 0
-    const borderColor = isOrange 
-      ? 'border-[rgba(255,140,0,0.3)] dark:border-[rgba(255,140,0,0.15)]'
-      : 'border-[rgba(40,120,255,0.3)] dark:border-[rgba(40,120,255,0.15)]'
     
     return (
       <div
@@ -258,51 +296,34 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
           setIsHovered(false)
           setActiveCommentIndex(0) // Hover çıkınca başa dön
         }}
-        className={`relative w-full max-w-[320px] mx-auto bg-gray-900 dark:bg-[#111] rounded-[16px] overflow-hidden border ${borderColor} shadow-sm hover:shadow-lg hover:shadow-brand-orange/20 transition-all hover:-translate-y-1 group cursor-pointer`}
+        className="relative w-full max-w-[440px] mx-auto h-[420px] rounded-[16px] overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.35)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.45)] hover:-translate-y-1 transition-all duration-300 group cursor-pointer flex flex-col explore-card"
       >
-        {/* Keşfet Etiketi - Sol üst */}
-        <div className="absolute top-3 left-3 z-10 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-white/20">
-          <p className="text-xs font-medium text-white/80">
-            Keşfet {post.type && <span className="text-white/60">• {post.type === 'artwork' ? 'Eser' : post.type === 'event' ? 'Etkinlik' : 'Gönderi'}</span>}
-          </p>
-        </div>
-
-        {/* Görsel - Kartın %70-75'ini kaplar */}
+        {/* Görsel - Kartın en üstünden başlar */}
         {post.cover && (
-          <div className="relative w-full" style={{ height: '70%', minHeight: '280px' }}>
+          <div className="relative w-full aspect-[3/4] flex-shrink-0 overflow-hidden">
             <img
               src={resolveImageUrl(post.cover)}
               alt={post.title}
               className={`w-full h-full object-cover transition-all duration-300 ${
                 isHovered ? 'blur-sm scale-105' : ''
               }`}
+              style={{ objectPosition: 'center top' }}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
               }}
             />
-            {/* Gradient Overlay - En altta yazı okunurluğu için */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-            
             {/* Hover Overlay - Blur + Dark + Yorum Döngüsü (Sadece yorum varsa) */}
             {isHovered && recentComments && recentComments.length > 0 && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-20 transition-opacity duration-300">
-                {/* Üstte - Beğeni ve Yorum Sayıları (Sadece Bilgi, Tıklanamaz) */}
-                <div className="absolute top-3 right-3 flex items-center gap-3 text-white/90 text-xs font-medium pointer-events-none">
-                  <span className="flex items-center gap-1">
-                    <Heart className="w-4 h-4" />
-                    {likesCount}
-                  </span>
-                  {commentsCount > 0 && (
-                    <span className="flex items-center gap-1">
-                      <MessageCircle className="w-4 h-4" />
-                      {commentsCount}
-                    </span>
-                  )}
-                </div>
-
-                {/* Ortada/Altta - Yorum Metinleri Döngü Halinde */}
-                <div className="absolute bottom-4 left-4 right-4">
-                  <p className="text-sm text-white/90 line-clamp-2 transition-opacity duration-500 font-medium italic">
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 z-20 transition-opacity duration-300 pointer-events-none">
+                {/* Yorum Metni + Kullanıcı Adı - Tam Ortada, Quote Hissi */}
+                <div className="text-center max-w-[90%] px-6 flex flex-col gap-1.5">
+                  <p 
+                    className="text-sm text-white/90 line-clamp-3 transition-opacity duration-500 font-medium italic"
+                    style={{
+                      textShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                      lineHeight: '1.5'
+                    }}
+                  >
                     "{(() => {
                       const comment = recentComments[activeCommentIndex]?.content || ''
                       // İlk 2-3 kelimeyi al, maksimum 50 karakter
@@ -313,80 +334,69 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
                       return comment.length > words.length ? words + '...' : words
                     })()}"
                   </p>
-                  {recentComments.length > 1 && (
-                    <p className="text-xs text-white/60 mt-1">
-                      {activeCommentIndex + 1} / {recentComments.length}
-                    </p>
+                  {recentComments[activeCommentIndex]?.user?.username && (
+                    <span 
+                      className="text-xs text-white/65 transition-opacity duration-500"
+                      style={{
+                        letterSpacing: '0.3px',
+                        textShadow: '0 1px 4px rgba(0,0,0,0.5)'
+                      }}
+                    >
+                      — {recentComments[activeCommentIndex].user.username}
+                    </span>
                   )}
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Alt Bilgi Alanı - Yarı transparan overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/70 to-transparent">
-          {/* Başlık */}
-          <h3 className="text-base font-semibold text-white mb-2 line-clamp-1">
-            {post.title}
-          </h3>
+            {/* Beğeni + Yorum ikonları - Sadece hover'da görünür, tam ortada */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none">
+              <div className="flex items-center gap-6">
+                {/* Beğeni ikonu + sayı - Socket event'leri ile aktif güncelleniyor */}
+                <div className="flex items-center gap-2 text-white bg-black/55 backdrop-blur-md px-4 py-2 rounded-full">
+                  <Heart 
+                    size={16}
+                    strokeWidth={1.5}
+                    className={isLiked ? 'fill-brand-orange text-brand-orange' : 'text-white'}
+                  />
+                  <span className="text-sm font-medium">{formatCount(displayLikesCount)}</span>
+                </div>
+                
+                {/* Yorum ikonu + sayı - Socket event'leri ile aktif güncelleniyor */}
+                <div className="flex items-center gap-2 text-white bg-black/55 backdrop-blur-md px-4 py-2 rounded-full">
+                  <MessageCircle size={16} strokeWidth={1.5} className="text-white" />
+                  <span className="text-sm font-medium">{formatCount(displayCommentsCount)}</span>
+                </div>
+              </div>
+            </div>
 
-          {/* Alt açıklama - Kullanıcı + etkileşim */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            {/* Kullanıcı bilgisi overlay - Sol alt köşe */}
+            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/40 group-hover:bg-black/60 backdrop-blur-md px-2 py-1 rounded-full z-20 transition-all duration-300">
               {post.authorAvatar ? (
                 <img
                   src={resolveImageUrl(post.authorAvatar)}
                   alt={post.author}
-                  className="w-5 h-5 rounded-full object-cover border border-white/20"
+                  className="w-4 h-4 rounded-full object-cover flex-shrink-0"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
                   }}
                 />
               ) : (
-                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xs font-semibold text-white">
-                    {post.author[0]?.toUpperCase()}
+                <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[8px] font-semibold text-white">
+                    {(post.authorUsername || post.author)[0]?.toUpperCase()}
                   </span>
                 </div>
               )}
-              <p className="text-xs text-white/80 font-medium">
+              <span className="text-[11px] font-medium text-white/90 truncate max-w-[120px]">
                 {post.authorUsername || post.author}
-              </p>
-              {commentsCount > 0 && (
-                <span className="text-xs text-white/60">• {commentsCount} yorum</span>
-              )}
-            </div>
-
-            {/* Minimal etkileşim ikonu - Alt sağ */}
-            <div className="flex items-center gap-1.5 text-white/70">
-              {commentsCount > 0 ? (
-                <>
-                  <MessageCircle className="w-4 h-4" />
-                  <span className="text-xs font-medium">{commentsCount}</span>
-                </>
-              ) : (
-                <>
-                  <Heart 
-                    className={`w-4 h-4 ${isLiked ? 'fill-brand-orange text-brand-orange' : ''}`}
-                  />
-                  <span className="text-xs font-medium">{likesCount}</span>
-                </>
-              )}
+              </span>
             </div>
           </div>
+        )}
 
-          {/* CTA - Gönderiyi keşfet */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleCardClick()
-            }}
-            className="mt-3 w-full text-xs font-medium text-brand-orange hover:text-brand-blue transition-colors text-left"
-          >
-            Gönderiyi keşfet →
-          </button>
-        </div>
+        {/* İnce renkli şerit - EN ALTA */}
+        <div className={`h-[4px] w-full ${isOrange ? 'bg-orange-500' : 'bg-blue-600'} rounded-b-xl`} />
 
         {/* Menü butonu - Sadece sahip görür */}
         {isOwner && (
@@ -406,6 +416,19 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
                 onClick={(e) => e.stopPropagation()}
                 className="absolute top-10 right-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[120px] z-30"
               >
+                {canManageCollections && isArtwork && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMenuOpen(false)
+                      setShowAddToCollectionModal(true)
+                    }}
+                    className="w-full px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2 text-sm font-medium transition-colors"
+                  >
+                    <FolderPlus size={16} />
+                    Koleksiyona Ekle
+                  </button>
+                )}
                 <button
                   onClick={handleDeleteClick}
                   disabled={deleteMutation.isPending}
@@ -482,6 +505,19 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
               onClick={(e) => e.stopPropagation()}
               className="absolute top-10 right-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[120px] z-[60]"
             >
+              {canManageCollections && isArtwork && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                    setShowAddToCollectionModal(true)
+                  }}
+                  className="w-full px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2 text-sm font-medium transition-colors"
+                >
+                  <FolderPlus size={16} />
+                  Koleksiyona Ekle
+                </button>
+              )}
               <button
                 onClick={handleDeleteClick}
                 disabled={deleteMutation.isPending}
@@ -517,15 +553,19 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-sm opacity-0 group-hover/image:opacity-100 transition-all duration-200 flex items-center justify-center rounded-2xl z-[5]">
                   <div className="flex items-center gap-8">
                     {/* Likes */}
-                    <div className="flex items-center gap-2 text-white text-lg font-semibold">
-                      <Heart className="w-6 h-6" fill={isLiked ? "currentColor" : "none"} />
+                    <div className="flex items-center gap-2 text-white/85 text-base font-medium">
+                      <Heart 
+                        size={18} 
+                        strokeWidth={1.5} 
+                        className={isLiked ? "fill-brand-orange text-brand-orange" : "text-inherit"} 
+                      />
                       <span>{likesCount}</span>
                     </div>
                     
                     {/* Comments */}
-                    <div className="flex items-center gap-2 text-white text-lg font-semibold">
-                      <MessageCircle className="w-6 h-6" />
-                      <span>{(post as any)._count?.comments || (post as any).commentCount || 0}</span>
+                    <div className="flex items-center gap-2 text-white/85 text-base font-medium">
+                      <MessageCircle size={18} strokeWidth={1.5} className="text-inherit" />
+                      <span>{commentsCount || (post as any)._count?.comments || (post as any).commentCount || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -622,7 +662,7 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
           <button
             onClick={handleLike}
             disabled={likeMutation.isPending}
-            className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${
+            className={`like-btn relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:scale-110 ${
               isLiked
                 ? 'text-brand-orange bg-brand-blue/10 dark:bg-brand-blue/20'
                 : 'text-gray-600 dark:text-gray-400 hover:text-brand-orange'
@@ -630,10 +670,10 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
           >
             <Heart
               size={18}
+              strokeWidth={1.5}
               className={`transition-all duration-300 ${animateLike ? 'scale-125' : 'scale-100'} ${
-                isLiked ? 'fill-brand-orange text-brand-orange' : ''
+                isLiked ? 'fill-brand-orange text-brand-orange' : 'text-gray-600 dark:text-gray-400'
               }`}
-              strokeWidth={isLiked ? 0 : 2}
             />
             {(animateLike || pingAnimating) && (
               <span className="absolute inset-0 animate-ping bg-brand-orange/40 rounded-lg"></span>
@@ -642,6 +682,15 @@ export default function PostCard({ post, onLike, onDelete, variant = 'default', 
           </button>
         )}
       </div>
+
+      {/* Add to Collection Modal */}
+      {showAddToCollectionModal && (
+        <AddToCollectionModal
+          postId={post.id}
+          open={showAddToCollectionModal}
+          onClose={() => setShowAddToCollectionModal(false)}
+        />
+      )}
     </div>
   )
 }

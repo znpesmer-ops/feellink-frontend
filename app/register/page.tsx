@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -55,10 +56,13 @@ export default function RegisterPage() {
     }
   }, [accessToken, user, capabilities, router, clearAuth])
 
+
   const {
-    register,
+    register: registerField,
     handleSubmit,
     formState: { errors, isSubmitting },
+    setValue,
+    watch,
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
   })
@@ -171,7 +175,7 @@ export default function RegisterPage() {
                 Email
               </label>
               <input
-                {...register('email')}
+                {...registerField('email')}
                 type="email"
                 inputMode="email"
                 autoComplete="email"
@@ -187,7 +191,7 @@ export default function RegisterPage() {
                 Username
               </label>
               <input
-                {...register('username')}
+                {...registerField('username')}
                 type="text"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 placeholder="Username"
@@ -201,7 +205,7 @@ export default function RegisterPage() {
                 Full Name (optional)
               </label>
               <input
-                {...register('fullName')}
+                {...registerField('fullName')}
                 type="text"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 placeholder="Full Name"
@@ -212,7 +216,7 @@ export default function RegisterPage() {
                 Password
               </label>
               <input
-                {...register('password')}
+                {...registerField('password')}
                 type="password"
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 placeholder="Password"

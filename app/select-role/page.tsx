@@ -348,7 +348,7 @@ export default function SelectRolePage() {
         </motion.div>
 
         <div className="space-y-4">
-          <p className="mx-auto max-w-2xl text-sm text-gray-600 dark:text-gray-400 md:text-base">
+          <p className="mx-auto max-w-2xl text-sm text-gray-600 dark:text-gray-300 md:text-base">
             Dijital sanat dünyasında rolünü seç. Kombinasyonlarını özgürce oluştur ve yaratıcı deneyimini genişlet.
           </p>
         </div>
@@ -366,8 +366,8 @@ export default function SelectRolePage() {
                 onClick={() => handleRoleSelect(role.id)}
                 className={`group relative overflow-hidden rounded-2xl border px-6 py-7 text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500 ${
                   isActive
-                    ? 'border-orange-400 bg-gradient-to-b from-blue-50/60 to-white shadow-lg shadow-orange-500/20 dark:border-orange-400/70 dark:from-blue-900/20 dark:to-transparent'
-                    : 'border-gray-200 bg-white shadow-sm hover:border-blue-300/50 hover:shadow-lg hover:shadow-blue-500/5 dark:border-white/10 dark:bg-white/[0.03]'
+                    ? 'border-orange-400 bg-gradient-to-b from-blue-50/60 to-white shadow-lg shadow-orange-500/20 dark:border-orange-400/70 dark:from-orange-500/20 dark:to-orange-500/5 dark:bg-orange-500/10'
+                    : 'border-gray-200 bg-white shadow-sm hover:border-blue-300/50 hover:shadow-lg hover:shadow-blue-500/5 dark:border-white/10 dark:bg-neutral-900/70'
                 }`}
               >
                 <span className="absolute inset-0 opacity-0 transition group-hover:opacity-100">
@@ -385,8 +385,8 @@ export default function SelectRolePage() {
                     <Icon className="h-6 w-6" />
                   </div>
                   <div>
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">{role.title}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100 tracking-tight">{role.title}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-200 line-clamp-2">
                       {role.description.split('.')[0]}.
                     </p>
                   </div>
@@ -396,7 +396,7 @@ export default function SelectRolePage() {
                   <CheckCircle className="absolute right-5 top-5 h-5 w-5 text-orange-500" />
                 )}
 
-                <div className="mt-4 flex items-center gap-2 text-xs font-medium text-orange-500 dark:text-orange-300">
+                <div className="mt-4 flex items-center gap-2 text-xs font-medium text-orange-500 dark:text-orange-400">
                   {isActive ? 'Rol seçildi' : 'Detayları görmek için seç'}
                 </div>
               </motion.button>
@@ -412,39 +412,38 @@ export default function SelectRolePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="rounded-3xl border border-blue-200/40 bg-gradient-to-b from-blue-50/40 to-white p-6 shadow-xl shadow-blue-500/5 backdrop-blur dark:border-blue-500/20 dark:bg-[#1a1a1a]/90"
+                className="rounded-3xl border border-white/30 bg-white/85 backdrop-blur-md p-6 shadow-xl dark:border-white/10 dark:bg-neutral-800/90 dark:backdrop-blur-md"
               >
                 <div className="flex flex-col gap-3 text-center">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{activeRole.subtitle}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">{activeRole.subtitle}</h2>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
                     {activeRole.description}
                   </p>
                 </div>
 
                 {/* Features List */}
                 <div className="mt-6 space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Özellikler</h4>
-                  <ul className="space-y-2.5 text-sm text-gray-700 dark:text-gray-300">
+                  <h3 className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-3 tracking-tight">Özellikler</h3>
+                  <ul className="space-y-2.5 text-sm text-gray-700 dark:text-gray-200">
                     {activeRole.features.map((feature, index) => (
-                      <li key={index} className="flex items-start gap-3">
-                        <span className="flex-shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        <span className="flex-1 leading-relaxed font-normal">{feature}</span>
+                      <li key={index} className="leading-relaxed font-normal">
+                        {feature}
                       </li>
                     ))}
                   </ul>
                 </div>
 
                 {/* Target Audience */}
-                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-500 mb-1.5">Kimler için uygun?</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed font-normal">
+                <div className="mt-6 pt-6 border-t border-gray-300 dark:border-white/10">
+                  <h4 className="text-xs font-medium text-gray-800 dark:text-gray-100 mb-1.5">Kimler için uygun?</h4>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed font-normal">
                     {activeRole.targetAudience}
                   </p>
                 </div>
 
                 {/* Info Note */}
-                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-500 leading-relaxed italic">
+                <div className="mt-6 pt-6 border-t border-gray-300 dark:border-white/10">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed italic">
                     Seçtiğin rol, Feellink deneyimini kişiselleştirir. Tüm özelliklere erişimin vardır; rolün yalnızca kullanım odağını belirler.
                   </p>
                 </div>
@@ -463,26 +462,36 @@ export default function SelectRolePage() {
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.99 }}
                           onClick={() => handleExtraToggle(extraId)}
-                          className={`relative rounded-2xl border border-dashed border-blue-300 bg-gradient-to-b from-white via-blue-50/30 to-white p-6 text-left transition-all duration-300 hover:shadow-md ${
-                            isActiveExtra ? 'ring-2 ring-blue-400/40 shadow-blue-200/20 dark:ring-blue-500/30 dark:shadow-blue-900/20' : ''
+                          className={`relative rounded-2xl border border-dashed border-blue-300 bg-white/80 backdrop-blur-md p-6 text-left transition-all duration-300 hover:shadow-md dark:border-white/10 dark:bg-neutral-800/90 dark:backdrop-blur-md ${
+                            isActiveExtra ? 'ring-2 ring-orange-500/40 border-orange-500/40 shadow-orange-500/20 dark:ring-orange-500/40 dark:border-orange-500/40 dark:shadow-orange-500/20' : ''
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${
+                              isActiveExtra 
+                                ? 'text-orange-600 dark:text-orange-400' 
+                                : 'text-blue-600 dark:text-blue-400'
+                            }`}>
                               Ek Paket
                             </span>
                           </div>
-                          <h4 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          <h5 className={`mt-4 text-lg font-semibold tracking-tight ${
+                            isActiveExtra
+                              ? 'text-orange-600 dark:text-orange-400'
+                              : 'text-gray-900 dark:text-gray-100'
+                          }`}>
                             {extra.label.replace(' Ekleyin', '')}
-                          </h4>
-                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                          </h5>
+                          <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
                             {partnerRole} modüllerini panonuza ekleyin. {extra.cta}
                           </p>
 
                           <ul className="mt-4 space-y-2 text-sm text-gray-700 dark:text-gray-200">
                             {extra.features.map((feature) => (
                               <li key={feature} className="flex items-center gap-2">
-                                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-500 mt-0.5" />
+                                <span className={`inline-flex h-1.5 w-1.5 rounded-full mt-0.5 ${
+                                  isActiveExtra ? 'bg-orange-500 dark:bg-orange-400' : 'bg-blue-500'
+                                }`} />
                                 <span className="text-sm font-normal">{feature}</span>
                               </li>
                             ))}
@@ -493,9 +502,9 @@ export default function SelectRolePage() {
                               event.stopPropagation()
                               handleExtraToggle(extraId)
                             }}
-                            className={`mt-6 w-full rounded-lg py-2 text-sm font-semibold transition ${
+                            className={`mt-6 w-full rounded-lg py-2 text-sm font-medium transition ${
                               isActiveExtra
-                                ? 'bg-orange-500 text-white hover:bg-orange-600 dark:hover:bg-orange-500/90'
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 dark:hover:bg-orange-600'
                                 : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/40'
                             }`}
                           >
@@ -524,7 +533,7 @@ export default function SelectRolePage() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="flex w-full flex-col gap-6 rounded-3xl border border-blue-200/40 bg-white/90 p-6 text-center shadow-xl shadow-blue-500/5 backdrop-blur dark:border-blue-500/20 dark:bg-[#1a1a1a]/90"
+                className="flex w-full flex-col gap-6 rounded-3xl border border-white/30 bg-white/85 p-6 text-center shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-neutral-800/90 dark:backdrop-blur-md"
               >
                 {mutationError && (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-700/60 dark:bg-red-900/20 dark:text-red-200">

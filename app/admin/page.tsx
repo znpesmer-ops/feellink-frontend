@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/store'
 import api from '@/lib/api'
 import { initAdminSocket } from '@/lib/socket'
-import { Users, FileText, MessageCircle, Calendar, Ticket, TrendingUp, Activity, Wifi, WifiOff } from 'lucide-react'
+import { Users, FileText, MessageCircle, Calendar, TrendingUp, Activity, Wifi, WifiOff } from 'lucide-react'
 import { Line, Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -132,13 +132,6 @@ export default function AdminDashboard() {
       icon: FileText,
       color: 'text-purple-500',
       bgColor: 'bg-purple-50 dark:bg-purple-900/20',
-    },
-    {
-      label: 'Bilet/Gelir (bugün)',
-      value: `${summary?.ticketsToday || 0} / ₺${(summary?.revenue || 0).toFixed(2)}`,
-      icon: Ticket,
-      color: 'text-[#ff7b00]',
-      bgColor: 'bg-orange-50 dark:bg-orange-900/20',
     },
   ]
 
@@ -272,8 +265,6 @@ export default function AdminDashboard() {
               <span className="font-semibold dark:text-white text-gray-900">{summary?.totalEvents || 0}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm dark:text-gray-400 text-gray-600">Toplam Bilet</span>
-              <span className="font-semibold dark:text-white text-gray-900">{summary?.totalTickets || 0}</span>
             </div>
           </div>
         </div>

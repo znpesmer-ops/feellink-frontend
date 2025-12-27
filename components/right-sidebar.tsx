@@ -218,7 +218,10 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
       className={`hidden lg:flex flex-col
                  w-full overflow-y-auto
                  pb-8
-                 text-[#111] dark:text-gray-100`}
+                 border-l border-black/6 dark:border-white/8
+                 pl-[18px] pr-[18px]
+                 bg-white dark:bg-[#0b1220]
+                 text-[#111] dark:text-gray-200`}
     >
       {/* İçerik wrapper - feed ve explore için üstten boşluk, orta içerik ile aynı hizada başlamalı */}
       <div className={`w-full flex flex-col ${(isFeed || isExplore) ? 'mt-0 pt-4' : 'pt-4'}`}>
@@ -227,7 +230,7 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
           <>
             {/* ✍️ Keşfet Yazıları */}
             <div className="w-full">
-              <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
+              <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
                 Keşfet Yazıları
               </h3>
               <div className="space-y-4">
@@ -241,10 +244,10 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
                           : post.lastPost?.link || `/articles/${post.id}`
                       }
                       className="flex items-start gap-3 p-3 rounded-xl
-                                 bg-gray-50 dark:bg-gray-800/50
-                                 border border-[rgba(40,120,255,0.25)] dark:border-[rgba(40,120,255,0.15)]
-                                 shadow-sm hover:shadow-md hover:-translate-y-[2px]
-                                 transition-all cursor-pointer group"
+                                 border border-black/4 dark:border-white/6
+                                 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-md hover:-translate-y-[2px]
+                                 transition-all cursor-pointer group bg-white"
+                      data-dark-bg="rgba(255,255,255,0.04)"
                     >
                       {/* Profil resmi */}
                       <div className="relative w-[42px] h-[42px] rounded-full overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700">
@@ -268,14 +271,14 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
 
                       {/* Yazı başlığı ve yazar adı */}
                       <div className="flex flex-col min-w-0">
-                        <p className="text-sm font-semibold text-[#222] dark:text-gray-100 mb-1">
+                        <p className="text-sm font-medium text-[#222] dark:text-gray-100 mb-1" style={{ fontWeight: 500 }}>
                           {post.lastPost?.title || 'Yazı'}
                         </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug" style={{ opacity: 0.6 }}>
                           {post.name}
                         </p>
                         {post.preview && (
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 line-clamp-1" style={{ opacity: 0.6 }}>
                             "{post.preview}"
                           </p>
                         )}
@@ -295,7 +298,7 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
             {/* 🏛️ Ayın Müzeleri - Her zaman 2x2 grid (4 slot) - Kurumsal hesaplar otomatik hesaplanan */}
             <div className="w-full">
               {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-              <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-wide">
+              <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
                 Ayın Müzeleri
               </h3>
               <div className="grid grid-cols-2 gap-4">
@@ -305,7 +308,8 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
                     <Link
                       key={museum.id}
                       href={`/profile/${museum.username || museum.id}`}
-                      className="relative rounded-2xl overflow-hidden border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] shadow-sm hover:shadow-md cursor-pointer group transition-all duration-200"
+                      className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-md cursor-pointer group transition-all duration-200 bg-white"
+                      data-dark-bg="rgba(255,255,255,0.04)"
                     >
                       {/* Background gradient fallback */}
                       <div className={`absolute inset-0 bg-gradient-to-br ${museum.color} opacity-90 z-0`} />
@@ -341,29 +345,28 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
 
         {/* 🔥 En Çok Beğenilenler */}
         {topLikedArticles.length > 0 && (
-          <div className="mt-10">
+          <div className="mt-10 bg-white rounded-2xl p-4 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] border dark:border-white/6" data-dark-bg="rgba(255,255,255,0.04)">
           {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-          <h3 className="text-xl font-semibold mb-4 text-[#ff7b00] tracking-wide">
-            En Çok Beğenilenler
-          </h3>
+            <h3 className="text-xl font-semibold mb-4 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
+              En Çok Beğenilenler
+            </h3>
           <div className="space-y-3">
             {topLikedArticles.map((article, index) => (
               <Link
                 key={article.id}
                 href={`/articles/${article.id}`}
                 className="block p-3 rounded-xl
-                         bg-gray-50 dark:bg-gray-800/50
-                         border border-[rgba(40,120,255,0.25)] dark:border-[rgba(40,120,255,0.15)]
-                         hover:bg-orange-50/70 dark:hover:bg-orange-500/10
-                         hover:border-[rgba(40,120,255,0.4)] dark:hover:border-[rgba(40,120,255,0.25)]
-                         transition-all cursor-pointer group"
+                         border border-black/4 dark:border-white/6
+                         hover:bg-gray-50/70 dark:hover:bg-white/5
+                         hover:border-white/12 dark:hover:border-white/12
+                         transition-all cursor-pointer group bg-transparent dark:bg-[rgba(255,255,255,0.02)]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-[#222] dark:text-gray-100 line-clamp-2 mb-1 group-hover:text-[#ff7b00] transition-colors">
+                    <p className="text-sm font-medium text-[#222] dark:text-gray-100 line-clamp-2 mb-1 transition-colors" style={{ fontWeight: 500 }}>
                       {article.title}
                     </p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400" style={{ opacity: 0.6 }}>
                       <span>{article.author?.fullName || article.author?.username}</span>
                       <span>•</span>
                       <div className="flex items-center gap-1">
@@ -374,7 +377,7 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
                   </div>
                   {index === 0 && topLikedArticles.length > 0 && (
                     <div className="flex-shrink-0">
-                      <span className="text-xs font-bold text-[#ff7b00] bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded-full">
+                      <span className="text-xs font-bold text-[#ff7b00] bg-gray-100 dark:bg-white/10 px-2 py-0.5 rounded-full">
                         #1
                       </span>
                     </div>
@@ -387,11 +390,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
         )}
 
         {/* ✍️ Aktif Yazarlar - 2x2 Grid (Ayın Müzeleri ile aynı yapı) */}
-        <div className="mt-10">
+        <div className="mt-10 bg-white rounded-2xl p-4 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] border dark:border-white/6" data-dark-bg="rgba(255,255,255,0.04)">
         {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-        <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-wide">
-          Aktif Yazarlar
-        </h3>
+          <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
+            Aktif Yazarlar
+          </h3>
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }, (_, i) => {
             const author = authors[i] || null;
@@ -399,7 +402,8 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
               <Link
                 key={author.id}
                 href={`/profile/${author.slug || author.id}`}
-                className="relative rounded-2xl overflow-hidden border border-[rgba(40,120,255,0.35)] dark:border-[rgba(40,120,255,0.15)] shadow-sm hover:shadow-md cursor-pointer group transition-all duration-200"
+                className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-md cursor-pointer group transition-all duration-200 bg-white"
+                data-dark-bg="rgba(255,255,255,0.04)"
               >
                 {/* Profil görseli - Kartın tamamını doldurur */}
                 <div className="relative w-full h-[110px] overflow-hidden">

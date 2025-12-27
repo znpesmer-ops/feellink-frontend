@@ -5,8 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import toast from 'react-hot-toast'
+import { TR_CITIES } from '@/constants/cities.tr'
 
 type ApplicationMethod = 'internal' | 'link' | 'email'
+
+interface Country {
+  code: string
+  name: string
+  cities: string[]
+}
 
 export default function NewJobPage() {
   const router = useRouter()
@@ -18,15 +25,29 @@ export default function NewJobPage() {
   const [error, setError] = useState<string | null>(null)
   const [shortSummary, setShortSummary] = useState('')
   const maxShortSummaryChars = 100
+  const [countries, setCountries] = useState<Country[]>([])
+  const [selectedCountry, setSelectedCountry] = useState<string>('TR') // Default Türkiye
+  const [city, setCity] = useState<string>('')
   
   // ✅ Edit mode kontrolü
   const jobId = searchParams.get('edit')
   const isEditMode = Boolean(jobId)
   const [isLoadingJob, setIsLoadingJob] = useState(false)
 
+  // Load countries data
+  useEffect(() => {
+    fetch('/data/countries.json')
+      .then((res) => res.json())
+      .then((data) => setCountries(data))
+      .catch((err) => {
+        console.error('Error loading countries:', err)
+        toast.error('Ülke listesi yüklenemedi')
+      })
+  }, [])
+
   // ✅ Edit modunda ilan verilerini yükle
   useEffect(() => {
-    if (isEditMode && jobId) {
+    if (isEditMode && jobId && countries.length > 0) {
       setIsLoadingJob(true)
       api.get(`/jobs/${jobId}`)
         .then((response) => {
@@ -56,10 +77,16 @@ export default function NewJobPage() {
           if (job.location) {
             const parts = job.location.split(', ')
             if (parts.length >= 2) {
-              const cityInput = document.querySelector('input[name="locationCity"]') as HTMLInputElement
-              const countryInput = document.querySelector('input[name="locationCountry"]') as HTMLInputElement
-              if (cityInput) cityInput.value = parts[0]
-              if (countryInput) countryInput.value = parts.slice(1).join(', ')
+              const cityValue = parts[0]
+              const countryValue = parts.slice(1).join(', ')
+              setCity(cityValue)
+              // Ülke adından code bul
+              const country = countries.find((c) => c.name === countryValue)
+              if (country) {
+                setSelectedCountry(country.code)
+              } else if (countryValue === 'Türkiye') {
+                setSelectedCountry('TR')
+              }
             }
           }
           // Salary'yi parse et
@@ -84,7 +111,7 @@ export default function NewJobPage() {
           setIsLoadingJob(false)
         })
     }
-  }, [isEditMode, jobId, router])
+  }, [isEditMode, jobId, router, countries])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -97,9 +124,9 @@ export default function NewJobPage() {
     // Mevcut backend DTO'ya uygun format
     const title = formData.get('title')?.toString().trim()
     const companyName = formData.get('companyName')?.toString().trim() || user?.fullName || ''
-    const locationCity = formData.get('locationCity')?.toString().trim() || ''
-    const locationCountry = formData.get('locationCountry')?.toString().trim() || 'Türkiye'
-    const location = [locationCity, locationCountry].filter(Boolean).join(', ') || undefined
+    const locationCity = city || formData.get('locationCity')?.toString().trim() || ''
+    const countryName = countries.find((c) => c.code === selectedCountry)?.name || 'Türkiye'
+    const location = [locationCity, countryName].filter(Boolean).join(', ') || undefined
 
     // Maaş formatı
     const salaryMin = formData.get('salaryMin')?.toString()
@@ -111,7 +138,8 @@ export default function NewJobPage() {
       if (salaryVisible) {
         salary = `${salaryMin || '?'} - ${salaryMax || '?'} ${salaryCurrency}`
       } else {
-        salary = `${salaryMin || '?'} - ${salaryMax || '?'} ${salaryCurrency} (Gizli)`
+        // 🔥 Maaş gizliyse sadece placeholder göster, rakam gösterme
+        salary = undefined // Maaş gizliyse hiç gösterilmez
       }
     }
 
@@ -321,26 +349,58 @@ export default function NewJobPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Şehir
+                Ülke
               </label>
-              <input
-                name="locationCity"
-                type="text"
-                placeholder="İstanbul"
+              <select
+                value={selectedCountry}
+                onChange={(e) => {
+                  setSelectedCountry(e.target.value)
+                  setCity('') // 🔒 Ülke değişince şehir sıfırlanır
+                }}
                 className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
-              />
+              >
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Ülke
+                Şehir
+                {selectedCountry === 'TR' && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(Türkiye için zorunlu)</span>
+                )}
               </label>
-              <input
-                name="locationCountry"
-                type="text"
-                placeholder="Türkiye"
-                defaultValue="Türkiye"
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
-              />
+              {selectedCountry === 'TR' ? (
+                <select
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
+                >
+                  <option value="">Şehir seçin</option>
+                  {TR_CITIES.map((cityName) => (
+                    <option key={cityName} value={cityName}>
+                      {cityName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name="locationCity"
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Şehir"
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange/70 focus:border-brand-orange/70"
+                />
+              )}
+              {selectedCountry === 'TR' && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Türkiye için şehir seçimi zorunludur.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

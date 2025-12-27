@@ -156,6 +156,7 @@ function BlurGuard({ isPro, children }: BlurGuardProps) {
 }
 
 export default function AnalyticsPage() {
+  const router = useRouter();
   const { user, capabilities, accessToken } = useAuthStore();
   const pro = isProPlan(user, capabilities);
   const [visits, setVisits] = useState<VisitData[]>([]);
@@ -269,43 +270,122 @@ export default function AnalyticsPage() {
     async function fetchAnalytics() {
       try {
         setLoading(true);
+        
+        // 🔒 KRİTİK: Auth token kontrolü
+        if (!accessToken) {
+          const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+          if (!tokenFromStorage) {
+            console.error('[Analytics] No access token - redirecting to login');
+            useAuthStore.getState().clearAuth();
+            router.push('/login');
+            return;
+          }
+        }
+        
+        console.log('[Analytics] 🔄 Fetching analytics data...', { 
+          hasToken: !!accessToken,
+          dateRange,
+          userId: user?.id 
+        });
+        
+        // 401 hatası durumunda catch et ve loading'i false yap
+        const handle401 = (err: any) => {
+          if (err?.response?.status === 401) {
+            console.error('[Analytics] Unauthorized - redirecting to login');
+            useAuthStore.getState().clearAuth();
+            router.push('/login');
+            throw err;
+          }
+          return err;
+        };
+        
         const [visitsRes, wordsRes, usersRes, eventsRes, colorPaletteRes, topPerformingRes, saveAnalyticsRes, sourceRes, comparisonRes, lowEngagementRes] = await Promise.all([
-          api.get(`/analytics/visits?range=${dateRange}`),
-          api.get("/analytics/words"),
-          api.get("/analytics/top-users"),
-          api.get("/analytics/event-stats"),
+          api.get(`/analytics/visits?range=${dateRange}`).catch(handle401),
+          api.get("/analytics/words").catch(handle401),
+          api.get("/analytics/top-users").catch(handle401),
+          api.get("/analytics/event-stats").catch(handle401),
           api.get("/analytics/color-palette").catch(() => ({ data: [] })), // Renk paleti yoksa boş array
           api.get(`/analytics/top-performing?range=${dateRange}`).catch(() => ({ data: null })),
           api.get(`/analytics/saves?range=${dateRange}`).catch(() => ({ data: null })),
-          api.get(`/analytics/sources?range=${dateRange}`).catch(() => ({ data: null })),
+          api.get(`/analytics/sources?range=${dateRange}`).catch(handle401),
           api.get(`/analytics/comparison?range=${dateRange}`).catch(() => ({ data: null })),
           api.get("/analytics/low-engagement").catch(() => ({ data: null })),
         ]);
 
-        setVisits(visitsRes.data);
-        setWords(wordsRes.data);
+        // 🔒 KRİTİK: Console log - gerçek data'yı gör
+        console.log('[Analytics] ✅ API Response:', {
+          visits: visitsRes?.data,
+          words: wordsRes?.data,
+          users: usersRes?.data,
+          events: eventsRes?.data,
+        });
+
+        // 🔒 GÜVENLİ ARRAY NORMALİZASYONU - Backend response format'larını handle et
+        // Visits: Array veya { visits: [] } formatında gelebilir
+        // State set ederken her zaman array olduğundan emin ol
+        const safeVisitsForState: VisitData[] = Array.isArray(visitsRes?.data)
+          ? visitsRes.data
+          : (visitsRes?.data?.visits && Array.isArray(visitsRes.data.visits))
+          ? visitsRes.data.visits
+          : [];
+        setVisits(safeVisitsForState);
+        
+        // Words: Array veya { words: [] } formatında gelebilir
+        const safeWords = Array.isArray(wordsRes?.data)
+          ? wordsRes.data
+          : (wordsRes?.data?.words && Array.isArray(wordsRes.data.words))
+          ? wordsRes.data.words
+          : [];
+        setWords(safeWords);
+        
         // 🚫 Yedek güvenlik katmanı: Kendini listeye dahil etme
-        const filteredUsers = (usersRes.data || []).filter(
-          (u: TopUser) => u.username !== user?.username
-        );
+        // Users: Array veya { users: [] } formatında gelebilir
+        const usersData = Array.isArray(usersRes?.data)
+          ? usersRes.data
+          : (usersRes?.data?.users && Array.isArray(usersRes.data.users))
+          ? usersRes.data.users
+          : [];
+        const filteredUsers = Array.isArray(usersData)
+          ? usersData.filter((u: TopUser) => u.username !== user?.username)
+          : [];
         setTopUsers(filteredUsers);
-        setEventStats(eventsRes.data);
-        setColorPalette(colorPaletteRes.data || []);
-        setTopPerforming(topPerformingRes.data);
-        setSaveAnalytics(saveAnalyticsRes.data);
-        setSourceDistribution(sourceRes.data);
-        setComparison(comparisonRes.data);
-        setLowEngagement(lowEngagementRes.data);
+        
+        // EventStats: Array veya { events: [] } formatında gelebilir
+        const safeEventStats = Array.isArray(eventsRes?.data)
+          ? eventsRes.data
+          : (eventsRes?.data?.events && Array.isArray(eventsRes.data.events))
+          ? eventsRes.data.events
+          : [];
+        setEventStats(safeEventStats);
+        setColorPalette(Array.isArray(colorPaletteRes?.data) ? colorPaletteRes.data : []);
+        setTopPerforming(topPerformingRes?.data || null);
+        setSaveAnalytics(saveAnalyticsRes?.data || null);
+        setSourceDistribution(sourceRes?.data || null);
+        setComparison(comparisonRes?.data || null);
+        setLowEngagement(lowEngagementRes?.data || null);
+        
+        console.log('[Analytics] ✅ Data set successfully');
       } catch (err: any) {
-        console.error("Analiz verileri alınamadı:", err);
+        console.error("[Analytics] ❌ Analiz verileri alınamadı:", err);
+        
+        // 401 hatası durumunda login'e yönlendir
+        if (err?.response?.status === 401) {
+          console.error('[Analytics] Unauthorized - redirecting to login');
+          useAuthStore.getState().clearAuth();
+          router.push('/login');
+          return;
+        }
+        
         toast.error(err.response?.data?.message || "Analiz verileri yüklenemedi");
       } finally {
+        // 🔒 KRİTİK: finally bloğu - loading'i GARANTİ kapat
+        console.log('[Analytics] 🔒 Setting loading to false');
         setLoading(false);
       }
     }
 
     fetchAnalytics();
-  }, [user, capabilities, pro, isHydrated, dateRange]);
+  }, [user, capabilities, pro, isHydrated, dateRange, router]);
 
   // 🎟️ Gerçek zamanlı bilet güncellemeleri için socket bağlantısı
   useEffect(() => {
@@ -363,9 +443,14 @@ export default function AnalyticsPage() {
     const socket = initSocket(accessToken);
 
     // Ziyaretçi güncelleme event'ini dinle
-    const handler = (visitorsData: TopUser[]) => {
+    const handler = (visitorsData: TopUser[] | { users?: TopUser[] }) => {
+      // 🔒 GÜVENLİ ARRAY NORMALİZASYONU
+      const safeVisitorsData = Array.isArray(visitorsData)
+        ? visitorsData
+        : visitorsData?.users ?? [];
+      
       // 🚫 Yedek güvenlik katmanı: Kendini listeye dahil etme
-      const filteredVisitors = (visitorsData || []).filter(
+      const filteredVisitors = safeVisitorsData.filter(
         (v: TopUser) => v.username !== user?.username
       );
       setTopUsers(filteredVisitors);
@@ -378,6 +463,37 @@ export default function AnalyticsPage() {
       socket.off(`visitor:update:${user.id}`, handler);
     };
   }, [user, user?.id]);
+
+  // 🔥 KRİTİK: Token yoksa veya geçersizse login'e yönlendir - HOOK'LAR ÖNCE!
+  useEffect(() => {
+    if (!accessToken) {
+      const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+      if (!tokenFromStorage) {
+        router.push('/login');
+      }
+    }
+  }, [accessToken, router]);
+
+  // 🔒 GÜVENLİ VISITS NORMALİZASYONU - useMemo ile optimize et
+  // ⚠️ ÖNEMLİ: Hook'lar conditional return'lerden ÖNCE çağrılmalı (Rules of Hooks)
+  // Backend ne dönerse dönsün, UI asla patlamaz
+  const safeVisits = useMemo((): VisitData[] => {
+    // Array ise direkt döndür
+    if (Array.isArray(visits)) return visits;
+    
+    // Backend { visits: [] } formatında dönebilir
+    const visitsObj = visits as any;
+    if (visitsObj?.visits && Array.isArray(visitsObj.visits)) {
+      return visitsObj.visits;
+    }
+    
+    // Hiçbiri değilse boş array döndür
+    return [];
+  }, [visits]);
+  
+  // 🔒 İlk render crash'ini tamamen kapat - guard
+  // Eğer safeVisits hala array değilse (çok nadir edge case), boş array kullan
+  const finalSafeVisits = Array.isArray(safeVisits) ? safeVisits : [];
 
   // Wait for hydration before checking role - ÖNEMLİ: Sidebar görünür kalması için min-h-screen KULLANMAYALIM
   if (!isHydrated) {
@@ -403,6 +519,20 @@ export default function AnalyticsPage() {
       </div>
     );
   }
+  
+  if (!accessToken) {
+    const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    if (!tokenFromStorage) {
+      return (
+        <div className="flex justify-center items-center py-20">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-[#FF8A00] mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">Yönlendiriliyorsunuz...</p>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (loading) {
     return (
@@ -420,15 +550,16 @@ export default function AnalyticsPage() {
   const chartAccent = "#FF8A00"; // Turuncu - vurgu rengi
 
   // Chart configurations
+  // 🔒 Tüm .map kullanımlarında finalSafeVisits kullan
   const visitsChartData = {
-    labels: visits.map((v) => {
+    labels: finalSafeVisits.map((v: VisitData) => {
       const date = new Date(v.date);
       return date.toLocaleDateString("tr-TR", { month: "short", day: "numeric" });
     }),
     datasets: [
       {
         label: "Etkileşim Sayısı",
-        data: visits.map((v) => v.count),
+        data: finalSafeVisits.map((v: VisitData) => v.count),
         borderColor: chartColorPrimary, // Mavi ana çizgi
         backgroundColor: isDark 
           ? "rgba(30, 136, 229, 0.15)" 
@@ -606,7 +737,7 @@ export default function AnalyticsPage() {
           <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-[#1E88E5] shadow-sm">
             <h3 className="text-[#FF8A00] font-semibold mb-4">En Aktif Ziyaretçiler</h3>
             <div className="space-y-3">
-              {topUsers.length === 0 ? (
+              {!Array.isArray(topUsers) || topUsers.length === 0 ? (
                 <p className="text-center text-gray-500 dark:text-gray-400 py-8">
                   Henüz aktif ziyaretçi bulunmuyor
                 </p>
@@ -698,7 +829,7 @@ export default function AnalyticsPage() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {colorMatches.map((match: any) => (
+                {Array.isArray(colorMatches) && colorMatches.length > 0 ? colorMatches.map((match: any) => (
                   <div
                     key={match.userId}
                     className="flex items-center justify-between bg-gray-50 dark:bg-[#161616] p-3 rounded-lg border border-gray-200 dark:border-[#222] hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition-colors"
@@ -735,7 +866,11 @@ export default function AnalyticsPage() {
                       %{match.similarity}
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <p className="text-center text-gray-500 dark:text-gray-400 py-4">
+                    Henüz renk eşleşmesi bulunmuyor
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -992,7 +1127,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {eventStats.length > 0 ? (
+          {Array.isArray(eventStats) && eventStats.length > 0 ? (
             <div className="space-y-3">
               {eventStats.map((event) => (
                 <div
@@ -1107,7 +1242,7 @@ export default function AnalyticsPage() {
 
         {/* 🎯 Top 5 En Çok Katılım Alan Etkinlikler Grafiği */}
         {/* 🔥 KRİTİK: Tam genişlik - grid dışında */}
-        {eventStats.length > 0 && (
+        {Array.isArray(eventStats) && eventStats.length > 0 && (
           <div className="w-full mt-6">
             <TopEventsChart
               events={eventStats.map((e) => ({

@@ -6,16 +6,18 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, Pin, PinIcon, FolderPlus, MoreVertical } from 'lucide-react'
+import { Heart, MessageCircle, Bookmark, X, Send, Trash2, CornerUpRight, CornerDownRight, Pin, PinIcon, FolderPlus, MoreVertical } from 'lucide-react'
 import MentionInput from './MentionInput'
 import { useRouter } from 'next/navigation'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import UserBadge from './UserBadge'
 import { ProRoleBadge } from './ProRoleBadge'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import { containsBadWord } from '@/lib/utils/containsBadWord'
 import Slider from 'react-slick'
 import toast from 'react-hot-toast'
 import { AddToCollectionModal } from './collections/AddToCollectionModal'
+import { ReportModal } from './ReportModal'
 
 const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
   ssr: false,
@@ -94,9 +96,11 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
   const [currentSlide, setCurrentSlide] = useState(0)
   const sliderRef = useRef<Slider | null>(null)
   const [showAddToCollectionModal, setShowAddToCollectionModal] = useState(false)
+  const [showReportModal, setShowReportModal] = useState<{ contentType: 'post' | 'comment'; contentId: string } | null>(null)
   
+  // ✅ Tüm kullanıcılar koleksiyona eser ekleyebilir
   const roles = capabilities?.roles ?? user?.roles ?? []
-  const canManageCollections = roles.includes('corporate') || roles.includes('collector')
+  const canManageCollections = true // Herkes koleksiyona eser ekleyebilir
 
   // Modal açıkken body'ye class ekle (arka plan UI elementlerini gizlemek için)
   useEffect(() => {
@@ -136,14 +140,30 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
     }
   }, [showDeleteConfirm])
 
-  // Fetch post details
+  // Fetch post details - MongoDB'den kalıcı yorumları yükle
   const { data: post, isLoading } = useQuery<Post>({
     queryKey: ['post', postId],
     queryFn: async () => {
       const response = await api.get(`/posts/${postId}`)
+      console.log('📥 [PostModal] Post loaded from backend:', {
+        postId,
+        commentsCount: response.data?.comments?.length || 0,
+        comments: response.data?.comments?.map((c: any) => ({ id: c.id, content: c.content?.substring(0, 50) })) || []
+      })
+      
+      // 🔥 KRİTİK: Backend'den gelen yorumları kontrol et
+      if (!response.data?.comments || response.data.comments.length === 0) {
+        console.warn('⚠️ [PostModal] Backend\'den yorum gelmedi! Post ID:', postId)
+      }
+      
       return response.data
     },
     enabled: !!accessToken && !!postId,
+    staleTime: 0, // 🔥 KRİTİK: Her zaman fresh data çek (MongoDB'den kalıcı yorumlar için)
+    gcTime: 0, // 🔥 KRİTİK: Cache'i hemen temizle (eski cacheTime yerine gcTime kullan)
+    refetchOnMount: true, // 🔥 KRİTİK: Mount olduğunda refetch et
+    refetchOnWindowFocus: true, // 🔥 KRİTİK: Window focus'ta da refetch et (sayfa yenilendiğinde)
+    refetchOnReconnect: true, // 🔥 KRİTİK: Bağlantı yenilendiğinde refetch et
   })
 
   // Yorum odaklaması - highlightCommentId varsa yorumu scroll et
@@ -179,8 +199,36 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
         return { liked: true }
       }
     },
+    onMutate: async () => {
+      // ✅ KRİTİK: Optimistic update - hemen görünsün (3-4 saniye gecikme olmasın)
+      await queryClient.cancelQueries({ queryKey: ['post', postId] })
+      
+      const previousPost = queryClient.getQueryData<Post>(['post', postId])
+      
+      if (previousPost) {
+        queryClient.setQueryData<Post>(['post', postId], {
+          ...previousPost,
+          isLiked: !previousPost.isLiked,
+          _count: {
+            ...previousPost._count,
+            likes: previousPost.isLiked 
+              ? Math.max(0, previousPost._count.likes - 1)
+              : previousPost._count.likes + 1,
+          },
+        })
+      }
+      
+      return { previousPost }
+    },
+    onError: (err, variables, context) => {
+      // Hata durumunda geri al
+      if (context?.previousPost) {
+        queryClient.setQueryData(['post', postId], context.previousPost)
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      // ✅ Socket event'i ile güncelleme gelecek, invalidateQueries gerekmez
+      // queryClient.invalidateQueries({ queryKey: ['post', postId] })
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       queryClient.invalidateQueries({ queryKey: ['feed'] })
     },
@@ -228,16 +276,104 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
       const response = await api.post(`/posts/${postId}/comments`, { content, parentId })
       return response.data
     },
-    onSuccess: () => {
-      // Optimistic update - Socket.IO'dan gelen güncelleme gerçek veriyi ayarlayacak
-      queryClient.invalidateQueries({ queryKey: ['post', postId] })
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    onSuccess: async (data) => {
+      console.log('✅ [PostModal] Comment created successfully:', data?.id)
+      
+      // 🔥 KRİTİK: Form'u temizle
       setCommentText('')
       setReplyingTo(null)
       setIsPostingComment(false)
+      
+      // 🔥 OPTIMISTIC UPDATE: Hemen görünsün (duplicate kontrolü ile)
+      queryClient.setQueryData<Post>(['post', postId], (oldData) => {
+        if (!oldData) return oldData
+        
+        // Duplicate kontrolü - aynı ID'ye sahip yorum var mı?
+        const checkCommentExists = (comments: any[]): boolean => {
+          for (const comment of comments || []) {
+            if (comment.id === data.id) {
+              return true
+            }
+            if (comment.replies && checkCommentExists(comment.replies)) {
+              return true
+            }
+          }
+          return false
+        }
+        
+        if (checkCommentExists(oldData.comments || [])) {
+          console.log('⚠️ [PostModal] Comment already exists in cache, skipping:', data.id)
+          return oldData
+        }
+        
+        // Backend'den gelen yorumu formatla
+        const newComment = {
+          id: data.id,
+          postId: data.postId,
+          content: data.content,
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt,
+          parentId: data.parentId || null,
+          userId: data.userId || data.user?.id,
+          isPinned: false,
+          isLikedByCurrentUser: false,
+          likesCount: 0,
+          user: {
+            id: data.user?.id || data.userId,
+            username: data.user?.username || user?.username || '',
+            fullName: data.user?.fullName || user?.fullName || '',
+            avatar: data.user?.avatarUrl || data.user?.avatar || user?.avatar || null,
+            isVerified: data.user?.isVerified || false,
+          },
+          replies: [],
+        }
+        
+        // Parent yorum varsa, onun replies array'ine ekle
+        if (data.parentId) {
+          const updateReplies = (comments: any[]): any[] => {
+            return comments.map((comment: any) => {
+              if (comment.id === data.parentId) {
+                return {
+                  ...comment,
+                  replies: [...(comment.replies || []), newComment],
+                }
+              }
+              if (comment.replies && comment.replies.length > 0) {
+                return {
+                  ...comment,
+                  replies: updateReplies(comment.replies),
+                }
+              }
+              return comment
+            })
+          }
+          
+          return {
+            ...oldData,
+            comments: updateReplies(oldData.comments || []),
+          }
+        } else {
+          // Ana yorum ise, comments array'ine ekle (en üste)
+          return {
+            ...oldData,
+            comments: [newComment, ...(oldData.comments || [])],
+          }
+        }
+      })
+      
+      // 🔥 KRİTİK: Backend'den de yükle (kalıcılık için, ama daha uzun gecikme ile)
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['post', postId] })
+        queryClient.refetchQueries({ queryKey: ['post', postId] })
+      }, 1000) // 1 saniye sonra backend'den yükle (optimistic update zaten gösteriyor)
+      
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('❌ [PostModal] Failed to create comment:', error)
       setIsPostingComment(false)
+      // Hata durumunda query'yi yeniden yükle
+      queryClient.invalidateQueries({ queryKey: ['post', postId] })
     },
   })
 
@@ -253,9 +389,12 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
     saveMutation.mutate()
   }
 
+  // Küfür kontrolü
+  const hasBadWord = containsBadWord(commentText)
+
   const handleComment = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!commentText.trim() || isPostingComment) return
+    if (!commentText.trim() || isPostingComment || hasBadWord) return
     
     setIsPostingComment(true)
     commentMutation.mutate({ content: commentText.trim(), parentId: replyingTo || undefined })
@@ -351,17 +490,111 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
     commentsSocket.emit('joinPostRoom', postId)
 
     // Yeni yorum dinleme
-    commentsSocket.on('newComment', (newComment: any) => {
+    commentsSocket.on('newComment', async (newComment: any) => {
       if (newComment.postId === postId) {
-        // Query'yi invalidate et ki güncel yorumları çeksin (nested replies dahil)
-        queryClient.invalidateQueries({ queryKey: ['post', postId] })
+        console.log('📨 [PostModal] Received newComment event:', newComment.id)
+        
+        // 🔥 KRİTİK: Kendi yorumumuzsa zaten optimistic update yaptık, sadece başkalarının yorumlarını ekle
+        // Eğer bu yorum zaten cache'de varsa (kendi yorumumuz), invalidate etme
+        const currentData = queryClient.getQueryData<Post>(['post', postId])
+        const commentExists = currentData?.comments?.some((c: any) => c.id === newComment.id) ||
+          currentData?.comments?.some((c: any) => c.replies?.some((r: any) => r.id === newComment.id))
+        
+        if (commentExists) {
+          console.log('✅ [PostModal] Comment already in cache (own comment), skipping socket update')
+          return
+        }
+        
+        // Başkasının yorumu ise, optimistic update yap
+        queryClient.setQueryData<Post>(['post', postId], (oldData) => {
+          if (!oldData) return oldData
+          
+          // Duplicate kontrolü
+          const checkCommentExists = (comments: any[]): boolean => {
+            for (const comment of comments || []) {
+              if (comment.id === newComment.id) {
+                return true
+              }
+              if (comment.replies && checkCommentExists(comment.replies)) {
+                return true
+              }
+            }
+            return false
+          }
+          
+          if (checkCommentExists(oldData.comments || [])) {
+            return oldData
+          }
+          
+          // Backend'den gelen yorumu formatla
+          const formattedComment = {
+            id: newComment.id,
+            postId: newComment.postId,
+            content: newComment.content,
+            createdAt: newComment.createdAt || new Date().toISOString(),
+            updatedAt: newComment.updatedAt,
+            parentId: newComment.parentId || null,
+            userId: newComment.userId || newComment.user?.id,
+            isPinned: false,
+            isLikedByCurrentUser: false,
+            likesCount: 0,
+            user: {
+              id: newComment.user?.id || newComment.userId,
+              username: newComment.user?.username || '',
+              fullName: newComment.user?.fullName || '',
+              avatar: newComment.user?.avatarUrl || newComment.user?.avatar || null,
+              isVerified: newComment.user?.isVerified || false,
+            },
+            replies: [],
+          }
+          
+          // Parent yorum varsa, onun replies array'ine ekle
+          if (newComment.parentId) {
+            const updateReplies = (comments: any[]): any[] => {
+              return comments.map((comment: any) => {
+                if (comment.id === newComment.parentId) {
+                  return {
+                    ...comment,
+                    replies: [...(comment.replies || []), formattedComment],
+                  }
+                }
+                if (comment.replies && comment.replies.length > 0) {
+                  return {
+                    ...comment,
+                    replies: updateReplies(comment.replies),
+                  }
+                }
+                return comment
+              })
+            }
+            
+            return {
+              ...oldData,
+              comments: updateReplies(oldData.comments || []),
+            }
+          } else {
+            // Ana yorum ise, comments array'ine ekle (en üste)
+            return {
+              ...oldData,
+              comments: [formattedComment, ...(oldData.comments || [])],
+            }
+          }
+        })
+        
+        // Backend'den de yükle (kalıcılık için, ama daha uzun gecikme ile)
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['post', postId] })
+          queryClient.refetchQueries({ queryKey: ['post', postId] })
+        }, 1000) // 1 saniye sonra backend'den yükle
       }
     })
 
     commentsSocket.on('commentCreated', (data: any) => {
       if (data.postId === postId) {
-        // Yorum sayısını güncelle (yanıtlar dahil)
-        queryClient.invalidateQueries({ queryKey: ['post', postId] })
+        console.log('📨 [PostModal] Received commentCreated event:', data.id)
+        // commentCreated event'i sadece bilgilendirme amaçlı
+        // newComment event'i zaten yorumu ekledi, burada invalidate etmiyoruz
+        // Çünkü invalidateQueries çağrısı yorumları yeniden yükleyip kaybolmasına neden oluyor
       }
     })
 
@@ -377,6 +610,49 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
     commentsSocket.on('commentUpdated', (data: { id: string; postId: string; content: string; updatedAt: string }) => {
       if (data.postId === postId) {
         queryClient.invalidateQueries({ queryKey: ['post', postId] })
+      }
+    })
+
+    // Yorum beğenme güncellemesi dinleme
+    commentsSocket.on('commentLikeUpdated', (data: { commentId: string; postId: string; liked: boolean; likesCount: number; userId: string }) => {
+      if (data.postId === postId) {
+        console.log('📨 [PostModal] Received commentLikeUpdated event:', data.commentId)
+        
+        // 🔥 KRİTİK: Yorum beğenme durumunu güncelle (yorum kaybolmasını önle)
+        queryClient.setQueryData<Post>(['post', postId], (oldData) => {
+          if (!oldData) return oldData
+          
+          // Yorumu bul ve güncelle (ana yorumlar ve replies içinde)
+          const updateCommentLikes = (comments: any[]): any[] => {
+            return comments.map((comment: any) => {
+              if (comment.id === data.commentId) {
+                return {
+                  ...comment,
+                  isLikedByCurrentUser: data.userId === user?.id ? data.liked : comment.isLikedByCurrentUser,
+                  likesCount: data.likesCount,
+                  _count: {
+                    ...comment._count,
+                    likes: data.likesCount,
+                  },
+                  likes: data.userId === user?.id && data.liked ? [{ id: 'temp' }] : (data.userId === user?.id ? [] : comment.likes),
+                }
+              }
+              // Replies içinde de ara
+              if (comment.replies && comment.replies.length > 0) {
+                return {
+                  ...comment,
+                  replies: updateCommentLikes(comment.replies),
+                }
+              }
+              return comment
+            })
+          }
+          
+          return {
+            ...oldData,
+            comments: updateCommentLikes(oldData.comments || []),
+          }
+        })
       }
     })
 
@@ -423,10 +699,11 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
       commentsSocket.off('newComment')
       commentsSocket.off('commentCreated')
       commentsSocket.off('commentDeleted')
+      commentsSocket.off('commentLikeUpdated')
       commentsSocket.off('commentPinned')
       commentsSocket.off('connect')
     }
-  }, [accessToken, postId, queryClient])
+  }, [accessToken, postId, queryClient, user?.id])
 
   // Close on Escape key
   useEffect(() => {
@@ -512,7 +789,7 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
         onClick={onClose}
       >
         <div
-          className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex animate-in fade-in slide-in-from-bottom-4 duration-300"
+          className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex animate-in fade-in slide-in-from-bottom-4 duration-300"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-center w-full h-96">
@@ -546,11 +823,12 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in fade-in slide-in-from-bottom-4 duration-300 transition-colors"
+        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto flex flex-col md:flex-row animate-in fade-in slide-in-from-bottom-4 duration-300 transition-colors"
+        style={{ height: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left side - Media - Sabit yükseklik */}
-        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center h-[520px] md:h-[600px] relative w-full overflow-hidden [&_.slick-slider]:pointer-events-auto">
+        <div className="md:w-3/5 bg-black dark:bg-gray-950 flex items-center justify-center h-[520px] md:h-[600px] min-h-full relative w-full overflow-hidden [&_.slick-slider]:pointer-events-auto flex-shrink-0">
           {mediaArray.length > 0 ? (
             hasMultipleMedia ? (
               /* Çoklu görsel - Slider */
@@ -583,27 +861,29 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
               </Slider>
             ) : (
               /* Tek görsel - Slider yok */
-              mediaArray[0].type === 'video' ? (
-                <video
-                  src={resolveImageUrl(mediaArray[0].url)}
-                  className="w-full h-full object-contain"
-                  controls
-                  autoPlay
-                  onError={(e) => {
-                    console.error('PostModal Video Error:', resolveImageUrl(mediaArray[0].url))
-                  }}
-                />
-              ) : (
-                <img
-                  src={resolveImageUrl(mediaArray[0].url)}
-                  alt={post.caption || 'Post'}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    console.error('PostModal Media Error:', resolveImageUrl(mediaArray[0].url))
-                    ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                  }}
-                />
-              )
+              <div className="w-full h-full flex items-center justify-center">
+                {mediaArray[0].type === 'video' ? (
+                  <video
+                    src={resolveImageUrl(mediaArray[0].url)}
+                    className="w-full h-full object-contain max-h-full"
+                    controls
+                    autoPlay
+                    onError={(e) => {
+                      console.error('PostModal Video Error:', resolveImageUrl(mediaArray[0].url))
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={resolveImageUrl(mediaArray[0].url)}
+                    alt={post.caption || 'Post'}
+                    className="w-full h-full object-contain max-h-full"
+                    onError={(e) => {
+                      console.error('PostModal Media Error:', resolveImageUrl(mediaArray[0].url))
+                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                    }}
+                  />
+                )}
+              </div>
             )
           ) : (
             <div className="text-gray-400">No media available</div>
@@ -647,7 +927,7 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
         </div>
 
         {/* Right side - Details */}
-        <div className="md:w-2/5 flex flex-col h-[90vh] md:h-auto max-h-[90vh]">
+        <div className="md:w-2/5 flex flex-col h-[520px] md:h-[600px] max-h-[90vh]">
           {/* Header - Instagram Style: User + Caption */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-start gap-3 flex-shrink-0">
             <div
@@ -685,12 +965,23 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                   <UserBadge role={post.user.role} />
                   <ProRoleBadge roles={(post.user as any).roles} plan={(post.user as any).plan} />
                 </div>
-                <button
-                  onClick={onClose}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                >
-                  <X size={20} className="text-gray-600 dark:text-gray-400" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {user?.id !== post.user.id && (
+                    <button
+                      onClick={() => setShowReportModal({ contentType: 'post', contentId: post.id })}
+                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                      title="Raporla"
+                    >
+                      <span className="text-sm">🚩</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={onClose}
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                  >
+                    <X size={20} className="text-gray-600 dark:text-gray-400" />
+                  </button>
+                </div>
               </div>
               {post.caption && (
                 <p className="text-black dark:text-white text-sm mt-[2px] leading-snug whitespace-pre-wrap break-words">
@@ -742,7 +1033,7 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                     : 'text-gray-700 dark:text-gray-300'
                 }`}
               />
-              {canManageCollections && (
+              {canManageCollections && post?.type === 'artwork' && (
                 <button
                   onClick={() => setShowAddToCollectionModal(true)}
                   className="hover:text-brand-orange transition-colors"
@@ -755,8 +1046,8 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
           </div>
 
 
-          {/* Comments Section - Instagram Style - Sabit yükseklik + scroll */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[420px] comments-scroll pr-2">
+          {/* Comments Section - Instagram Style - Scroll */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 comments-scroll pr-2 min-h-0">
             {/* ✅ SABİTLENEN YORUM ALANI - Özel Banner */}
             {(() => {
               const pinnedComment = post.comments?.find((c: any) => c.isPinned);
@@ -913,8 +1204,9 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                                     input?.focus()
                                   }, 100)
                                 }}
-                                className="text-xs text-brand-orange hover:underline font-medium transition-colors"
+                                className="text-xs text-brand-orange hover:underline font-medium transition-colors flex items-center gap-1"
                               >
+                                <CornerDownRight size={14} />
                                 Yanıtla
                               </button>
                             </div>
@@ -931,6 +1223,7 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                                 initialLiked={comment.isLikedByCurrentUser || false}
                                 initialCount={comment.likesCount || 0}
                                 type="post"
+                                postId={postId}
                               />
                             </div>
                             
@@ -969,14 +1262,35 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                                     {!isCommentOwner && isPostOwner && (
                                       <button
                                         onClick={() => handleDeleteComment(comment.id)}
-                                        className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                        className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                       >
                                         Yorumu Sil
+                                      </button>
+                                    )}
+                                    {!isCommentOwner && (
+                                      <button
+                                        onClick={() => {
+                                          setShowReportModal({ contentType: 'comment', contentId: comment.id })
+                                          setCommentMenuOpen(null)
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-b-lg transition-colors"
+                                      >
+                                        🚩 Raporla
                                       </button>
                                     )}
                                   </div>
                                 )}
                               </div>
+                            )}
+                            {/* Raporla butonu - Yorum sahibi değilse */}
+                            {!isCommentOwner && !isPostOwner && (
+                              <button
+                                onClick={() => setShowReportModal({ contentType: 'comment', contentId: comment.id })}
+                                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                title="Raporla"
+                              >
+                                <span className="text-xs">🚩</span>
+                              </button>
                             )}
                           </div>
                         )}
@@ -1072,6 +1386,7 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                                   initialLiked={reply.isLikedByCurrentUser || false}
                                   initialCount={reply.likesCount || 0}
                                   type="post"
+                                  postId={postId}
                                 />
                               </div>
                             </div>
@@ -1112,25 +1427,32 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
               </div>
             )}
             {/* Comment form - Instagram Style */}
-            <form onSubmit={handleComment} className="flex items-center px-4 py-3">
-              <MentionInput
-                value={commentText}
-                setValue={setCommentText}
-                placeholder={replyingTo ? "Yanıt yaz..." : "Yorum ekle..."}
-                disabled={isPostingComment}
-                className="flex-1 bg-transparent text-gray-300 dark:text-gray-300 text-sm outline-none"
-              />
-              <button
-                type="submit"
-                disabled={!commentText.trim() || isPostingComment}
-                className="ml-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-full p-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isPostingComment ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <Send size={16} />
-                )}
-              </button>
+            <form onSubmit={handleComment} className="px-4 py-3">
+              <div className="flex items-center">
+                <MentionInput
+                  value={commentText}
+                  setValue={setCommentText}
+                  placeholder={replyingTo ? "Yanıt yaz..." : "Yorum ekle..."}
+                  disabled={isPostingComment}
+                  className="flex-1 bg-transparent text-gray-300 dark:text-gray-300 text-sm outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!commentText.trim() || isPostingComment || hasBadWord}
+                  className="ml-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-full p-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isPostingComment ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Send size={16} />
+                  )}
+                </button>
+              </div>
+              {hasBadWord && (
+                <p className="text-xs text-orange-500 mt-1 px-1">
+                  Bu yorum Feellink topluluk kurallarına uygun değil.
+                </p>
+              )}
             </form>
           </div>
         </div>
@@ -1181,6 +1503,16 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
             </div>
           </div>
         </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <ReportModal
+          isOpen={!!showReportModal}
+          onClose={() => setShowReportModal(null)}
+          contentType={showReportModal.contentType}
+          contentId={showReportModal.contentId}
+        />
       )}
     </div>
   )

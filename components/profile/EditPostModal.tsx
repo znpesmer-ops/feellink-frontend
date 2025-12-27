@@ -5,6 +5,7 @@ import { X, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
+import { containsBadWord } from '@/lib/utils/containsBadWord'
 
 interface EditPostModalProps {
   post: {
@@ -28,8 +29,16 @@ export function EditPostModal({ post, open, onClose, onSuccess }: EditPostModalP
     }
   }, [open, post])
 
+  // Küfür kontrolü
+  const hasBadWord = containsBadWord(caption)
+
   const handleSave = async () => {
     if (!post.id) return
+
+    if (hasBadWord) {
+      toast.error('Bu içerik Feellink topluluk kurallarına uygun değil.')
+      return
+    }
 
     try {
       setSaving(true)
@@ -95,6 +104,11 @@ export function EditPostModal({ post, open, onClose, onSuccess }: EditPostModalP
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00]/30 focus:border-[#ff7b00] dark:bg-gray-800 dark:text-gray-100 resize-none"
               disabled={saving}
             />
+            {hasBadWord && (
+              <p className="text-xs text-orange-500 mt-1">
+                Bu içerik Feellink topluluk kurallarına uygun değil.
+              </p>
+            )}
           </div>
         </div>
 
@@ -109,7 +123,7 @@ export function EditPostModal({ post, open, onClose, onSuccess }: EditPostModalP
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || hasBadWord}
             className="flex-1 px-4 py-2 bg-[#ff7b00] hover:bg-[#e36f00] text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {saving ? (

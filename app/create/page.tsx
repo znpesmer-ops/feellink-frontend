@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import api, { getErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
+import { containsBadWord } from '@/lib/utils/containsBadWord'
 import { AuthGuard } from '@/lib/auth-guard'
 
 function CreateContent() {
@@ -88,11 +89,18 @@ function CreateContent() {
     },
   })
 
+  // Küfür kontrolü
+  const hasBadWord = containsBadWord(caption)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (files.length === 0) {
       setError('Lütfen en az bir fotoğraf veya video seçin')
+      return
+    }
+    if (hasBadWord) {
+      setError('Bu içerik Feellink topluluk kurallarına uygun değil.')
       return
     }
     createPostMutation.mutate()
@@ -193,6 +201,11 @@ function CreateContent() {
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Açıklamana #hashtag ekleyerek gönderini kategorize edebilirsin
           </p>
+          {hasBadWord && (
+            <p className="text-xs text-orange-500 mt-1">
+              Bu içerik Feellink topluluk kurallarına uygun değil.
+            </p>
+          )}
         </div>
 
         {/* Location */}
@@ -230,7 +243,7 @@ function CreateContent() {
           </button>
           <button
             type="submit"
-            disabled={uploading || files.length === 0}
+            disabled={uploading || files.length === 0 || hasBadWord}
             className="flex-1 px-4 py-3 bg-[#ff7b00] text-white rounded-xl hover:bg-[#e36f00] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {uploading ? 'Yükleniyor...' : 'Paylaş'}

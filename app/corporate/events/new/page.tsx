@@ -10,7 +10,7 @@ export default function NewEventPage() {
     <div className="max-w-4xl mx-auto pt-8 px-4 pb-20">
         <div className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl p-8 shadow-sm">
           <h1 className="text-3xl font-bold text-[#ff7b00] mb-2">
-            🎟️ Yeni Etkinlik Oluştur
+            Yeni Etkinlik Oluştur
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
             Etkinlik bilgilerini doldurun ve yayınlayın

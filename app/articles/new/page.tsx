@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
 import { Upload, X, Calendar } from 'lucide-react'
 import ArticleImageCropper from '@/components/articles/ArticleImageCropper'
+import RichTextEditor from '@/components/articles/RichTextEditor'
 
 function NewArticleContent() {
   const router = useRouter()
@@ -226,17 +227,15 @@ function NewArticleContent() {
             </p>
           </div>
 
-          {/* İçerik */}
+          {/* İçerik - Rich Text Editor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               İçerik *
             </label>
-            <textarea
+            <RichTextEditor
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={setContent}
               placeholder="Yazının içeriğini buraya yaz..."
-              rows={12}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-xl bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ff7b00] transition-all resize-none"
             />
           </div>
 

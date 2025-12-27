@@ -77,15 +77,15 @@ export default function JobListingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
-  const [confirmAction, setConfirmAction] = useState<{
+  const [inlineConfirm, setInlineConfirm] = useState<{
     applicationId: string
-    action: 'approve' | 'reject' | null
+    action: 'approve' | 'reject'
   } | null>(null)
 
   // Rol bazlı kontrol
   const roles = capabilities?.roles ?? user?.roles ?? []
   const canCreateJob = roles.includes('corporate') || roles.includes('collector')
-  const isOwner = jobListing?.createdBy.id === user?.id
+  const isOwner = jobListing?.createdBy?.id === user?.id
 
   useEffect(() => {
     if (!accessToken) {
@@ -300,156 +300,222 @@ export default function JobListingDetailPage() {
           {applications.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">Bu ilana henüz başvuru yapılmadı.</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {applications.map((app) => (
                 <div
                   key={app.id}
-                  className="flex items-start justify-between gap-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/40 backdrop-blur p-4"
+                  className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/40 backdrop-blur overflow-hidden"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      {app.applicant.avatar ? (
-                        <img
-                          src={app.applicant.avatar}
-                          alt={app.applicant.username || 'Profil'}
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center">
-                          <UserCircle2 className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                  {/* Üst Bölüm: Aday Bilgileri */}
+                  <div className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          {app.applicant.avatar ? (
+                            <img
+                              src={app.applicant.avatar}
+                              alt={app.applicant.username || 'Profil'}
+                              className="h-12 w-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center border-2 border-gray-200 dark:border-gray-700">
+                              <UserCircle2 className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              {app.applicant.fullName || app.applicant.username || 'İsimsiz Kullanıcı'}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{app.applicant.email}</p>
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {app.applicant.fullName || app.applicant.username || 'İsimsiz Kullanıcı'}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{app.applicant.email}</p>
+                        {app.coverLetter && (
+                          <p className="mt-3 text-sm text-gray-600 dark:text-gray-300 leading-relaxed line-clamp-3">{app.coverLetter}</p>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {app.portfolioUrl && (
+                            <a
+                              href={app.portfolioUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-orange hover:text-orange-600 hover:underline"
+                            >
+                              📎 Portfolyo
+                            </a>
+                          )}
+                          {app.portfolioFileUrl && (
+                            <a
+                              href={app.portfolioFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-orange hover:text-orange-600 hover:underline"
+                            >
+                              📄 Portfolyo Dosyası
+                            </a>
+                          )}
+                          {app.cvUrl && (
+                            <a
+                              href={app.cvUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-orange hover:text-orange-600 hover:underline"
+                            >
+                              📄 CV
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {getStatusBadge(app.status)}
                       </div>
                     </div>
-                    {app.coverLetter && (
-                      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{app.coverLetter}</p>
-                    )}
-                    {app.portfolioUrl && (
-                      <a
-                        href={app.portfolioUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs text-brand-orange hover:underline"
-                      >
-                        📎 Portfolyo Linki →
-                      </a>
-                    )}
-                    {app.portfolioFileUrl && (
-                      <a
-                        href={app.portfolioFileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs text-brand-orange hover:underline ml-2"
-                      >
-                        📄 Portfolyo Dosyası →
-                      </a>
-                    )}
-                    {app.cvUrl && (
-                      <a
-                        href={app.cvUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs text-brand-orange hover:underline ml-2"
-                      >
-                        📄 CV →
-                      </a>
-                    )}
-                    <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(app.createdAt).toLocaleDateString('tr-TR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                    </p>
-
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    {getStatusBadge(app.status)}
-                    
-                    {/* İlan sahibi için aksiyon butonları */}
-                    {isOwner && (
-                      <>
-                        {/* 1. PENDING durumu: SADECE "İncelemeye Al" butonu */}
-                        {app.status === 'PENDING' && (
-                          <div className="flex flex-col gap-2 mt-2">
-                            <button
-                              onClick={() => handleStatusUpdate(app.id, 'REVIEWED')}
-                              disabled={updatingStatus === app.id}
-                              className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 dark:border dark:border-blue-800/50 text-blue-600 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/40 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                            >
-                              {updatingStatus === app.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : null}
-                              İncelemeye Al
-                            </button>
-                          </div>
-                        )}
 
-                        {/* 2. REVIEWED durumu: Olumlu ve Olumsuz Yanıt butonları */}
-                        {app.status === 'REVIEWED' && (
-                          <div className="flex flex-col gap-2 mt-2">
-                            <button
-                              onClick={() => setConfirmAction({ applicationId: app.id, action: 'approve' })}
-                              disabled={updatingStatus === app.id}
-                              className="px-3 py-1.5 text-xs font-medium bg-green-50 dark:bg-green-900/30 dark:border dark:border-green-800/50 text-green-600 dark:text-green-300 rounded-md hover:bg-green-100 dark:hover:bg-green-900/40 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                            >
-                              {updatingStatus === app.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <CheckCircle className="h-3 w-3" />
-                              )}
-                              Olumlu Yanıt
-                            </button>
-                            <button
-                              onClick={() => setConfirmAction({ applicationId: app.id, action: 'reject' })}
-                              disabled={updatingStatus === app.id}
-                              className="px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/30 dark:border dark:border-red-800/50 text-red-600 dark:text-red-300 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                            >
-                              {updatingStatus === app.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <XCircle className="h-3 w-3" />
-                              )}
-                              Olumsuz Yanıt
-                            </button>
-                          </div>
-                        )}
+                  {/* Ayırıcı Çizgi */}
+                  {isOwner && (
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                  )}
 
-                        {/* 3. ACCEPTED durumu: Mesaj Gönder butonu */}
-                        {app.status === 'ACCEPTED' && (
-                          <div className="flex flex-col gap-2 mt-2">
-                            <div className="rounded-lg bg-green-50 dark:bg-green-900/30 dark:border dark:border-green-800/50 p-2 mb-1">
-                              <p className="text-xs font-medium text-green-700 dark:text-green-300 text-center">
-                                ✅ Başvuru olumlu yanıtlandı
+                  {/* Alt Bölüm: BAŞVURU DEĞERLENDİRME (Sadece İlan Sahibi İçin) */}
+                  {isOwner && (
+                    <div className="p-4 bg-gray-50/50 dark:bg-gray-900/30">
+                      {/* Başlık */}
+                      <div className="mb-4">
+                        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">
+                          Başvuru Değerlendirme
+                        </h3>
+                        
+                        {/* Durum ve Tarih Bilgisi */}
+                        <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400 mb-4">
+                          <div>
+                            <span className="font-medium">Durum:</span>{' '}
+                            <span className="capitalize">
+                              {app.status === 'PENDING' ? 'Beklemede' : 
+                               app.status === 'REVIEWED' ? 'İnceleniyor' :
+                               app.status === 'ACCEPTED' ? 'Olumlu Yanıt' :
+                               app.status === 'REJECTED' ? 'Olumsuz Yanıt' : app.status}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-medium">Başvuru Tarihi:</span>{' '}
+                            {new Date(app.createdAt).toLocaleDateString('tr-TR', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Karar Verildikten Sonra: Kilitli Durum Bandı */}
+                      {(app.status === 'ACCEPTED' || app.status === 'REJECTED') ? (
+                        <div className={`rounded-lg p-3 border ${
+                          app.status === 'ACCEPTED'
+                            ? 'bg-green-50/80 dark:bg-green-900/20 border-green-200 dark:border-green-800/50'
+                            : 'bg-red-50/80 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
+                        }`}>
+                          <div className="flex items-start gap-2">
+                            {app.status === 'ACCEPTED' ? (
+                              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-xs font-medium ${
+                                app.status === 'ACCEPTED'
+                                  ? 'text-green-700 dark:text-green-300'
+                                  : 'text-red-700 dark:text-red-300'
+                              }`}>
+                                {app.status === 'ACCEPTED'
+                                  ? 'Bu başvuru olumlu değerlendirildi'
+                                  : 'Bu başvuru olumsuz değerlendirildi'}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {app.status === 'ACCEPTED'
+                                  ? 'Adaya bilgilendirme maili gönderildi.'
+                                  : 'Aday bilgilendirildi.'}
                               </p>
                             </div>
+                          </div>
+                          {app.status === 'ACCEPTED' && (
                             <button
                               onClick={() => handleSendMessage(app.applicant.id)}
-                              className="px-3 py-1.5 text-xs font-medium bg-brand-orange text-white rounded-md hover:bg-orange-600 transition flex items-center justify-center gap-1.5"
+                              className="mt-3 w-full px-3 py-2 text-xs font-medium bg-brand-orange text-white rounded-md hover:bg-orange-600 transition flex items-center justify-center gap-1.5"
                             >
                               💬 Mesaj Gönder
                             </button>
-                          </div>
-                        )}
-
-                        {/* 4. REJECTED durumu: Sadece bilgi göster */}
-                        {app.status === 'REJECTED' && (
-                          <div className="mt-2 text-left min-w-[200px]">
-                            <div className="rounded-lg bg-red-50 dark:bg-red-900/30 dark:border dark:border-red-800/50 p-3">
-                              <p className="text-xs font-medium text-red-700 dark:text-red-300">
-                                ❌ Başvuru olumsuz yanıtlandı
+                          )}
+                        </div>
+                      ) : (
+                        /* Karar Verilmemiş: Aksiyon Alanı */
+                        <>
+                          {/* Mini Inline Confirmation */}
+                          {inlineConfirm && inlineConfirm.applicationId === app.id ? (
+                            <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/80 dark:bg-blue-900/20 p-4 mb-4">
+                              <p className="text-xs font-medium text-blue-900 dark:text-blue-200 mb-2">
+                                {inlineConfirm.action === 'approve'
+                                  ? 'Bu başvuruyu olumlu değerlendirmek üzeresiniz.'
+                                  : 'Bu başvuruyu olumsuz değerlendirmek üzeresiniz.'}
                               </p>
+                              <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                                Adaya bilgilendirme maili gönderilecektir.
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={async () => {
+                                    if (inlineConfirm.action === 'approve') {
+                                      await handleStatusUpdate(inlineConfirm.applicationId, 'ACCEPTED')
+                                    } else {
+                                      await handleStatusUpdate(inlineConfirm.applicationId, 'REJECTED')
+                                    }
+                                    setInlineConfirm(null)
+                                  }}
+                                  disabled={updatingStatus === inlineConfirm.applicationId}
+                                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    inlineConfirm.action === 'approve'
+                                      ? 'bg-green-600 text-white hover:bg-green-700'
+                                      : 'bg-red-600 text-white hover:bg-red-700'
+                                  }`}
+                                >
+                                  {updatingStatus === inlineConfirm.applicationId ? (
+                                    <Loader2 className="h-3 w-3 animate-spin mx-auto" />
+                                  ) : (
+                                    'Onayla'
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => setInlineConfirm(null)}
+                                  className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                                >
+                                  Vazgeç
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                          ) : (
+                            /* Karar Butonları */
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => setInlineConfirm({ applicationId: app.id, action: 'approve' })}
+                                disabled={updatingStatus === app.id}
+                                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-brand-orange text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                                Olumlu Değerlendir
+                              </button>
+                              <button
+                                onClick={() => setInlineConfirm({ applicationId: app.id, action: 'reject' })}
+                                disabled={updatingStatus === app.id}
+                                className="flex-1 px-4 py-2.5 text-sm font-medium bg-transparent border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                              >
+                                <XCircle className="h-4 w-4" />
+                                Olumsuz Değerlendir
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -457,59 +523,6 @@ export default function JobListingDetailPage() {
         </div>
       )}
 
-      {/* ✅ Başvuru Durumu Güncelleme Onay Modalı */}
-      {confirmAction && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/70"
-          onClick={() => setConfirmAction(null)}
-        >
-          <div 
-            className="w-[420px] rounded-xl bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              {confirmAction.action === 'approve'
-                ? 'Olumlu yanıt vermek istiyor musunuz?'
-                : 'Olumsuz yanıt vermek istiyor musunuz?'}
-            </h3>
-
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              {confirmAction.action === 'approve'
-                ? 'Bu işlem sonrası başvuru olumlu olarak işaretlenecektir.'
-                : 'Bu işlem sonrası başvuru olumsuz olarak işaretlenecektir.'}
-            </p>
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmAction(null)}
-                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                İptal
-              </button>
-
-              <button
-                onClick={async () => {
-                  if (confirmAction.action === 'approve') {
-                    await handleStatusUpdate(confirmAction.applicationId, 'ACCEPTED')
-                  } else if (confirmAction.action === 'reject') {
-                    await handleStatusUpdate(confirmAction.applicationId, 'REJECTED')
-                  }
-                  setConfirmAction(null)
-                }}
-                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
-                  confirmAction.action === 'approve'
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                {confirmAction.action === 'approve'
-                  ? 'Olumlu Yanıt Ver'
-                  : 'Olumsuz Yanıt Ver'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ImageIcon, MessageCircle, Landmark, Palette } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import Link from 'next/link'
@@ -18,35 +19,62 @@ interface FeaturedData {
 }
 
 export default function HighlightsRow({ compactTop = false }: HighlightsRowProps) {
-  const [featured, setFeatured] = useState<FeaturedData>({
-    museum: null,
-    artwork: null,
-    comment: null,
-    collector: null,
-  })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchFeatured = async () => {
+  // ✅ TEK KAYNAK: Backend'den monthly highlights çek
+  const { data: monthlyHighlights, isLoading } = useQuery({
+    queryKey: ['monthly-highlights'],
+    queryFn: async () => {
       try {
-        const res = await api.get('/sidebar/featured')
-        setFeatured(res.data)
+        const res = await api.get('/highlights/monthly')
+        return res.data
       } catch (err) {
-        console.error('Featured highlights alınamadı:', err)
-        // Hata durumunda boş veri göster
-        setFeatured({
+        console.error('Monthly highlights alınamadı:', err)
+        return {
           museum: null,
           artwork: null,
           comment: null,
-          collector: null,
-        })
-      } finally {
-        setLoading(false)
+          collection: null,
+        }
       }
-    }
+    },
+    staleTime: 60 * 60 * 1000, // 1 saat cache
+    refetchOnWindowFocus: false,
+  })
 
-    fetchFeatured()
-  }, [])
+  // Backward compatibility için format dönüşümü
+  const featured: FeaturedData = {
+    museum: monthlyHighlights?.museum
+      ? {
+          name: monthlyHighlights.museum.name,
+          username: monthlyHighlights.museum.username,
+          imageUrl: monthlyHighlights.museum.imageUrl || null,
+        }
+      : null,
+    artwork: monthlyHighlights?.artwork
+      ? {
+          title: monthlyHighlights.artwork.title,
+          postId: monthlyHighlights.artwork.postId,
+          imageUrl: monthlyHighlights.artwork.imageUrl || null,
+        }
+      : null,
+    comment: monthlyHighlights?.comment
+      ? {
+          text: monthlyHighlights.comment.text,
+          commentId: monthlyHighlights.comment.commentId,
+          postId: monthlyHighlights.comment.postId,
+          username: monthlyHighlights.comment.username,
+          fullName: monthlyHighlights.comment.fullName,
+        }
+      : null,
+    collector: monthlyHighlights?.collection
+      ? {
+          name: monthlyHighlights.collection.title,
+          username: monthlyHighlights.collection.owner.username,
+          imageUrl: monthlyHighlights.collection.coverImage || monthlyHighlights.collection.owner.avatar || null,
+        }
+      : null,
+  }
+
+  const loading = isLoading
 
   // Her kart için hedef URL'yi hesapla
   const getCardUrl = (item: any) => {
@@ -61,8 +89,8 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
         return featured.comment?.postId && featured.comment?.commentId
           ? `/feed?post=${featured.comment.postId}&comment=${featured.comment.commentId}`
           : null
-      case 4: // Ayın Koleksiyoneri
-        return featured.collector?.username ? `/profile/${featured.collector.username}` : null
+      case 4: // Ayın Koleksiyonu
+        return monthlyHighlights?.collection?.id ? `/collections/${monthlyHighlights.collection.id}` : null
       default:
         return null
     }
@@ -98,7 +126,7 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
     },
     {
       id: 4,
-      title: 'Ayın Koleksiyoneri',
+      title: 'Ayın Koleksiyonu',
       subtitle: featured.collector?.name || '—',
       icon: <Palette size={20} strokeWidth={1.8} />,
       data: featured.collector,
@@ -138,7 +166,7 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
             : item.id === 2
             ? 'bg-gradient-to-br from-blue-500/20 to-blue-600/30'
             : item.id === 3
-            ? 'bg-gradient-to-br from-purple-500/20 to-purple-600/30'
+            ? 'bg-gradient-to-b from-[rgba(120,80,160,0.15)] to-[rgba(20,20,30,0.85)]'
             : 'bg-gradient-to-br from-pink-500/20 to-pink-600/30'
 
           const cardUrl = getCardUrl(item)
@@ -162,18 +190,25 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
 
               {/* Yazılar - En altta overlay içinde */}
               {item.id === 3 ? (
-                // Ayın Yorumu için özel format (yorum metni önce, başlık sonra) - Ayın Eseri ile aynı hizada
-                <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
-                  <p className="text-sm text-white font-medium leading-snug mb-1.5">
-                    "{item.subtitle}"
-                  </p>
-                  {item.username && (
-                    <p className="text-xs text-white/60 mb-1.5">@{item.username}</p>
-                  )}
-                  <p className="text-xs font-semibold text-[#ff7b00] tracking-wide uppercase">
-                    {item.title}
-                  </p>
-                </div>
+                // Ayın Yorumu için özel format: Başlık üstte (diğer kartlarla aynı hizada), kullanıcı adı altında, yorum metni ortada
+                <>
+                  {/* Başlık - Diğer kartlarla birebir aynı bottom padding ve hiza */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
+                    <p className="text-xs font-semibold text-[#ff7b00] mb-1.5 tracking-wide uppercase">
+                      {item.title}
+                    </p>
+                    {/* Kullanıcı adı - Daha sakin, küratoryal ton */}
+                    {item.username && (
+                      <p className="text-xs text-white/60 leading-snug line-clamp-1">@{item.username}</p>
+                    )}
+                  </div>
+                  {/* Yorum metni - Kartın optik merkezinde, quote hissi veren stil */}
+                  <div className="absolute inset-0 flex items-center justify-center px-3 md:px-4 pb-20 md:pb-24">
+                    <p className="relative top-[30px] text-sm text-white/90 font-medium italic leading-snug text-center">
+                      {item.subtitle}
+                    </p>
+                  </div>
+                </>
               ) : (
                 // Diğer kartlar için normal format (başlık önce, içerik sonra)
                 <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">

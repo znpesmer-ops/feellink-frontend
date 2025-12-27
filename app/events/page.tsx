@@ -67,20 +67,80 @@ export default function EventsFeedPage() {
       try {
         // Genel etkinlikleri çek
         const res = await api.get("/events/all");
-        setEvents(res.data || []);
-        setFiltered(res.data || []);
+        
+        // 🔒 GÜVENLİ VERİ NORMALİZASYONU - Backend response format'larını handle et
+        // Backend ne dönerse dönsün, UI asla patlamaz
+        const safeEventsData = (() => {
+          // Response data kontrolü
+          if (!res.data) return [];
+          
+          // Array ise direkt döndür
+          if (Array.isArray(res.data)) {
+            return res.data;
+          }
+          
+          // { events: [...] } formatında gelebilir
+          if (res.data.events && Array.isArray(res.data.events)) {
+            return res.data.events;
+          }
+          
+          // { data: [...] } formatında gelebilir
+          if (res.data.data && Array.isArray(res.data.data)) {
+            return res.data.data;
+          }
+          
+          // Hiçbiri değilse boş array
+          return [];
+        })();
+        
+        setEvents(safeEventsData);
+        setFiltered(safeEventsData);
         
         // Kullanıcının etkinliklerini çek (giriş yapmışsa)
         if (user) {
           try {
             const myRes = await api.get("/events/my");
-            setMyEvents(myRes.data || []);
-          } catch (err) {
+            
+            // 🔒 GÜVENLİ VERİ NORMALİZASYONU - Kendi etkinliklerim için de
+            const safeMyEventsData = (() => {
+              if (!myRes.data) return [];
+              if (Array.isArray(myRes.data)) return myRes.data;
+              if (myRes.data.events && Array.isArray(myRes.data.events)) return myRes.data.events;
+              if (myRes.data.data && Array.isArray(myRes.data.data)) return myRes.data.data;
+              return [];
+            })();
+            
+            setMyEvents(safeMyEventsData);
+          } catch (err: any) {
             console.error("Kendi etkinliklerim alınamadı:", err);
+            // 500 hatası durumunda sessizce devam et, boş array kullan
+            setMyEvents([]);
+            
+            // Sadece kritik olmayan hatalarda kullanıcıya bilgi ver
+            if (err?.response?.status !== 500) {
+              toast.error("Etkinlikleriniz yüklenemedi. Lütfen sayfayı yenileyin.");
+            }
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Etkinlikler alınamadı:", err);
+        
+        // 🔒 Hata durumunda boş array ile devam et
+        setEvents([]);
+        setFiltered([]);
+        
+        // Sadece network hatası veya kritik hatalarda kullanıcıya bilgi ver
+        // 500 hatası backend'de handle edildi, boş array döner
+        if (err?.code === 'ERR_NETWORK' || err?.message?.includes('Network Error')) {
+          toast.error("Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.");
+        } else if (err?.response?.status === 401) {
+          // 401 hatası için sessizce devam et (auth guard zaten yönetiyor)
+          console.log("Unauthorized - auth guard will handle");
+        } else if (err?.response?.status && err?.response?.status >= 500) {
+          // 500+ hatalar için sessizce devam et (backend zaten boş array döndü)
+          console.log("Server error - backend returned empty array");
+        }
+        // Diğer durumlarda sessizce devam et, boş array zaten set edildi
       } finally {
         setLoading(false);
       }
@@ -91,6 +151,7 @@ export default function EventsFeedPage() {
   // Tab değiştiğinde filtreyi uygula
   useEffect(() => {
     if (activeTab === "all") {
+      // 🔒 "Tümü" sekmesinde filtreyi bypass et - tüm eventleri göster
       setFiltered(events);
       setFilter("all");
     } else if (activeTab === "mine") {
@@ -118,6 +179,13 @@ export default function EventsFeedPage() {
     setFilter(type);
     const now = new Date();
     const sourceData = activeTab === "all" ? events : myEvents;
+    
+    // 🔒 PROFESYONEL FİLTRELEME - "Tümü" filtresinde filtreyi bypass et
+    if (type === "all") {
+      setFiltered(sourceData);
+      return;
+    }
+    
     let filteredData = [...sourceData];
 
     if (type === "upcoming") filteredData = sourceData.filter(e => new Date(e.date) >= now);
@@ -168,27 +236,28 @@ export default function EventsFeedPage() {
     let canCreate = true;
     let errorMessage = "";
 
-    // Sanatsever Free: 6 ayda 1
-    if (primaryRole === "art_lover" && plan === "FREE") {
-      if (myEvents.length > 0) {
-        const sortedEvents = [...myEvents].sort(
-          (a, b) => (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0)
-        );
-        const lastEvent = sortedEvents[0];
-        if (lastEvent && lastEvent.createdAt) {
-          const lastEventDate = new Date(lastEvent.createdAt);
-          const yearDiff = now.getFullYear() - lastEventDate.getFullYear();
-          const monthDiff = now.getMonth() - lastEventDate.getMonth();
-          const totalMonths = yearDiff * 12 + monthDiff;
-          if (totalMonths < 6) {
-            canCreate = false;
-            errorMessage = `6 ayda bir etkinlik oluşturabilirsiniz. Son etkinliğinizden ${6 - totalMonths} ay sonra tekrar deneyebilirsiniz.`;
-          }
-        }
-      }
-    }
+    // ✅ 6 aylık etkinlik limiti kaldırıldı - artık sınırsız
+    // Sanatsever Free: Artık sınırsız
+    // if (primaryRole === "art_lover" && plan === "FREE") {
+    //   if (myEvents.length > 0) {
+    //     const sortedEvents = [...myEvents].sort(
+    //       (a, b) => (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+    //     );
+    //     const lastEvent = sortedEvents[0];
+    //     if (lastEvent && lastEvent.createdAt) {
+    //       const lastEventDate = new Date(lastEvent.createdAt);
+    //       const yearDiff = now.getFullYear() - lastEventDate.getFullYear();
+    //       const monthDiff = now.getMonth() - lastEventDate.getMonth();
+    //       const totalMonths = yearDiff * 12 + monthDiff;
+    //       if (totalMonths < 6) {
+    //         canCreate = false;
+    //         errorMessage = `6 ayda bir etkinlik oluşturabilirsiniz. Son etkinliğinizden ${6 - totalMonths} ay sonra tekrar deneyebilirsiniz.`;
+    //       }
+    //     }
+    //   }
+    // }
     // Kurumsal Free: Ayda 30
-    else if (primaryRole === "corporate" && plan === "FREE") {
+    if (primaryRole === "corporate" && plan === "FREE") {
       const thisMonthEvents = myEvents.filter((e) => {
         if (!e.createdAt) return false;
         const eventDate = new Date(e.createdAt);
@@ -234,17 +303,18 @@ export default function EventsFeedPage() {
   }
 
   return (
-    <div className="flex justify-center gap-10 pt-6 px-6 max-w-7xl mx-auto">
+    <div className="w-full max-w-[1280px] mx-auto px-6 pt-6">
       {/* Orta içerik */}
-      <div className="flex-1 max-w-[1200px] space-y-10 mx-auto xl:mr-[420px]">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6 md:mb-8">
+      <div className="w-full xl:mr-[420px]">
+        {/* Başlık ve Buton */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-brand-orange">
             Etkinlikler
           </h1>
           {user && (
             <button
               onClick={handleCreateClick}
-              className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white font-medium transition shadow-md whitespace-nowrap"
+              className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange/90 text-white font-medium transition shadow-md whitespace-nowrap ml-auto md:ml-0"
             >
               + Etkinlik Oluştur
             </button>
@@ -252,7 +322,7 @@ export default function EventsFeedPage() {
         </div>
 
         {/* TAB BAR */}
-        <div className="flex gap-4 md:gap-6 border-b border-gray-200 dark:border-gray-700 pb-3 overflow-x-auto">
+        <div className="flex gap-4 md:gap-6 border-b border-gray-200 dark:border-gray-700 pb-3 mb-6 overflow-x-auto">
           <button
             className={`text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === "all"
@@ -337,24 +407,25 @@ export default function EventsFeedPage() {
               : "Etkinlik bulunamadı."}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mt-8" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
             {filtered.map((ev) => {
               // "Etkinliklerim" sekmesinde düzenleme/silme butonları göster
               if (activeTab === "mine") {
                 return (
                   <div
                     key={ev.id}
-                    className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all"
+                    className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all w-full"
+                    style={{ maxWidth: 'none' }}
                   >
-                    <div className="h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-[200px] bg-gray-100 dark:bg-gray-800 overflow-hidden">
                       <img
                         src={ev.coverImage ? resolveImageUrl(ev.coverImage) : "/placeholder.png"}
                         alt={ev.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover rounded-t-2xl"
                       />
                     </div>
 
-                    <div className="p-4">
+                    <div className="p-4 px-5 pb-5">
                       {/* Başlık & Etkinlik Sahibi */}
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <h2 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-1 flex-1">
@@ -431,17 +502,18 @@ export default function EventsFeedPage() {
                 <Link
                   key={ev.id}
                   href={`/events/${ev.id}`}
-                  className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all group no-underline hover:no-underline"
+                  className="bg-white dark:bg-[#1a1a1a]/70 border border-gray-200 dark:border-gray-700/40 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all group no-underline hover:no-underline w-full"
+                  style={{ maxWidth: 'none' }}
                 >
-                  <div className="h-48 bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                  <div className="h-[200px] bg-gray-100 dark:bg-gray-800 overflow-hidden">
                     <img
                       src={ev.coverImage ? resolveImageUrl(ev.coverImage) : "/placeholder.png"}
                       alt={ev.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover rounded-t-2xl group-hover:scale-105 transition-transform duration-300"
                     />
                   </div>
 
-                  <div className="p-4 flex flex-col justify-between min-h-[160px]">
+                  <div className="p-4 px-5 pb-5 flex flex-col justify-between min-h-[160px]">
                     <div>
                       {/* Başlık & Etkinlik Sahibi */}
                       <div className="flex items-center justify-between gap-2 mb-1">
@@ -540,11 +612,28 @@ export default function EventsFeedPage() {
         <CreateEventModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
+          onCreated={async () => {
             // Etkinlik listesini yenile
-            api.get("/events/my")
-              .then((res) => setMyEvents(res.data || []))
-              .catch((error) => console.error("Etkinlikler alınamadı:", error));
+            try {
+              const res = await api.get("/events/my");
+              
+              // 🔒 GÜVENLİ VERİ NORMALİZASYONU
+              const safeMyEventsData = (() => {
+                if (!res.data) return [];
+                if (Array.isArray(res.data)) return res.data;
+                if (res.data.events && Array.isArray(res.data.events)) return res.data.events;
+                if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
+                return [];
+              })();
+              
+              setMyEvents(safeMyEventsData);
+            } catch (error: any) {
+              console.error("Etkinlikler alınamadı:", error);
+              // 500 hatası durumunda sessizce devam et
+              if (error?.response?.status !== 500) {
+                toast.error("Etkinlikler yenilenemedi.");
+              }
+            }
           }}
         />
       )}

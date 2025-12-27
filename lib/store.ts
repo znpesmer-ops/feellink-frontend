@@ -18,6 +18,11 @@ interface User {
   isVerified?: boolean
   isAdmin?: boolean
   superAdmin?: boolean // 🔥 GOD-MODE
+  profileCompleted?: boolean
+  dateOfBirth?: string | null
+  country?: string | null
+  city?: string | null
+  gender?: string | null
 }
 
 interface AuthState {
@@ -27,6 +32,7 @@ interface AuthState {
   accessToken: string | null
   refreshToken: string | null
   unreadCount: number
+  unreadMessageCount: number
   setAuth: (
     user: User,
     accessToken: string,
@@ -41,6 +47,7 @@ interface AuthState {
   clearAuth: () => void
   refreshUser: () => Promise<void> // Kullanıcı bilgilerini backend'den yenile
   setUnreadCount: (count: number) => void // Bildirim okunmamış sayısını güncelle
+  setUnreadMessageCount: (count: number) => void // Mesaj okunmamış sayısını güncelle
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -52,7 +59,12 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       unreadCount: 0,
+      unreadMessageCount: 0,
       setAuth: (user, accessToken, refreshToken, capabilities = null, sidebar = null) => {
+        // Token'ı localStorage'a kaydet (middleware ve diğer kontroller için)
+        if (typeof window !== 'undefined' && accessToken) {
+          localStorage.setItem('access_token', accessToken)
+        }
         set({ user, accessToken, refreshToken, capabilities, sidebar })
       },
       setUser: (user, capabilities = null, sidebar = null) => {
@@ -70,15 +82,22 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({ ...state, sidebar }))
       },
       updateTokens: (accessToken, refreshToken) => {
+        // Token'ı localStorage'a kaydet (API interceptor için)
+        if (typeof window !== 'undefined' && accessToken) {
+          localStorage.setItem('access_token', accessToken)
+        }
         set((state) => ({
           accessToken,
           refreshToken: refreshToken || state.refreshToken,
         }))
       },
       clearAuth: () => {
-        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0 })
-        // 🔥 Logout durumunda localStorage'dan rolleri de temizle
-        localStorage.removeItem('feellink_roles')
+        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0, unreadMessageCount: 0 })
+        // 🔥 Logout durumunda localStorage'dan rolleri ve token'ı temizle
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('feellink_roles')
+          localStorage.removeItem('access_token')
+        }
       },
       refreshUser: async () => {
         try {
@@ -98,6 +117,9 @@ export const useAuthStore = create<AuthState>()(
       },
       setUnreadCount: (count: number) => {
         set({ unreadCount: count })
+      },
+      setUnreadMessageCount: (count: number) => {
+        set({ unreadMessageCount: count })
       },
     }),
     {

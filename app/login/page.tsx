@@ -36,6 +36,7 @@ export default function LoginPage() {
   const [isChecking, setIsChecking] = useState(true)
   const [isLoginMode, setIsLoginMode] = useState(true)
   const [darkMode, setDarkMode] = useState(false)
+  const [isLoggingIn, setIsLoggingIn] = useState(false) // 🔥 Manuel loading state (sonsuz loading'i önle)
 
   const handlePostAuthNavigation = (
     currentUser = user,
@@ -116,14 +117,18 @@ export default function LoginPage() {
   // Eğer zaten giriş yapılmışsa role göre yönlendir
   // SADECE login sayfasında olduğumuz için bu redirect çalışmalı
   useEffect(() => {
-    // 🔥 KRİTİK: Profil sayfasındayken hiçbir redirect yapma
-    if (pathname.startsWith('/profile')) {
+    // Login sayfasında değilsek kontrol yapma
+    if (pathname !== '/login') {
       setIsChecking(false)
       return
     }
     
+    // Token kontrolü - localStorage'dan da kontrol et
+    const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+    const hasToken = accessToken || tokenFromStorage
+    
     // Login sayfasında olduğumuz için, eğer token yoksa auth state'i temizle
-    if (!accessToken) {
+    if (!hasToken) {
       // Token yoksa state'i temizle (eski kullanıcı bilgileri kalmasın)
       if (user) {
         const { clearAuth } = useAuthStore.getState()
@@ -133,10 +138,13 @@ export default function LoginPage() {
       return
     }
     
-    // Sadece login sayfasındayken redirect yap
-    // Diğer sayfalarda (ör. /profile/me) refresh yapıldığında bu çalışmamalı
-    if (accessToken && user) {
+    // Token varsa ve kullanıcı bilgisi varsa redirect yap
+    if (hasToken && user) {
       handlePostAuthNavigation(user, capabilities ?? undefined)
+    } else if (hasToken && !user) {
+      // Token var ama user yok - state'i yeniden yükle veya feed'e yönlendir
+      router.replace('/feed')
+      setIsChecking(false)
     } else {
       setIsChecking(false)
     }
@@ -151,8 +159,10 @@ export default function LoginPage() {
   })
 
   const onLogin = async (data: LoginForm) => {
+    setIsLoggingIn(true) // 🔥 Manuel loading state başlat
+    setError('')
+    
     try {
-      setError('')
       // Debug: API URL'ini console'a yazdır
       console.log('API Base URL:', api.defaults.baseURL)
       console.log('LOGIN URL:', api.defaults.baseURL + '/auth/login')
@@ -169,12 +179,43 @@ export default function LoginPage() {
         needsRoleSelection,
       } = response.data
 
+      // Token'ı localStorage'a kaydet (middleware ve diğer kontroller için)
+      if (typeof window !== 'undefined' && newAccessToken) {
+        localStorage.setItem('access_token', newAccessToken)
+      }
+
       setAuth(loggedUser, newAccessToken, newRefreshToken, caps ?? null, sidebar ?? null)
 
-      handlePostAuthNavigation(loggedUser, caps ?? undefined, needsRoleSelection)
+      // Hemen redirect yap - handlePostAuthNavigation içinde zaten var ama garantilemek için
+      const redirectRoute = needsRoleSelection
+        ? '/select-role'
+        : getDashboardRouteFromUser({
+            roles: caps?.roles ?? loggedUser.roles,
+            isAdmin: loggedUser.isAdmin,
+            capabilities: caps ?? undefined,
+          }) || '/feed'
+      
+      // 🔥 KRİTİK: Redirect'i garantilemek için window.location kullan (daha güvenilir)
+      console.log('[LOGIN] ✅ Login başarılı, redirecting to:', redirectRoute)
+      
+      // 🔥 KRİTİK: Loading state'ini kapat VE redirect yap
+      setIsLoggingIn(false)
+      
+      // window.location kullan (router.replace bazen çalışmıyor, özellikle Next.js 15'te)
+      // Kısa bir delay ile redirect yap (state update'in tamamlanması için)
+      setTimeout(() => {
+        window.location.href = redirectRoute
+      }, 50)
     } catch (err: any) {
       console.error('Login error:', err)
-      setError(getErrorMessage(err))
+      // 🔒 GÜVENLİK: Login hatalarında tek bir güvenli mesaj göster (user enumeration önleme)
+      const errorMessage = getErrorMessage(err, { isLogin: true })
+      setError(errorMessage)
+      // Şifre alanını temizleme - kullanıcı düzeltebilsin
+    } finally {
+      // 🔥 KRİTİK: Her durumda loading state'inin kapandığından emin ol
+      // Bu, network timeout veya diğer hatalarda sonsuz loading'i önler
+      setIsLoggingIn(false)
     }
   }
 
@@ -192,8 +233,24 @@ export default function LoginPage() {
         needsRoleSelection,
       } = response.data
 
+      // Token'ı localStorage'a kaydet
+      if (typeof window !== 'undefined' && newAccessToken) {
+        localStorage.setItem('access_token', newAccessToken)
+      }
+
       setAuth(registeredUser, newAccessToken, newRefreshToken, caps ?? null, sidebar ?? null)
-      handlePostAuthNavigation(registeredUser, caps ?? undefined, needsRoleSelection)
+      
+      // Hemen redirect yap
+      if (needsRoleSelection) {
+        router.replace('/select-role')
+      } else {
+        const route = getDashboardRouteFromUser({
+          roles: caps?.roles ?? registeredUser.roles,
+          isAdmin: registeredUser.isAdmin,
+          capabilities: caps ?? undefined,
+        }) || '/feed'
+        router.replace(route)
+      }
     } catch (err: any) {
       console.error('Register error:', err)
       setError(getErrorMessage(err))
@@ -321,6 +378,7 @@ export default function LoginPage() {
             onSubmit={loginForm.handleSubmit(onLogin)}
             noValidate
           >
+              {/* 🔒 GÜVENLİK: Tek bir güvenli hata mesajı (form üstünde) */}
               {error && (
                 <div
                   className={`px-4 py-3 rounded-lg text-sm ${
@@ -328,6 +386,7 @@ export default function LoginPage() {
                       ? 'bg-red-900/20 border border-red-800 text-red-400'
                       : 'bg-red-50 border border-red-200 text-red-700'
                   }`}
+                  role="alert"
                 >
                   {error}
                 </div>
@@ -405,10 +464,10 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loginForm.formState.isSubmitting}
+                disabled={loginForm.formState.isSubmitting || isLoggingIn}
                 className="w-full py-2 bg-[#ff7a00] hover:bg-[#ff9500] text-white font-semibold rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {loginForm.formState.isSubmitting ? (
+                {(loginForm.formState.isSubmitting || isLoggingIn) ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <span>Giriş yapılıyor...</span>

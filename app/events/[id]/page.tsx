@@ -9,6 +9,7 @@ import RightSidebar from "@/components/right-sidebar";
 import CreateTicketModal from "@/components/tickets/CreateTicketModal";
 import BuyTicketModal from "@/components/tickets/BuyTicketModal";
 import DeleteConfirmModal from "@/components/common/DeleteConfirmModal";
+import ApproveParticipantModal from "@/components/events/ApproveParticipantModal";
 import { useAuthStore } from "@/lib/store";
 import { resolveImageUrl } from "@/lib/resolveImageUrl";
 
@@ -69,6 +70,10 @@ export default function EventDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  // ✅ Onay modal state
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState<{ userId: string; username: string } | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -195,6 +200,30 @@ export default function EventDetailPage() {
     } catch (error: any) {
       console.error("Talep durumu güncellenemedi:", error);
       toast.error(error.response?.data?.message || "Talep durumu güncellenemedi.");
+      throw error; // Modal için hata fırlat
+    }
+  };
+
+  // ✅ Onay butonuna tıklanınca modal aç
+  const handleApproveClick = (request: { userId: string; user: { username: string } }) => {
+    setSelectedParticipant({ userId: request.userId, username: request.user.username });
+    setApproveModalOpen(true);
+  };
+
+  // ✅ Modal içinden onaylama
+  const handleConfirmApprove = async () => {
+    if (!selectedParticipant) return;
+
+    setIsApproving(true);
+    try {
+      await handleUpdateRequestStatus(selectedParticipant.userId, 'APPROVED');
+      setApproveModalOpen(false);
+      setSelectedParticipant(null);
+      toast.success("Katılımcı etkinliğe başarıyla onaylandı.");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin.");
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -297,7 +326,7 @@ export default function EventDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-gray-500 dark:text-gray-400 mb-6">
+          <div className="flex items-center gap-4 text-gray-500 dark:text-gray-400 mb-6 flex-wrap">
             <span className="flex items-center gap-1">
               <Calendar size={16} />
               {new Date(event.date).toLocaleDateString("tr-TR", {
@@ -306,6 +335,15 @@ export default function EventDetailPage() {
                 day: 'numeric'
               })}
             </span>
+            {event.date && (
+              <span className="flex items-center gap-1">
+                🕒 {new Date(event.date).toLocaleTimeString("tr-TR", {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false
+                })}
+              </span>
+            )}
             <button
               onClick={handleShowParticipants}
               className="flex items-center gap-1 hover:text-brand-orange transition-colors"
@@ -385,7 +423,7 @@ export default function EventDetailPage() {
           {event.ownerId === user?.id && pendingRequests.length > 0 && (
             <div className="mb-8">
               <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
-                📋 Katılım Talepleri ({pendingRequests.length})
+                Katılım Talepleri ({pendingRequests.length})
               </h3>
               <div className="space-y-3">
                 {pendingRequests.map((request) => (
@@ -424,7 +462,7 @@ export default function EventDetailPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleUpdateRequestStatus(request.userId, 'APPROVED')}
+                        onClick={() => handleApproveClick(request)}
                         className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition"
                       >
                         Onayla
@@ -472,15 +510,6 @@ export default function EventDetailPage() {
                 </div>
             )}
 
-            {/* Organizatör için: Bilet Ekle butonu */}
-            {event.ownerId === user?.id && (
-              <button
-                onClick={() => setShowTicketModal(true)}
-                className="bg-brand-orange hover:bg-brand-orange/90 text-white px-4 py-2 rounded-xl font-medium transition flex items-center gap-2"
-              >
-                <Plus size={18} /> Bilet Ekle
-              </button>
-            )}
           </div>
 
           {/* Yorumlar */}
@@ -597,6 +626,21 @@ export default function EventDetailPage() {
           event={event}
           isOpen={showBuyTicketModal}
           onClose={() => setShowBuyTicketModal(false)}
+        />
+      )}
+
+      {/* ✅ Onay Modal */}
+      {event && selectedParticipant && (
+        <ApproveParticipantModal
+          open={approveModalOpen}
+          participantName={selectedParticipant.username}
+          eventTitle={event.title}
+          onConfirm={handleConfirmApprove}
+          onCancel={() => {
+            setApproveModalOpen(false);
+            setSelectedParticipant(null);
+          }}
+          isLoading={isApproving}
         />
       )}
 

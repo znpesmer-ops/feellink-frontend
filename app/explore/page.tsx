@@ -129,17 +129,34 @@ function ExploreContent() {
   } = useInfiniteQuery({
     queryKey: ['explore'],
     queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams()
-      params.append('limit', '20')
-      if (pageParam) {
-        params.append('cursor', pageParam)
+      try {
+        const params = new URLSearchParams()
+        params.append('limit', '20')
+        if (pageParam) {
+          params.append('cursor', pageParam)
+        }
+        const response = await api.get(`/explore?${params.toString()}`)
+        return response.data
+      } catch (err: any) {
+        // DETAYLI ERROR LOG - kullanıcının istediği bilgi
+        console.error('[EXPLORE] API ERROR:', {
+          message: err?.message,
+          status: err?.response?.status,
+          data: err?.response?.data,
+          url: err?.config?.url,
+          baseURL: err?.config?.baseURL,
+          method: err?.config?.method,
+          hasToken: !!err?.config?.headers?.Authorization,
+          tokenPreview: err?.config?.headers?.Authorization?.substring(0, 20) + '...' || 'NO_TOKEN',
+        })
+        // Boş data döndür ki UI patlamasın
+        return { posts: [], nextCursor: null, hasMore: false }
       }
-      const response = await api.get(`/explore?${params.toString()}`)
-      return response.data
     },
     initialPageParam: undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    enabled: !!accessToken,
+    // Token olmasa bile explore çalışır (public endpoint)
+    enabled: true,
   })
 
   // Infinite scroll handler
@@ -172,10 +189,6 @@ function ExploreContent() {
       })
     }
   }, [posts])
-
-  if (!accessToken) {
-    return null
-  }
 
   if (isLoading) {
     return (

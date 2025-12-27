@@ -9,7 +9,6 @@ import {
   Users,
   FileText,
   MessageCircle,
-  Ticket,
   TrendingUp,
   Globe,
 } from 'lucide-react'
@@ -144,13 +143,6 @@ export default function AdminAnalyticsPage() {
       icon: MessageCircle,
       color: 'text-pink-600 dark:text-pink-400',
       bgColor: 'bg-pink-50 dark:bg-pink-900/20',
-    },
-    {
-      label: 'Biletler',
-      value: data.totalTickets.toLocaleString('tr-TR'),
-      icon: Ticket,
-      color: 'text-indigo-600 dark:text-indigo-400',
-      bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
     },
     {
       label: 'Gelir (₺)',

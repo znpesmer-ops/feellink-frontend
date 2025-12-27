@@ -1,9 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import UserBadge from './UserBadge'
-import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import { Avatar } from '@/components/ui/Avatar'
 
 interface SearchUser {
   id: string
@@ -21,41 +20,7 @@ interface SearchResultsProps {
   isLoading: boolean
 }
 
-// Avatar bileşeni - güvenli render ve fallback
-function Avatar({ src, alt }: { src?: string | null; alt: string }) {
-  if (!src) {
-    // Fallback: baş harf avatarı
-    const letter = (alt?.[0] || '?').toUpperCase()
-    return (
-      <div className="w-9 h-9 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 dark:bg-orange-500/20 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-        {letter}
-      </div>
-    )
-  }
-
-  return (
-    <div className="relative w-9 h-9 rounded-full overflow-hidden ring-1 ring-black/5 dark:ring-white/10 flex-shrink-0">
-      <Image
-        src={resolveImageUrl(src) || '/images/avatar-placeholder.png'}
-        alt={alt}
-        fill
-        sizes="36px"
-        className="object-cover"
-        referrerPolicy="no-referrer"
-        onError={(e) => {
-          // Hata durumunda fallback'e geç
-          const target = e.target as HTMLImageElement
-          target.style.display = 'none'
-          const parent = target.parentElement
-          if (parent) {
-            const letter = (alt?.[0] || '?').toUpperCase()
-            parent.innerHTML = `<div class="w-full h-full rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 dark:bg-orange-500/20 flex items-center justify-center text-sm font-semibold">${letter}</div>`
-          }
-        }}
-      />
-    </div>
-  )
-}
+// ✅ Avatar component'i artık components/ui/Avatar.tsx'ten import ediliyor
 
 export function SearchResults({ results, onSelect, isLoading }: SearchResultsProps) {
   if (isLoading) {
@@ -101,8 +66,9 @@ export function SearchResults({ results, onSelect, isLoading }: SearchResultsPro
             >
               {/* Avatar */}
               <Avatar
-                src={user.avatarUrl || user.avatar || undefined}
+                src={user.avatarUrl || user.avatar}
                 alt={user.fullName || user.username}
+                className="w-9 h-9 flex-shrink-0"
               />
 
               {/* User Info */}

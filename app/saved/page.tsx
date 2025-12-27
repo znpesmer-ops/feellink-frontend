@@ -18,9 +18,18 @@ function SavedContent() {
     queryKey: ['saved-posts'],
     queryFn: async () => {
       const response = await api.get('/posts/saved')
-      return response.data
+      console.log('💾 [Saved] Saved posts response:', {
+        status: response.status,
+        data: response.data,
+        count: Array.isArray(response.data) ? response.data.length : 0,
+      })
+      // Backend'den array dönüyor mu kontrol et
+      return Array.isArray(response.data) ? response.data : (response.data?.posts || [])
     },
     enabled: !!accessToken,
+    staleTime: 0, // Her zaman fresh data çek
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   })
 
   // Unsave mutation
@@ -79,45 +88,46 @@ function SavedContent() {
         </div>
 
         {/* Grid View */}
-        {savedPosts && savedPosts.length > 0 ? (
+        {savedPosts && Array.isArray(savedPosts) && savedPosts.length > 0 ? (
           <div className="grid grid-cols-3 gap-1">
-            {savedPosts.map((post: any) => (
-              <div
-                key={post.id}
-                className="aspect-square relative cursor-pointer group overflow-hidden"
-                onClick={() => setSelectedPost(post)}
-              >
-                {post.media && post.media.length > 0 && (
-                  <>
-                    {post.media[0].type === 'video' ? (
-                      <video
-                        src={post.media[0].url}
-                        className="w-full h-full object-cover"
-                        muted
-                      />
-                    ) : (
-                      <img
-                        src={post.media[0].url}
-                        alt={post.caption || 'Post'}
-                        className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
-                      <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-4 text-white">
-                        <span className="font-semibold">❤️ {post._count.likes}</span>
-                        <span className="font-semibold">💬 {post._count.comments}</span>
-                      </div>
+            {savedPosts
+              .filter((post: any) => post && post.id && post.media && post.media.length > 0) // Güvenlik kontrolü
+              .map((post: any) => (
+                <div
+                  key={post.id}
+                  className="aspect-square relative cursor-pointer group overflow-hidden rounded-lg"
+                  onClick={() => setSelectedPost(post)}
+                >
+                  {post.media[0].type === 'video' ? (
+                    <video
+                      src={post.media[0].url}
+                      className="w-full h-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <img
+                      src={post.media[0].url}
+                      alt={post.caption || 'Post'}
+                      className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                      }}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-4 text-white">
+                      <span className="font-semibold">❤️ {post._count?.likes || 0}</span>
+                      <span className="font-semibold">💬 {post._count?.comments || 0}</span>
                     </div>
-                  </>
-                )}
-              </div>
-            ))}
+                  </div>
+                </div>
+              ))}
           </div>
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-500 mb-2">No saved posts yet</p>
-            <p className="text-gray-400 text-sm">
-              Save posts you want to see later by tapping the bookmark icon.
+            <p className="text-gray-500 dark:text-gray-400 mb-2">Henüz kaydedilmiş gönderi yok</p>
+            <p className="text-gray-400 dark:text-gray-500 text-sm">
+              Gönderileri kaydetmek için gönderi üzerindeki kaydet ikonuna tıklayın.
             </p>
           </div>
         )}

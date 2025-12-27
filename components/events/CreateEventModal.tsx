@@ -64,27 +64,28 @@ export default function CreateEventModal({ isOpen, onClose, onCreated }: CreateE
 
     const now = new Date();
 
-    // Sanatsever Free: 6 ayda 1
-    if (primaryRole === "art_lover" && plan === "FREE") {
-      if (myEvents.length === 0) {
-        return { allowed: true };
-      }
-      // En son etkinliği bul
-      const sortedEvents = [...myEvents].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      const lastEvent = sortedEvents[0];
-      if (lastEvent) {
-        const diff = differenceInMonths(now, new Date(lastEvent.createdAt));
-        if (diff < 6) {
-          return {
-            allowed: false,
-            message: `6 ayda bir etkinlik oluşturabilirsiniz. Son etkinliğinizden ${6 - diff} ay sonra tekrar deneyebilirsiniz.`,
-          };
-        }
-      }
-      return { allowed: true };
-    }
+    // ✅ 6 aylık etkinlik limiti kaldırıldı - artık sınırsız
+    // Sanatsever Free: Artık sınırsız
+    // if (primaryRole === "art_lover" && plan === "FREE") {
+    //   if (myEvents.length === 0) {
+    //     return { allowed: true };
+    //   }
+    //   // En son etkinliği bul
+    //   const sortedEvents = [...myEvents].sort(
+    //     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    //   );
+    //   const lastEvent = sortedEvents[0];
+    //   if (lastEvent) {
+    //     const diff = differenceInMonths(now, new Date(lastEvent.createdAt));
+    //     if (diff < 6) {
+    //       return {
+    //         allowed: false,
+    //         message: `6 ayda bir etkinlik oluşturabilirsiniz. Son etkinliğinizden ${6 - diff} ay sonra tekrar deneyebilirsiniz.`,
+    //       };
+    //     }
+    //   }
+    //   return { allowed: true };
+    // }
 
     // Kurumsal Free: Ayda 30
     if (primaryRole === "corporate" && plan === "FREE") {
@@ -222,7 +223,7 @@ export default function CreateEventModal({ isOpen, onClose, onCreated }: CreateE
         </button>
 
         <h2 className="text-2xl font-semibold text-[#ff7b00] mb-4">
-          🎟️ Yeni Etkinlik Oluştur
+          Yeni Etkinlik Oluştur
         </h2>
 
         {/* Limit Uyarısı */}

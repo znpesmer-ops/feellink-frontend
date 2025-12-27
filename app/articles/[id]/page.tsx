@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
-import { Heart, MessageCircle, ArrowLeft, Eye } from 'lucide-react'
+import { Heart, MessageCircle, ArrowLeft, Eye, CornerDownRight } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
 import { initArticlesSocket } from '@/lib/socket'
 import type { Socket } from 'socket.io-client'
+import DOMPurify from 'dompurify'
 
 const CommentLikeButton = dynamic(() => import('@/components/CommentLikeButton'), {
   ssr: false,
@@ -448,7 +449,15 @@ export default function ArticleDetailPage() {
 
       {/* İçerik */}
       <div className="prose prose-lg dark:prose-invert max-w-none mb-10 text-gray-800 dark:text-gray-200 leading-relaxed">
-        <div className="whitespace-pre-wrap">{article.content}</div>
+        <div
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(article.content, {
+              ALLOWED_TAGS: ['p', 'strong', 'em', 's', 'u', 'a', 'h2', 'h3', 'ul', 'ol', 'li', 'br'],
+              ALLOWED_ATTR: ['href', 'target', 'rel'],
+              ALLOW_DATA_ATTR: false,
+            }),
+          }}
+        />
       </div>
 
       {/* Beğeni / Yorum / Okunma İstatistikleri */}
@@ -580,9 +589,10 @@ export default function ArticleDetailPage() {
                 {user && (
                   <button
                     onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                    className="text-xs text-[#ff7b00] hover:text-[#e36f00] font-medium transition-colors mt-2"
+                    className="text-xs text-[#ff7b00] hover:text-[#e36f00] font-medium transition-colors mt-2 flex items-center gap-1"
                   >
-                    ↪️ Yanıtla
+                    <CornerDownRight size={14} />
+                    Yanıtla
                   </button>
                 )}
 

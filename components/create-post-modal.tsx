@@ -9,6 +9,7 @@ import Slider, { Settings } from 'react-slick'
 import 'slick-carousel/slick/slick.css'
 import 'slick-carousel/slick/slick-theme.css'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
+import { containsBadWord } from '@/lib/utils/containsBadWord'
 
 interface CreatePostModalProps {
   isOpen: boolean
@@ -33,10 +34,21 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sliderRef = useRef<Slider | null>(null)
 
+  // Küfür kontrolü
+  const hasBadWord = containsBadWord(caption)
+
   const createPostMutation = useMutation({
     mutationFn: async () => {
       setUploading(true)
       setError('')
+      
+      // Küfür kontrolü
+      if (hasBadWord) {
+        setError('Bu içerik Feellink topluluk kurallarına uygun değil.')
+        setUploading(false)
+        return
+      }
+      
       const formData = new FormData()
       
       // Backend her zaman 'files' field name'ini bekliyor (FilesInterceptor('files', 10))
@@ -633,6 +645,11 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Açıklamana #hashtag ekleyerek gönderini kategorize edebilirsin
             </p>
+            {hasBadWord && (
+              <p className="text-xs text-orange-500 mt-1">
+                Bu içerik Feellink topluluk kurallarına uygun değil.
+              </p>
+            )}
           </div>
 
           {/* Konum alanı kaldırıldı */}
@@ -656,7 +673,7 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
             </button>
             <button
               type="submit"
-              disabled={uploading || files.length === 0}
+              disabled={uploading || files.length === 0 || hasBadWord}
               className="px-8 py-2 rounded-xl bg-brand-orange text-white font-semibold hover:bg-[#e67a00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploading ? 'Yükleniyor...' : 'Paylaş'}

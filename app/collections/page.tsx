@@ -35,33 +35,42 @@ export default function CollectionsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("Tümü");
   const { user, capabilities, accessToken } = useAuthStore();
 
-  // Rol bazlı kontrol: sadece corporate ve collector koleksiyon oluşturabilir
+  // ✅ Tüm kullanıcılar koleksiyon oluşturabilir (sadece görüntüleme için değil)
   const roles = capabilities?.roles ?? user?.roles ?? [];
-  const canCreateCollection = roles.includes("corporate") || roles.includes("collector");
+  const canCreateCollection = true; // Herkes koleksiyon oluşturabilir
 
   useEffect(() => {
-    if (!accessToken) return;
-
     async function fetchCollections() {
       try {
         setLoading(true);
         console.log("🔄 Koleksiyonlar yükleniyor...");
-        const [publicRes, myRes] = await Promise.all([
-          api.get<Collection[]>("/collections/public"),
-          canCreateCollection ? api.get<Collection[]>("/collections/my").catch((err) => {
-            console.warn("⚠️ My collections yüklenemedi:", err);
-            return { data: [] };
-          }) : Promise.resolve({ data: [] }),
-        ]);
+        
+        // Public endpoint - token gerektirmez
+        const publicRes = await api.get<Collection[]>("/collections/public").catch((err) => {
+          console.warn("⚠️ Public collections yüklenemedi:", err);
+          return { data: [] };
+        });
+        
+        // My collections - sadece token varsa ve yetki varsa
+        const myRes = accessToken && canCreateCollection 
+          ? await api.get<Collection[]>("/collections/my").catch((err) => {
+              console.warn("⚠️ My collections yüklenemedi:", err);
+              return { data: [] };
+            })
+          : Promise.resolve({ data: [] });
+        
+        const [myCollectionsData] = await Promise.all([myRes]);
+        
         console.log("✅ Public collections:", publicRes.data);
-        console.log("✅ My collections:", myRes.data);
+        console.log("✅ My collections:", myCollectionsData.data);
         setCollections(publicRes.data || []);
-        setMyCollections(myRes.data || []);
+        setMyCollections(myCollectionsData.data || []);
         setFilteredCollections(publicRes.data || []);
       } catch (error: any) {
         console.error("❌ Koleksiyonlar alınamadı:", error);
         console.error("Error response:", error?.response?.data);
         console.error("Error status:", error?.response?.status);
+        // Hata durumunda boş array göster ama loading'i false yap
         setCollections([]);
         setMyCollections([]);
         setFilteredCollections([]);
@@ -115,6 +124,7 @@ export default function CollectionsPage() {
     }
   };
 
+  // Loading durumu
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">

@@ -7,6 +7,7 @@ import RoleChanger from '@/components/admin/RoleChanger'
 import { ROLE_METADATA } from '@/lib/role-utils'
 import { BadgeState, SubscriptionPlanCode, UserRoleCode } from '@/types/capabilities'
 import DeleteModal from '@/components/DeleteModal'
+import { TR_CITIES } from '@/constants/cities.tr'
 
 interface User {
   id: string
@@ -23,6 +24,31 @@ interface User {
   followingCount: number
   isOnline: boolean
   createdAt: string
+  dateOfBirth?: string | null
+  country?: string | null
+  city?: string | null
+  gender?: string | null
+  profileCompleted?: boolean
+}
+
+// Util: Yaş hesaplama
+function calcAge(birthDate?: string | null): number | null {
+  if (!birthDate) return null
+  const d = new Date(birthDate)
+  if (isNaN(d.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - d.getFullYear()
+  const m = now.getMonth() - d.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--
+  return age
+}
+
+// Util: Cinsiyet label
+function genderLabel(g?: string | null): string {
+  if (g === 'FEMALE') return 'Kadın'
+  if (g === 'MALE') return 'Erkek'
+  if (g === 'UNSPECIFIED') return 'Belirtmek istemiyorum'
+  return '-'
 }
 
 export default function AdminUsersPage() {
@@ -33,17 +59,31 @@ export default function AdminUsersPage() {
   const [total, setTotal] = useState(0)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  
+  // Filter states
+  const [cityFilter, setCityFilter] = useState('')
+  const [genderFilter, setGenderFilter] = useState<string>('')
+  const [ageMin, setAgeMin] = useState<string>('')
+  const [ageMax, setAgeMax] = useState<string>('')
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     fetchUsers()
-  }, [page, searchQuery])
+  }, [page, searchQuery, cityFilter, genderFilter, ageMin, ageMax])
 
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const response = await api.get(
-        `/admin/users?page=${page}&limit=20${searchQuery ? `&search=${searchQuery}` : ''}`
-      )
+      const params = new URLSearchParams()
+      params.append('page', page.toString())
+      params.append('limit', '20')
+      if (searchQuery) params.append('search', searchQuery)
+      if (cityFilter) params.append('city', cityFilter)
+      if (genderFilter) params.append('gender', genderFilter)
+      if (ageMin) params.append('ageMin', ageMin)
+      if (ageMax) params.append('ageMax', ageMax)
+      
+      const response = await api.get(`/admin/users?${params.toString()}`)
       setUsers(response.data.users)
       setTotal(response.data.total)
     } catch (err) {
@@ -51,6 +91,14 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleClearFilters = () => {
+    setCityFilter('')
+    setGenderFilter('')
+    setAgeMin('')
+    setAgeMax('')
+    setPage(1)
   }
 
   const handleUpdateUser = async (userId: string, data: { roles?: UserRoleCode[]; isVerified?: boolean }) => {
@@ -104,23 +152,127 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-        <input
-          type="text"
-          placeholder="Kullanıcı ara..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-            setPage(1)
-          }}
-          className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#0d0d0d] dark:text-white"
-        />
+      <div className="space-y-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Kullanıcı ara..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setPage(1)
+            }}
+            className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#0d0d0d] dark:text-white"
+          />
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition-colors"
+          >
+            {showFilters ? 'Filtreleri Gizle' : 'Filtreleri Göster'}
+          </button>
+          {(cityFilter || genderFilter || ageMin || ageMax) && (
+            <button
+              onClick={handleClearFilters}
+              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+            >
+              Filtreleri Temizle
+            </button>
+          )}
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 dark:bg-[#0d0d0d] border border-gray-200 dark:border-gray-700 rounded-xl">
+            {/* City Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Şehir
+              </label>
+              <select
+                value={cityFilter}
+                onChange={(e) => {
+                  setCityFilter(e.target.value)
+                  setPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#1a1a1a] dark:text-white"
+              >
+                <option value="">Tüm Şehirler</option>
+                {TR_CITIES.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Gender Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Cinsiyet
+              </label>
+              <select
+                value={genderFilter}
+                onChange={(e) => {
+                  setGenderFilter(e.target.value)
+                  setPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#1a1a1a] dark:text-white"
+              >
+                <option value="">Tümü</option>
+                <option value="FEMALE">Kadın</option>
+                <option value="MALE">Erkek</option>
+                <option value="UNSPECIFIED">Belirtmemiş</option>
+              </select>
+            </div>
+
+            {/* Age Min */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Min Yaş
+              </label>
+              <input
+                type="number"
+                placeholder="18"
+                min="18"
+                max="100"
+                value={ageMin}
+                onChange={(e) => {
+                  setAgeMin(e.target.value)
+                  setPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#1a1a1a] dark:text-white"
+              />
+            </div>
+
+            {/* Age Max */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Max Yaş
+              </label>
+              <input
+                type="number"
+                placeholder="100"
+                min="18"
+                max="100"
+                value={ageMax}
+                onChange={(e) => {
+                  setAgeMax(e.target.value)
+                  setPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff7b00] dark:bg-[#1a1a1a] dark:text-white"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-gray-200 dark:border-gray-700/40 shadow-sm dark:bg-[#111] bg-white overflow-hidden w-full">
         <div className="overflow-x-auto pr-2">
-          <table className="w-full min-w-[1200px]">
+          <table className="w-full min-w-[1600px]">
             <thead className="bg-gray-50 dark:bg-[#0d0d0d] border-b border-gray-200 dark:border-gray-700">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px]">
@@ -128,6 +280,18 @@ export default function AdminUsersPage() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[220px]">
                   Email
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[80px]">
+                  Yaş
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[100px]">
+                  Ülke
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[120px]">
+                  Şehir
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[140px]">
+                  Cinsiyet
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[200px]">
                   Roller / Yetki
@@ -179,6 +343,26 @@ export default function AdminUsersPage() {
                       <Mail size={14} className="text-gray-400 flex-shrink-0" />
                       <span className="truncate">{user.email}</span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm dark:text-gray-300 text-gray-700">
+                      {calcAge(user.dateOfBirth) !== null ? `${calcAge(user.dateOfBirth)}` : '-'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm dark:text-gray-300 text-gray-700">
+                      {user.country || '-'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm dark:text-gray-300 text-gray-700">
+                      {user.city || '-'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-sm dark:text-gray-300 text-gray-700">
+                      {genderLabel(user.gender)}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1.5">

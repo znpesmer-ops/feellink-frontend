@@ -1,23 +1,43 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import api from '@/lib/api'
 import { AuthGuard } from '@/lib/auth-guard'
 import Cropper from 'react-easy-crop'
 import getCroppedImg from '@/utils/cropImage'
 import type { Area } from 'react-easy-crop'
+import toast from 'react-hot-toast'
+import { TR_CITIES } from '@/constants/cities.tr'
+import { Lock, BarChart3 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+
+type Gender = 'FEMALE' | 'MALE' | 'UNSPECIFIED'
+
+interface Country {
+  code: string
+  name: string
+  cities: string[]
+}
 
 function EditProfileContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+  const isRequired = searchParams.get('required') === 'true'
   const { user, accessToken, capabilities, setUser } = useAuthStore()
-  const [username, setUsername] = useState('')
+  // 🔒 KRİTİK: Username state'i kaldırıldı - sadece gösterim için user?.username kullanılacak
   const [bio, setBio] = useState('')
   const [avatar, setAvatar] = useState('')
   const [fullName, setFullName] = useState('')
   const [website, setWebsite] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [country, setCountry] = useState<string | null>(null)
+  const [city, setCity] = useState<string | null>(null)
+  const [gender, setGender] = useState<'FEMALE' | 'MALE' | 'UNSPECIFIED' | ''>('')
+  const [countries, setCountries] = useState<Country[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [message, setMessage] = useState('')
@@ -31,15 +51,43 @@ function EditProfileContent() {
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
 
+  // Load countries data
+  useEffect(() => {
+    fetch('/data/countries.json')
+      .then((res) => res.json())
+      .then((data) => setCountries(data))
+      .catch((err) => {
+        console.error('Error loading countries:', err)
+        toast.error('Ülke listesi yüklenemedi')
+      })
+  }, [])
+
   useEffect(() => {
     if (user) {
-      setUsername(user.username || '')
+      // 🔒 KRİTİK: Username set edilmiyor - sadece gösterim için user?.username kullanılacak
       setBio(user.bio || '')
       setAvatar(user.avatar || '')
       setAvatarPreview(user.avatar || '')
       setFullName(user.fullName || '')
       setWebsite((user as any).website || '')
       setIsPrivate(user.isPrivate || false)
+      // Load profile data from API if available
+      const loadProfileData = async () => {
+        try {
+          const response = await api.get('/users/me')
+          const profileData = response.data
+          if (profileData.dateOfBirth) {
+            const date = new Date(profileData.dateOfBirth)
+            setDateOfBirth(date.toISOString().split('T')[0])
+          }
+          setCountry(profileData.country || null)
+          setCity(profileData.city || null)
+          setGender((profileData.gender as 'FEMALE' | 'MALE' | 'UNSPECIFIED') || '')
+        } catch (error) {
+          console.error('Error loading profile data:', error)
+        }
+      }
+      loadProfileData()
     }
   }, [user])
 
@@ -144,18 +192,24 @@ function EditProfileContent() {
     setMessage('')
 
     try {
-      // Convert empty website string to null, or null if isPrivate is true
-      const websiteValue = isPrivate || !website || website.trim() === '' ? null : website.trim()
+      // Convert empty website string to null (isPrivate kontrolü kaldırıldı - linkler her zaman açık)
+      const websiteValue = !website || website.trim() === '' ? null : website.trim()
 
+      // 🔒 KRİTİK: Username'i gönderme - profil URL'ini bozmamak için
+      // Username sadece özel bir sayfadan (username değiştirme) güncellenebilir
       const response = await api.put(
         '/users/profile',
         {
-          username,
+          // username: username, // ❌ KALDIRILDI - Profil URL'ini bozmamak için
           bio,
           avatar,
           fullName,
           website: websiteValue,
           isPrivate,
+          dateOfBirth: dateOfBirth || undefined,
+          country: country ?? undefined,
+          city: city ?? undefined,
+          gender: gender || undefined,
         },
         {
           headers: {
@@ -164,16 +218,106 @@ function EditProfileContent() {
         }
       )
 
-      if (user) {
+      // 🔒 KRİTİK: User state'ini güncelle - UI'ın eski veriyi göstermesini önle
+      if (response.data) {
+        // Backend'den gelen updated user'ı kullan (profileCompleted backend'den geliyor)
         const updatedUser = { ...user, ...response.data }
         setUser(updatedUser, capabilities ?? null)
+        
+        // 🔥 Backend'den fresh user data çek (profileCompleted garantili olsun)
+        try {
+          const freshUserResponse = await api.get('/users/me')
+          if (freshUserResponse.data) {
+            setUser(freshUserResponse.data, capabilities ?? null)
+            console.log('[Profile Edit] ✅ User state refreshed with profileCompleted:', freshUserResponse.data.profileCompleted)
+            
+            // 🔔 Sidebar ve diğer component'leri bilgilendir
+            window.dispatchEvent(new CustomEvent('profileUpdated'))
+            
+            // 🔔 Notifications query'leri invalidate et (unread count güncellensin)
+            // Profil tamamlandıysa bildirimler query'sini de invalidate et
+            queryClient.invalidateQueries({ queryKey: ['notifications'] })
+            queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+            
+            // 🔥 Profil tamamlandıysa bildirimleri temizle
+            if (freshUserResponse.data.profileCompleted === true) {
+              // Bildirimler query'sini refetch et
+              queryClient.refetchQueries({ queryKey: ['notifications'] })
+            }
+          }
+        } catch (refreshError) {
+          console.warn('[Profile Edit] Failed to refresh user state:', refreshError)
+          // Fallback: Response data'yı kullan
+          if (response.data) {
+            const updatedUser = { ...user, ...response.data }
+            setUser(updatedUser, capabilities ?? null)
+          }
+        }
       }
-          setMessage('Profil başarıyla güncellendi!')
+      setMessage('Profil başarıyla güncellendi!')
+      toast.success('Profil başarıyla güncellendi!')
+      
+      // 🔔 Notifications query'leri invalidate et (unread count güncellensin)
+      // Backend notification'ları isRead: true yaptı, frontend cache'i güncelle
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+      
+      // 🔥 Profil tamamlandıysa bildirimleri refetch et
+      if (dateOfBirth && country && city && gender) {
+        queryClient.refetchQueries({ queryKey: ['notifications'] })
+      }
+      
+      // Zorunlu alanlar tamamlandıysa required query param'ini kaldır
+      if (isRequired && dateOfBirth && country && city && gender) {
+        router.replace('/profile/edit')
+      }
 
-      // Redirect after a short delay
-      setTimeout(() => {
-        router.push(`/profile/${user?.username}`)
-      }, 1500)
+      // 🔒 KRİTİK: Backend'den FRESH username al - case-sensitive sorununu kesin çöz
+      // Backend response'unda username varsa onu kullan, yoksa /users/me'den al
+      let finalUsername: string | null = null
+      
+      if (response.data?.username) {
+        // Backend update response'unda username varsa onu kullan
+        finalUsername = response.data.username
+        console.log('[Profile Edit] Username from update response:', finalUsername)
+      } else {
+        // Backend'den fresh username al
+        try {
+          const freshUserResponse = await api.get('/users/me')
+          if (freshUserResponse.data?.username) {
+            finalUsername = freshUserResponse.data.username
+            console.log('[Profile Edit] Username from /users/me:', finalUsername)
+            // State'i de güncelle
+            setUser(freshUserResponse.data, capabilities ?? null)
+          }
+        } catch (refreshError) {
+          console.warn('Failed to refresh user data for redirect:', refreshError)
+        }
+      }
+      
+      // Fallback: user store'dan username al
+      if (!finalUsername) {
+        finalUsername = user?.username || null
+        console.log('[Profile Edit] Username from store (fallback):', finalUsername)
+      }
+      
+      // Redirect yap (sadece required değilse)
+      if (!isRequired && finalUsername) {
+        setTimeout(() => {
+          console.log('[Profile Edit] Redirecting to:', `/profile/${finalUsername}`)
+          router.push(`/profile/${finalUsername}`)
+          router.refresh() // 🔒 Sayfayı yenile - güncel veriyi göster
+        }, 1500)
+      } else if (isRequired && dateOfBirth && country && city && gender) {
+        // Zorunlu alanlar tamamlandı, feed'e yönlendir
+        setTimeout(() => {
+          router.push('/feed')
+          router.refresh()
+        }, 1500)
+      } else if (!finalUsername) {
+        console.error('[Profile Edit] No username found for redirect')
+        toast.error('Profil güncellendi ancak yönlendirme yapılamadı')
+      }
     } catch (error: any) {
       setMessage(error.response?.data?.message || 'Bir hata oluştu')
     } finally {
@@ -185,10 +329,38 @@ function EditProfileContent() {
     return null
   }
 
+  // Zorunlu alanlar kontrolü
+  const hasRequiredFields = dateOfBirth && country && city && gender
+  const requiredFieldsMissing = !dateOfBirth || !country || !city || !gender
+
   return (
     <div className="max-w-2xl mx-auto mt-8 px-4">
       <div className="bg-white dark:bg-[#111111] rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 p-6 md:p-8 transition-colors">
         <h2 className="text-2xl font-bold text-[#1f1f1f] dark:text-white mb-6">Profili Düzenle</h2>
+
+        {/* Zorunlu Alan Uyarısı (sadece required=true varsa veya zorunlu alanlar eksikse) */}
+        {(isRequired || requiredFieldsMissing) && (
+          <div className="mb-6 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+            <h3 className="text-lg font-semibold text-orange-900 dark:text-orange-200 mb-2">
+              Profilini Tamamla
+            </h3>
+            <p className="text-sm text-orange-800 dark:text-orange-300 mb-3">
+              {isRequired 
+                ? 'Feellink\'i tam kullanabilmek için aşağıdaki bilgileri doldurman gerekiyor.'
+                : 'Bazı zorunlu bilgiler eksik. Lütfen aşağıdaki alanları doldur.'}
+            </p>
+            <div className="space-y-1.5 text-xs text-orange-700 dark:text-orange-400">
+              <div className="flex items-center gap-2">
+                <Lock size={14} />
+                <span>Bu bilgiler gizlilik ayarlarına tabidir</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <BarChart3 size={14} />
+                <span>Yaş ve şehir yalnızca istatistik ve filtreleme için kullanılır</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Avatar Upload */}
         <div className="mb-6">
@@ -253,18 +425,17 @@ function EditProfileContent() {
           </div>
         </div>
 
-        {/* Username */}
+        {/* Username - Read Only */}
         <div className="mb-6">
           <label className="block text-sm text-gray-700 dark:text-white/70 mb-2">
             Kullanıcı Adı
           </label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400"
-            placeholder="ör: sudesmer001"
-          />
+          <div className="w-full bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-gray-500 dark:text-gray-400">
+            @{user?.username || 'kullanıcıadı'}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Kullanıcı adı değiştirilemez (profil URL'inizi korur)
+          </p>
         </div>
 
         {/* Full Name */}
@@ -305,17 +476,117 @@ function EditProfileContent() {
             type="url"
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
-            disabled={isPrivate}
-            className={`w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400 ${
-              isPrivate ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            className="w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400"
             placeholder="https://example.com"
           />
-          {isPrivate && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Gizli hesaplarda bağlantı alanı devre dışı bırakılmıştır.
-            </p>
-          )}
+        </div>
+
+        {/* Date of Birth */}
+        <div className="mb-6">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-2">
+            Doğum Tarihi <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            max={new Date(new Date().setFullYear(new Date().getFullYear() - 13)).toISOString().split('T')[0]}
+            className="w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400"
+          />
+          <p className="text-xs text-gray-500 dark:text-white/50 mt-1">
+            Yaşınız otomatik olarak hesaplanır (13+ zorunlu)
+          </p>
+        </div>
+
+        {/* Country */}
+        <div className="mb-6">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-2">
+            Ülke <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={country ?? ''}
+            onChange={(e) => {
+              setCountry(e.target.value || null)
+              setCity(null) // 🔒 Ülke değişince şehir sıfırlanır
+            }}
+            className="w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400"
+          >
+            <option value="">Ülke seçin</option>
+            {countries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* City */}
+        <div className="mb-6">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-2">
+            Şehir <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={city ?? ''}
+            onChange={(e) => setCity(e.target.value || null)}
+            disabled={!country}
+            className="w-full bg-white text-[#111] border border-black/10 rounded-lg px-3 py-2 placeholder-gray-400 focus:border-orange-500 transition dark:bg-[#1E1F24] dark:text-white dark:border-white/10 dark:placeholder-white/40 dark:focus:border-orange-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="" disabled>
+              {country ? 'Şehir seçin' : 'Önce ülke seçin'}
+            </option>
+            {country === 'TR' ? (
+              // 🇹🇷 Türkiye için 81 il listesi (sabit, filtreleme yok)
+              (() => {
+                // 🔍 Console test
+                console.log('[Profile Edit] TR_CITIES length:', TR_CITIES.length)
+                console.log('[Profile Edit] TR_CITIES:', TR_CITIES)
+                return TR_CITIES.map((cityName) => (
+                  <option key={cityName} value={cityName}>
+                    {cityName}
+                  </option>
+                ))
+              })()
+            ) : (
+              // Diğer ülkeler için countries.json'dan
+              country &&
+              countries
+                .find((c) => c.code === country)
+                ?.cities.map((cityName) => (
+                  <option key={cityName} value={cityName}>
+                    {cityName}
+                  </option>
+                ))
+            )}
+          </select>
+        </div>
+
+        {/* Gender */}
+        <div className="mb-6">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-2">
+            Cinsiyet <span className="text-red-500">*</span>
+          </label>
+          <div className="space-y-2">
+            {[
+              { value: 'FEMALE', label: 'Kadın' },
+              { value: 'MALE', label: 'Erkek' },
+              { value: 'UNSPECIFIED', label: 'Belirtmek istemiyorum' },
+            ].map((option) => (
+              <label
+                key={option.value}
+                className="flex items-center gap-3 p-3 border border-black/10 dark:border-white/10 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2a2b30] transition-colors"
+              >
+                <input
+                  type="radio"
+                  name="gender"
+                  value={option.value}
+                  checked={gender === option.value}
+                  onChange={(e) => setGender(e.target.value as Gender)}
+                  className="w-4 h-4 text-brand-orange focus:ring-brand-orange"
+                />
+                <span className="text-sm text-gray-900 dark:text-gray-100">{option.label}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Private Account */}
@@ -340,8 +611,9 @@ function EditProfileContent() {
         <div className="flex gap-3">
           <button
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isLoading || requiredFieldsMissing}
             className="flex-1 bg-[#FF8A00] text-white py-3 rounded-lg hover:bg-[#e67a00] transition font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            title={requiredFieldsMissing ? 'Lütfen tüm zorunlu alanları doldurun' : ''}
           >
             {isLoading ? 'Kaydediliyor...' : 'Kaydet'}
           </button>

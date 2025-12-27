@@ -8,6 +8,7 @@ import { SearchResults } from './search-results'
 import api from '@/lib/api'
 import { useTheme } from '@/lib/theme-context'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import { Avatar } from '@/components/ui/Avatar'
 
 interface SearchUser {
   id: string
@@ -252,20 +253,12 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="flex items-center space-x-2 group hover:opacity-80 transition-opacity focus:outline-none"
             >
-              <div className="w-8 h-8 rounded-full bg-brand-orange flex items-center justify-center text-white font-semibold text-sm overflow-hidden ring-2 ring-transparent group-hover:ring-brand-orange/20 transition-all">
-                {user?.avatar ? (
-                  <img
-                    src={resolveImageUrl(user.avatar)}
-                    alt={user.username}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Silently fallback to placeholder without logging
-                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                    }}
-                  />
-                ) : (
-                  <span>{user?.username?.charAt(0).toUpperCase() || 'U'}</span>
-                )}
+              <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-brand-orange/20 transition-all">
+                <Avatar
+                  src={user?.avatar}
+                  alt={user?.username || user?.fullName || 'Kullanıcı'}
+                  className="w-full h-full"
+                />
               </div>
               <svg
                 className={`w-4 h-4 text-gray-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}

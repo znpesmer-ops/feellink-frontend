@@ -78,7 +78,7 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
             {children}
           </main>
           {(isFeed || isExplore) && (
-            <aside className="hidden xl:block w-[380px] flex-shrink-0 pt-4 pr-6">
+            <aside className="hidden xl:block w-[400px] flex-shrink-0 pt-4 pr-6">
               <RightSidebar mode={isExplore ? 'explore' : 'feed'} />
             </aside>
           )}

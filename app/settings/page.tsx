@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DeleteAccountModal } from '@/components/settings/DeleteAccountModal'
+import ChangePasswordModal from '@/components/settings/ChangePasswordModal'
 
 function SettingsContent() {
   const { user, setUser } = useAuthStore()
@@ -54,6 +55,27 @@ function SettingsContent() {
         </div>
 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-900 dark:text-gray-100">Hesap Güvenliği</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                E-posta
+              </label>
+              <input
+                type="email"
+                value={user?.email || ''}
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                E-posta adresiniz doğrulanmış durumda.
+              </p>
+            </div>
+            <SecuritySection />
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-900 dark:text-gray-100">Bildirimler</h2>
           <Link
             href="/settings/notifications"
@@ -86,7 +108,7 @@ function BlockedUsersButton() {
     <>
       <button
         onClick={() => setIsModalOpen(true)}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-[#ff7b00] text-white rounded-lg hover:bg-[#e96d00] transition-colors text-sm font-medium"
       >
         Engellenenleri Görüntüle
       </button>
@@ -389,6 +411,33 @@ function EmailField({ user, onUpdate }: { user: any; onUpdate: () => void }) {
         </div>
       )}
     </div>
+  )
+}
+
+function SecuritySection() {
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+
+  return (
+    <>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Şifre
+        </label>
+        <button
+          onClick={() => setShowPasswordModal(true)}
+          className="px-4 py-2 text-sm font-medium bg-[#ff7b00] text-white hover:bg-[#e96d00] rounded-lg transition-colors"
+        >
+          Şifre Değiştir
+        </button>
+      </div>
+
+      {showPasswordModal && (
+        <ChangePasswordModal
+          open={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+        />
+      )}
+    </>
   )
 }
 
