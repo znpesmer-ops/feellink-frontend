@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from "react"
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { Calendar, Users, Trash2 } from 'lucide-react'
@@ -22,7 +23,7 @@ interface Event {
   }
 }
 
-export default function AdminEvents() {
+function AdminEventsContent() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -132,7 +133,13 @@ export default function AdminEvents() {
     </div>
   )
 }
-
+export default function AdminEvents() {
+  return (
+    <Suspense fallback={<div>Yükleniyor...</div>}>
+      <AdminEventsContent />
+    </Suspense>
+  )
+}
 
 
 
