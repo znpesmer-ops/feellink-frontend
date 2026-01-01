@@ -156,10 +156,10 @@ export default function AdminSettingsPage() {
                             <div className="text-sm font-medium text-[var(--text)]">{item.label}</div>
                           </div>
                           <div className="text-xs text-[var(--sub)] mb-1">{item.value}</div>
-                          {'description' in item && item.description && (
+                          {'description' in item && String(item.description) && (
                             <div className="text-xs text-[var(--sub)] opacity-75 mt-1 flex items-start gap-1">
                               <Info size={12} className="mt-0.5 flex-shrink-0" />
-                              <span>{String(item.description ?? "")}</span>
+                              <span>{String(item.description)}</span>
                             </div>
                           )}
                         </div>
