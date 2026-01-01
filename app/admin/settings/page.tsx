@@ -159,7 +159,7 @@ export default function AdminSettingsPage() {
                           {'description' in item && item.description && (
                             <div className="text-xs text-[var(--sub)] opacity-75 mt-1 flex items-start gap-1">
                               <Info size={12} className="mt-0.5 flex-shrink-0" />
-                              <span>{item.description}</span>
+                              <span>{String(item.description ?? "")}</span>
                             </div>
                           )}
                         </div>
