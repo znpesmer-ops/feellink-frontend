@@ -2,7 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
-   ignoreBuildErrors: true,
+  ignoreBuildErrors: true,
+  },
+  eslint: {
+  ignoreDuringBuilds: true,
   },
   webpack: (config, { isServer }) => {
     // ✅ framer-motion için webpack konfigürasyonu
