@@ -1,9 +1,11 @@
 'use client'
 
-import { Suspense } from "react"
+export const dynamic = 'force-dynamic'
+
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
-import { Calendar, Users, Trash2 } from 'lucide-react'
+import { Calendar, Users } from 'lucide-react'
 
 interface Event {
   id: string
@@ -49,14 +51,16 @@ function AdminEventsContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ff7b00]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ff7b00]" />
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold dark:text-white text-gray-900">Etkinlikler</h2>
+      <h2 className="text-3xl font-bold dark:text-white text-gray-900">
+        Etkinlikler
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {events.map((event) => (
@@ -67,11 +71,13 @@ function AdminEventsContent() {
             <h3 className="text-lg font-semibold dark:text-white text-gray-900 mb-2">
               {event.title}
             </h3>
+
             {event.description && (
               <p className="text-sm dark:text-gray-400 text-gray-600 mb-4 line-clamp-2">
                 {event.description}
               </p>
             )}
+
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm dark:text-gray-400 text-gray-600">
                 <Calendar className="w-4 h-4" />
@@ -81,11 +87,13 @@ function AdminEventsContent() {
                   year: 'numeric',
                 })}
               </div>
+
               <div className="flex items-center gap-2 text-sm dark:text-gray-400 text-gray-600">
                 <Users className="w-4 h-4" />
                 {event._count.participants} katılımcı
               </div>
             </div>
+
             <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2">
                 {event.owner.avatar ? (
@@ -113,6 +121,7 @@ function AdminEventsContent() {
         <div className="text-sm dark:text-gray-400 text-gray-600">
           Toplam {total} etkinlik
         </div>
+
         <div className="flex gap-2">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -121,6 +130,7 @@ function AdminEventsContent() {
           >
             Önceki
           </button>
+
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * 20 >= total}
@@ -133,6 +143,7 @@ function AdminEventsContent() {
     </div>
   )
 }
+
 export default function AdminEvents() {
   return (
     <Suspense fallback={<div>Yükleniyor...</div>}>
@@ -140,39 +151,3 @@ export default function AdminEvents() {
     </Suspense>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
