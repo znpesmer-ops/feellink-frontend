@@ -314,18 +314,65 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
                       {/* Background gradient fallback */}
                       <div className={`absolute inset-0 bg-gradient-to-br ${museum.color} opacity-90 z-0`} />
                       <div className="relative w-full h-[110px] overflow-hidden z-10">
-                        {!imageErrors[`museum-${museum.id}`] ? (
-                          <img
-                            src={resolveImageUrl(museum.image)}
-                            alt={museum.name}
-                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200 relative z-10"
-                            onError={() => {
-                              setImageErrors((prev) => ({ ...prev, [`museum-${museum.id}`]: true }))
-                            }}
-                          />
-                        ) : (
-                          <div className={`w-full h-full bg-gradient-to-br ${museum.color} opacity-90`} />
-                        )}
+                        {(() => {
+                          // 🔒 Güvenlik: Gerçek image yoksa hiçbir görsel gösterme (fallback avatar yok)
+                          const isUsableImage = (url?: string | null): boolean => {
+                            if (!url || typeof url !== 'string') return false
+                            const u = url.trim()
+                            if (!u || u === 'null' || u === 'undefined') return false
+
+                            // Projedeki placeholder isimlerini burada yakala
+                            const blocked = [
+                              'default-user',
+                              'default-avatar',
+                              'female',
+                              'woman',
+                              'avatar-female',
+                              'placeholder-user',
+                              'avatar-placeholder',
+                            ]
+
+                            // local asset path veya url içinde geçiyorsa engelle
+                            if (blocked.some((k) => u.toLowerCase().includes(k))) return false
+
+                            return true
+                          }
+
+                          const hasValidImage = isUsableImage(museum?.image)
+                          
+                          // Görsel geçerli değilse veya hata varsa gradient göster
+                          if (!hasValidImage || imageErrors[`museum-${museum.id}`]) {
+                            return <div className={`w-full h-full bg-gradient-to-br ${museum.color} opacity-90`} />
+                          }
+
+                          // Geçerli image varsa resolve et ve fallback kontrolü yap
+                          const imageToResolve = museum?.image
+                          if (!imageToResolve) {
+                            return <div className={`w-full h-full bg-gradient-to-br ${museum.color} opacity-90`} />
+                          }
+
+                          const resolvedUrl = resolveImageUrl(imageToResolve)
+                          
+                          // resolveImageUrl fallback döndürmüşse kontrol et
+                          if (!resolvedUrl || resolvedUrl.includes('avatar-placeholder') || 
+                              resolvedUrl.includes('default-user') || 
+                              resolvedUrl.includes('default-avatar') ||
+                              resolvedUrl.includes('female') ||
+                              resolvedUrl.includes('woman')) {
+                            return <div className={`w-full h-full bg-gradient-to-br ${museum.color} opacity-90`} />
+                          }
+
+                          return (
+                            <img
+                              src={resolvedUrl}
+                              alt={museum.name || 'Müze'}
+                              className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200 relative z-10"
+                              onError={() => {
+                                setImageErrors((prev) => ({ ...prev, [`museum-${museum.id}`]: true }))
+                              }}
+                            />
+                          )
+                        })()}
                       </div>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end justify-center p-2 z-20">
                         <p className="text-white text-xs font-medium text-center drop-shadow-sm">

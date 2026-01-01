@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import api from './api'
+// 🔥 Lazy import - circular dependency'yi önlemek için
+// import api from './api'
 import { CapabilitySummary, SidebarVisibility, SubscriptionPlanCode, UserRoleCode } from '@/types/capabilities'
 
 interface User {
@@ -23,6 +24,7 @@ interface User {
   country?: string | null
   city?: string | null
   gender?: string | null
+  activeRole?: string | null // 🎯 Aktif rol (profil header'da gösterilecek, onboarding kontrolü için)
 }
 
 interface AuthState {
@@ -106,6 +108,8 @@ export const useAuthStore = create<AuthState>()(
             return
           }
 
+          // 🔥 Lazy import - circular dependency'yi önlemek için
+          const { default: api } = await import('./api')
           const response = await api.get('/auth/me')
           const { user: updatedUser, capabilities, sidebar } = response.data
 

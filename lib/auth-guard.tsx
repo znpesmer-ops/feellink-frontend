@@ -19,6 +19,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     '/forgot-password',
     '/reset-password',
     '/onboarding',   // Onboarding sayfası public
+    '/select-role',  // 🎯 Rol seçim sayfası public (onboarding akışı için)
     '/posts',        // Eser detay sayfaları public
     '/artwork',      // Eser sayfaları public (alternatif route)
   ]
@@ -73,6 +74,52 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!hasToken) {
         router.replace('/login')
         return
+      }
+
+      // 🔥 KRİTİK: Feed, settings ve diğer ana sayfalara giderken activeRole kontrolünü atla
+      // Login sonrası direkt bu sayfalara gidebilsin
+      const allowedRoutesWithoutActiveRole = ['/feed', '/select-role', '/settings', '/notifications', '/profile']
+      const isAllowedRoute = allowedRoutesWithoutActiveRole.some(route => pathname?.startsWith(route))
+      
+      // ✅ Login sonrası feed'e giderken token varsa direkt geç (user yüklenene kadar bekleme)
+      if (isAllowedRoute && hasToken) {
+        // Bu sayfalara giderken activeRole kontrolünü atla, direkt geç
+        // User henüz yüklenmemiş olsa bile token varsa geç (user sonra yüklenecek)
+        return
+      }
+
+      // 🎯 KRİTİK: Rol seçimi kontrolü - sadece admin ve diğer özel sayfalar için
+      // Normal kullanıcı sayfaları için activeRole kontrolü yapma
+      if (hasToken && user && !isAllowedRoute) {
+        // activeRole kontrolü - user object'inde activeRole field'ı var mı?
+        const hasActiveRole = user.activeRole !== null && user.activeRole !== undefined && user.activeRole !== ''
+        // roles kontrolü - eğer roles varsa activeRole olmasa bile devam et
+        const hasRoles = user.roles && user.roles.length > 0
+        
+        // Eğer activeRole yoksa VE roles da yoksa, /select-role'e yönlendir
+        // Ama sadece admin veya özel sayfalar için
+        if (!hasActiveRole && !hasRoles && pathname !== '/select-role') {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[AuthGuard] User authenticated but no activeRole and no roles, redirecting to /select-role')
+          }
+          router.replace('/select-role')
+          return
+        }
+        
+        // ✅ Eğer roles varsa ama activeRole yoksa, ilk role'ü activeRole olarak kullan
+        if (hasRoles && !hasActiveRole && pathname !== '/select-role') {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[AuthGuard] User has roles but no activeRole, using first role as activeRole')
+          }
+          // activeRole'ü set et (store'da güncelle)
+          const firstRole = user.roles?.[0]
+          if (firstRole) {
+            setUser({
+              ...user,
+              activeRole: firstRole,
+            })
+          }
+        }
       }
 
       // Token var ama store'da yok - store'u güncelle
@@ -243,8 +290,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Show loading while checking auth or waiting for capabilities (sadece protected route'larda)
-  // Token varsa loading gösterme - user bilgisi yüklenene kadar bekle
-  if ((!hasToken || !user) && !isPublicRoute && !pathname?.startsWith('/profile')) {
+  // ✅ Feed'e giderken token varsa user yüklenene kadar bekleme (user sonra yüklenecek)
+  const allowedRoutesWithoutActiveRole = ['/feed', '/select-role', '/settings', '/notifications', '/profile']
+  const isAllowedRoute = allowedRoutesWithoutActiveRole.some(route => pathname?.startsWith(route))
+  
+  if ((!hasToken || !user) && !isPublicRoute && !pathname?.startsWith('/profile') && !isAllowedRoute) {
     // Token yoksa login'e yönlendir (zaten useEffect'te yapılıyor ama loading göster)
     if (!hasToken) {
       return (
@@ -253,7 +303,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         </div>
       )
     }
-    // Token var ama user yok - user yüklenene kadar bekle
+    // Token var ama user yok - user yüklenene kadar bekle (sadece feed dışı sayfalar için)
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>

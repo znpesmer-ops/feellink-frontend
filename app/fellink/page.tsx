@@ -1165,7 +1165,7 @@ export default function FellinkPage() {
             Topluluk ilanlarını keşfet
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Feellink ekosistemindeki kurum ve koleksiyonerlerin paylaştığı güncel iş & proje fırsatları burada.
+            Feellinkte bulunan kullanıcıların paylaştığı güncel iş & proje fırsatları burada.
           </p>
         </div>
       </header>

@@ -505,7 +505,7 @@ export default function EventDetailPage() {
                     )}
                   </button>
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Etkinlik sahibi talebinizi onayladığında biletiniz oluşturulacaktır.
+                    Etkinlik sahibi talebinizi onayladığında size mail iletilecektir.
                   </p>
                 </div>
             )}

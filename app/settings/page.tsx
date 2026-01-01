@@ -10,6 +10,9 @@ import toast from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DeleteAccountModal } from '@/components/settings/DeleteAccountModal'
 import ChangePasswordModal from '@/components/settings/ChangePasswordModal'
+import { ROLE_METADATA, normalizeRole } from '@/lib/role-utils'
+import type { UserRoleCode } from '@/types/capabilities'
+import { Send, MessageSquare, Shield } from 'lucide-react'
 
 function SettingsContent() {
   const { user, setUser } = useAuthStore()
@@ -73,6 +76,19 @@ function SettingsContent() {
             </div>
             <SecuritySection />
           </div>
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-900 dark:text-gray-100">Profil Görünümü</h2>
+          <ProfileColorSignatureToggle user={user} userData={userData} onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ['user-me'] })
+            queryClient.invalidateQueries({ queryKey: ['profile'] })
+          }} />
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-900 dark:text-gray-100">Rol Değişikliği</h2>
+          <RoleChangeRequestSection user={user} />
         </div>
 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
@@ -438,6 +454,280 @@ function SecuritySection() {
         />
       )}
     </>
+  )
+}
+
+function ProfileColorSignatureToggle({ user, userData, onUpdate }: { user: any; userData: any; onUpdate: () => void }) {
+  const [isEnabled, setIsEnabled] = useState(userData?.showProfileColorSignature ?? true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // userData değiştiğinde state'i güncelle
+  useEffect(() => {
+    if (userData?.showProfileColorSignature !== undefined) {
+      setIsEnabled(userData.showProfileColorSignature)
+    }
+  }, [userData])
+
+  const handleToggle = async () => {
+    const newValue = !isEnabled
+    setIsEnabled(newValue)
+    setIsSaving(true)
+
+    try {
+      await api.put('/users/profile', { showProfileColorSignature: newValue })
+      toast.success(newValue ? 'Renk imzası gösteriliyor' : 'Renk imzası gizlendi')
+      onUpdate()
+    } catch (error: any) {
+      // Hata durumunda eski değere geri dön
+      setIsEnabled(!newValue)
+      toast.error(error.response?.data?.message || 'Ayar güncellenirken bir hata oluştu')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
+      <div className="flex-1">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+          Profil Renk İmzası
+        </h3>
+        <p className="text-xs text-gray-600 dark:text-gray-400">
+          Yüklediğiniz eserlerden oluşan renk imzasını profilinizde gösterir.
+        </p>
+      </div>
+      <button
+        onClick={handleToggle}
+        disabled={isSaving}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-orange focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+          isEnabled ? 'bg-brand-orange' : 'bg-gray-300 dark:bg-gray-600'
+        }`}
+        role="switch"
+        aria-checked={isEnabled}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            isEnabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  )
+}
+
+function RoleChangeRequestSection({ user }: { user: any }) {
+  const [showModal, setShowModal] = useState(false)
+  const currentRole = user?.activeRole || user?.roles?.[0] || 'art_lover'
+  const normalizedCurrentRole = normalizeRole(currentRole)
+  const currentRoleLabel = ROLE_METADATA[normalizedCurrentRole]?.label || 'Sanat Sever'
+
+  return (
+    <>
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Mevcut rolünüz: <span className="font-semibold">{currentRoleLabel}</span>
+        </p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Mevcut rolünüzü değiştirmek için yöneticilere talep gönderebilirsiniz. Rol değişikliği talepleri admin paneli üzerinden onaylanır.
+        </p>
+        <button
+          onClick={() => setShowModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-orange text-white rounded-lg hover:bg-brand-orange/90 transition-colors text-sm font-medium"
+        >
+          <Send className="w-4 h-4" />
+          Rol Değişikliği Talebi Gönder
+        </button>
+      </div>
+
+      {showModal && (
+        <RoleChangeRequestModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          currentRole={normalizedCurrentRole}
+        />
+      )}
+    </>
+  )
+}
+
+function RoleChangeRequestModal({ isOpen, onClose, currentRole }: { isOpen: boolean; onClose: () => void; currentRole: UserRoleCode }) {
+  const [selectedRole, setSelectedRole] = useState<UserRoleCode | null>(null)
+  const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const queryClient = useQueryClient()
+
+  // ✅ Her zaman tüm 4 rolü göster
+  const allRoles = Object.keys(ROLE_METADATA) as UserRoleCode[]
+  const normalizedCurrentRole = normalizeRole(currentRole)
+  
+  // ✅ Modal açıldığında/kapandığında state'i resetle
+  useEffect(() => {
+    if (!isOpen) {
+      // Modal kapandığında state'i resetle
+      setSelectedRole(null)
+      setMessage('')
+    }
+  }, [isOpen])
+
+  // ✅ Aktif role tıklama handler'ı
+  const handleRoleClick = (role: UserRoleCode) => {
+    const normalizedRole = normalizeRole(role)
+    
+    // Aktif rolse, seçim yapma ve mesaj göster
+    if (normalizedRole === normalizedCurrentRole) {
+      toast.error('Zaten bu role sahipsiniz.')
+      return
+    }
+    
+    // Aktif rolden farklı bir rolse, seç
+    setSelectedRole(role)
+  }
+
+  const handleSubmit = async () => {
+    if (!selectedRole) {
+      toast.error('Lütfen bir rol seçin')
+      return
+    }
+    
+    // ✅ Ekstra güvenlik kontrolü: Mevcut rolü seçmeye çalışırsa engelle
+    const normalizedSelected = normalizeRole(selectedRole)
+    if (normalizedSelected === normalizedCurrentRole) {
+      toast.error('Zaten bu role sahipsiniz.')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await api.post('/users/role-change-request', {
+        requestedRole: selectedRole,
+        message: message.trim() || undefined,
+      })
+      toast.success('Rol değişikliği talebiniz gönderildi. Yöneticiler tarafından incelenecektir.')
+      setMessage('')
+      setSelectedRole(null) // ✅ Reset
+      onClose()
+      queryClient.invalidateQueries({ queryKey: ['user-me'] })
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Talep gönderilirken bir hata oluştu')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // ✅ Seçilen rolün aktif rolden farklı olup olmadığını kontrol et
+  const isRoleDifferent = selectedRole ? normalizeRole(selectedRole) !== normalizedCurrentRole : false
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white dark:bg-[#111827] rounded-xl shadow-xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Shield className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Rol Değişikliği Talebi</h2>
+        </div>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              İstenen Rol
+            </label>
+            <div className="space-y-2">
+              {!selectedRole && (
+                <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 italic">
+                  Lütfen bir rol seçin
+                </div>
+              )}
+              {allRoles.map((role) => {
+                const Icon = ROLE_METADATA[role].icon
+                const normalizedRole = normalizeRole(role)
+                const isCurrentRole = normalizedRole === normalizedCurrentRole
+                const isSelected = selectedRole === role && !isCurrentRole
+                
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => handleRoleClick(role)}
+                    disabled={isCurrentRole}
+                    className={`w-full flex items-center gap-3 px-4 py-3 border rounded-lg transition-all text-left ${
+                      isCurrentRole
+                        ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60 cursor-not-allowed'
+                        : isSelected
+                        ? 'border-brand-orange bg-brand-orange/5 dark:bg-brand-orange/10'
+                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    <Icon 
+                      className={`w-5 h-5 flex-shrink-0 ${
+                        isCurrentRole
+                          ? 'text-gray-400 dark:text-gray-500'
+                          : isSelected 
+                          ? 'text-brand-orange' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`} 
+                    />
+                    <div className="flex-1 flex flex-col">
+                      <span className={`text-sm font-medium ${
+                        isCurrentRole
+                          ? 'text-gray-400 dark:text-gray-500'
+                          : isSelected
+                          ? 'text-brand-orange dark:text-brand-orange'
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
+                        {ROLE_METADATA[role].label}
+                      </span>
+                      {isCurrentRole && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                          Zaten bu role sahipsiniz
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              Açıklama (Opsiyonel)
+            </label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Rol değişikliği talebinizin nedenini açıklayabilirsiniz..."
+              rows={4}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-orange resize-none"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting || !isRoleDifferent}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-brand-orange text-white rounded-lg hover:bg-brand-orange/90 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="w-4 h-4" />
+              {isSubmitting ? 'Gönderiliyor...' : 'Gönder'}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
+            >
+              İptal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

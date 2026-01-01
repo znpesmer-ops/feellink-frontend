@@ -66,8 +66,13 @@ export default function CollectionDetailPage() {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
 
+  // 🎯 Rol bazlı yetki kısıtları izole edildi (devre dışı, kod korunuyor)
+  // Tüm kullanıcılar tüm özelliklere erişebilir
+  const ALLOW_ALL_ROLES = true // Geri alınabilir flag
+
   const roles = capabilities?.roles ?? user?.roles ?? []
-  const canManageCollections = roles.includes('corporate') || roles.includes('collector')
+  // ✅ Tüm kullanıcılar koleksiyon yönetebilir (rol kısıtı yok)
+  const canManageCollections = ALLOW_ALL_ROLES ? true : (roles.includes('corporate') || roles.includes('collector'))
   const isOwner = collection?.ownerId === user?.id
 
   useEffect(() => {

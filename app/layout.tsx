@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Providers } from './providers'
-import { LayoutConditional } from '@/components/layout-conditional'
 // import { Onboarding } from '@/components/Onboarding' // Kaldırıldı - ürün seviyesi için gereksiz
 
 export const metadata: Metadata = {

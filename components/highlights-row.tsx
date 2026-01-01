@@ -25,9 +25,15 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
     queryFn: async () => {
       try {
         const res = await api.get('/highlights/monthly')
-        return res.data
-      } catch (err) {
+        return res.data || {
+          museum: null,
+          artwork: null,
+          comment: null,
+          collection: null,
+        }
+      } catch (err: any) {
         console.error('Monthly highlights alınamadı:', err)
+        // Hata durumunda güvenli fallback döndür
         return {
           museum: null,
           artwork: null,
@@ -38,38 +44,39 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
     },
     staleTime: 60 * 60 * 1000, // 1 saat cache
     refetchOnWindowFocus: false,
+    retry: 1, // Sadece 1 kez retry yap
   })
 
-  // Backward compatibility için format dönüşümü
+  // Backward compatibility için format dönüşümü - Güvenli null kontrolü
   const featured: FeaturedData = {
     museum: monthlyHighlights?.museum
       ? {
-          name: monthlyHighlights.museum.name,
-          username: monthlyHighlights.museum.username,
-          imageUrl: monthlyHighlights.museum.imageUrl || null,
+          name: monthlyHighlights.museum?.name || '',
+          username: monthlyHighlights.museum?.username || '',
+          imageUrl: monthlyHighlights.museum?.imageUrl || null,
         }
       : null,
     artwork: monthlyHighlights?.artwork
       ? {
-          title: monthlyHighlights.artwork.title,
-          postId: monthlyHighlights.artwork.postId,
-          imageUrl: monthlyHighlights.artwork.imageUrl || null,
+          title: monthlyHighlights.artwork?.title || '',
+          postId: monthlyHighlights.artwork?.postId || '',
+          imageUrl: monthlyHighlights.artwork?.imageUrl || null,
         }
       : null,
     comment: monthlyHighlights?.comment
       ? {
-          text: monthlyHighlights.comment.text,
-          commentId: monthlyHighlights.comment.commentId,
-          postId: monthlyHighlights.comment.postId,
-          username: monthlyHighlights.comment.username,
-          fullName: monthlyHighlights.comment.fullName,
+          text: monthlyHighlights.comment?.text || '',
+          commentId: monthlyHighlights.comment?.commentId || '',
+          postId: monthlyHighlights.comment?.postId || '',
+          username: monthlyHighlights.comment?.username || '',
+          fullName: monthlyHighlights.comment?.fullName || '',
         }
       : null,
     collector: monthlyHighlights?.collection
       ? {
-          name: monthlyHighlights.collection.title,
-          username: monthlyHighlights.collection.owner.username,
-          imageUrl: monthlyHighlights.collection.coverImage || monthlyHighlights.collection.owner.avatar || null,
+          name: monthlyHighlights.collection?.title || '',
+          username: monthlyHighlights.collection?.owner?.username || '',
+          imageUrl: monthlyHighlights.collection?.coverImage || monthlyHighlights.collection?.owner?.avatar || null,
         }
       : null,
   }
@@ -159,8 +166,34 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
             )
           }
 
+          // 🔒 Güvenlik: Gerçek imageUrl yoksa hiçbir görsel gösterme (fallback avatar yok)
+          // isUsableImage helper: Tüm placeholder ve fallback path'lerini engeller
+          const isUsableImage = (url?: string | null): boolean => {
+            if (!url || typeof url !== 'string') return false
+            const u = url.trim()
+            if (!u || u === 'null' || u === 'undefined') return false
+
+            // Projedeki placeholder isimlerini burada yakala
+            const blocked = [
+              'default-user',
+              'default-avatar',
+              'female',
+              'woman',
+              'avatar-female',
+              'placeholder-user',
+              'avatar-placeholder',
+            ]
+
+            // local asset path veya url içinde geçiyorsa engelle
+            if (blocked.some((k) => u.toLowerCase().includes(k))) return false
+
+            return true
+          }
+          
+          const hasValidImage = isUsableImage(item.imageUrl)
+          
           // Ayın Yorumu için özel görsel yoksa placeholder
-          const displayImage = item.imageUrl || (item.id === 3 ? null : null)
+          const displayImage = hasValidImage ? item.imageUrl : null
           const fallbackBg = item.id === 1 
             ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30'
             : item.id === 2
@@ -174,14 +207,26 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
           // Tüm kartlar aynı yapıyı kullanır (Ayın Yorumu dahil)
           const CardContent = (
             <div className="relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gray-900 dark:bg-[#111] border border-[rgba(255,140,0,0.35)] dark:border-[rgba(255,140,0,0.15)] shadow-sm hover:shadow-lg hover:shadow-brand-orange/20 transition-all hover:-translate-y-1 group cursor-pointer">
-              {/* Görsel veya Gradient Background */}
-              {displayImage ? (
-                <img
-                  src={resolveImageUrl(displayImage)}
-                  alt={item.subtitle}
-                  className="absolute inset-0 w-full h-full object-cover object-center"
-                />
-              ) : (
+              {/* Görsel veya Gradient Background - 🔒 Sadece gerçek imageUrl varsa görsel göster */}
+              {displayImage && isUsableImage(displayImage) ? (() => {
+                const resolvedUrl = resolveImageUrl(displayImage)
+                // 🔒 resolveImageUrl'in döndürdüğü URL fallback avatar ise görsel gösterme
+                if (!isUsableImage(resolvedUrl)) {
+                  return <div className={`absolute inset-0 ${fallbackBg}`} />
+                }
+                
+                return (
+                  <img
+                    src={resolvedUrl}
+                    alt={item.subtitle}
+                    className="absolute inset-0 w-full h-full object-cover object-center"
+                    onError={(e) => {
+                      // 🔒 Görsel yüklenemezse gizle, fallback gösterme
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                )
+              })() : (
                 <div className={`absolute inset-0 ${fallbackBg}`} />
               )}
 

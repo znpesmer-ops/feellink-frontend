@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Palette,
   AlertTriangle,
+  UserCog,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
@@ -92,6 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { href: '/admin', icon: Home, label: 'Dashboard' },
     { href: '/admin/users', icon: Users, label: 'Kullanıcılar' },
+    { href: '/admin/role-change-requests', icon: UserCog, label: 'Rol Değişiklik Talepleri' },
     { href: '/admin/posts', icon: FileText, label: 'Gönderiler' },
     { href: '/admin/artworks', icon: Palette, label: 'Eserler' },
     { href: '/admin/comments', icon: MessageCircle, label: 'Yorumlar' },

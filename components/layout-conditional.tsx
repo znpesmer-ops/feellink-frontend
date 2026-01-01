@@ -10,8 +10,10 @@ import { Menu, User, LogOut, X } from 'lucide-react'
 import Link from 'next/link'
 import { useTheme } from '@/lib/theme-context'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
-import api from '@/lib/api'
+// 🔥 Lazy import - server-side render sorunlarını önlemek için
+// import api from '@/lib/api'
 import { Sidebar } from '@/components/sidebar'
+import { AccountSuspendedBanner } from '@/components/AccountSuspendedBanner'
 
 function LayoutConditionalComponent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -23,6 +25,7 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
   const [rightSidebarTitle, setRightSidebarTitle] = useState('Keşfet')
   const [mobileProfileMenuOpen, setMobileProfileMenuOpen] = useState(false)
   const mobileProfileMenuRef = useRef<HTMLDivElement>(null)
+  const [showBanner, setShowBanner] = useState(false)
 
   const isFeed = pathname.startsWith('/feed')
   const isExplore = pathname === '/explore'
@@ -41,6 +44,8 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
   const handleLogout = async () => {
     try {
       if (refreshToken) {
+        // 🔥 Lazy import - server-side render sorunlarını önlemek için
+        const { default: api } = await import('@/lib/api')
         await api.post('/auth/logout', { refreshToken })
       }
     } catch (error) {
@@ -71,8 +76,14 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
         <Header />
       </div>
 
+      {/* 🔒 HESAP ASKIYA ALMA BANNER'ı - Header'ın hemen altında */}
+      <div className="fixed top-[72px] left-0 right-0 lg:left-64 z-[99]">
+        <AccountSuspendedBanner onVisibilityChange={setShowBanner} />
+      </div>
+
       {/* ANA İÇERİK */}
-      <div className="pt-[72px] lg:pl-64">
+      {/* ✅ Banner varsa padding'i artır (banner yüksekliği ~60px) */}
+      <div className={`pt-[72px] lg:pl-64 ${showBanner ? 'pt-[132px]' : ''}`}>
         <div className="flex">
           <main className="flex-1 px-4 md:px-10 pb-20 max-w-[900px] xl:max-w-[1100px] mx-auto">
             {children}
@@ -134,56 +145,62 @@ function LayoutConditionalComponent({ children }: { children: React.ReactNode })
 
       {/* Mobil Header */}
       {accessToken && user && (
-        <div className="lg:hidden fixed top-0 left-0 right-0 z-[100] border-b-2 border-brand-orange/30 bg-white/95 dark:bg-[#0a0f1f]/95 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setSidebarOpen(true)}>
-                <Menu size={22} />
-              </button>
-              <div className="text-sm font-semibold">
-                <span className="text-[#ff7b00]">Feellink</span>
+        <>
+          <div className="lg:hidden fixed top-0 left-0 right-0 z-[100] border-b-2 border-brand-orange/30 bg-white/95 dark:bg-[#0a0f1f]/95 backdrop-blur">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSidebarOpen(true)}>
+                  <Menu size={22} />
+                </button>
+                <div className="text-sm font-semibold">
+                  <span className="text-[#ff7b00]">Feellink</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 relative" ref={mobileProfileMenuRef}>
-              <button onClick={toggleTheme} className="p-2 rounded-lg">
-                {theme === 'dark' ? '☀️' : '🌙'}
-              </button>
-              {(isFeed || isExplore) && (
-                <button onClick={() => { setRightSidebarOpen(true); setRightSidebarTitle(isExplore ? 'Keşfet' : 'Keşfet'); }}>
-                  <User size={20} />
+              <div className="flex items-center gap-2 relative" ref={mobileProfileMenuRef}>
+                <button onClick={toggleTheme} className="p-2 rounded-lg">
+                  {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
-              )}
-              <div className="relative">
-                <button onClick={() => setMobileProfileMenuOpen(!mobileProfileMenuOpen)}>
-                  <div className="w-7 h-7 rounded-full bg-[#ff7b00] flex items-center justify-center text-white text-xs">
-                    {user.avatar ? (
-                      <img src={resolveImageUrl(user.avatar)} alt={user.username} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <span>{user.username?.charAt(0).toUpperCase() || 'U'}</span>
-                    )}
-                  </div>
-                </button>
-                {mobileProfileMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border z-50">
-                    <Link href="/profile/me" onClick={() => setMobileProfileMenuOpen(false)} className="block px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-b">
-                      <div className="flex items-center gap-2">
-                        <User size={18} />
-                        <span>Profilim</span>
-                      </div>
-                    </Link>
-                    <button onClick={handleLogout} className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
-                      <LogOut size={18} />
-                      <span>Çıkış Yap</span>
-                    </button>
-                  </div>
+                {(isFeed || isExplore) && (
+                  <button onClick={() => { setRightSidebarOpen(true); setRightSidebarTitle(isExplore ? 'Keşfet' : 'Keşfet'); }}>
+                    <User size={20} />
+                  </button>
                 )}
+                <div className="relative">
+                  <button onClick={() => setMobileProfileMenuOpen(!mobileProfileMenuOpen)}>
+                    <div className="w-7 h-7 rounded-full bg-[#ff7b00] flex items-center justify-center text-white text-xs">
+                      {user.avatar ? (
+                        <img src={resolveImageUrl(user.avatar)} alt={user.username} className="w-full h-full object-cover rounded-full" />
+                      ) : (
+                        <span>{user.username?.charAt(0).toUpperCase() || 'U'}</span>
+                      )}
+                    </div>
+                  </button>
+                  {mobileProfileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border z-50">
+                      <Link href="/profile/me" onClick={() => setMobileProfileMenuOpen(false)} className="block px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 border-b">
+                        <div className="flex items-center gap-2">
+                          <User size={18} />
+                          <span>Profilim</span>
+                        </div>
+                      </Link>
+                      <button onClick={handleLogout} className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
+                        <LogOut size={18} />
+                        <span>Çıkış Yap</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            <div className="px-4 pb-3">
+              <Header forceMobile={true} />
+            </div>
           </div>
-          <div className="px-4 pb-3">
-            <Header forceMobile={true} />
+          {/* 🔒 HESAP ASKIYA ALMA BANNER'ı - Mobil Header'ın altında */}
+          <div className="lg:hidden fixed top-[72px] left-0 right-0 z-[99]">
+            <AccountSuspendedBanner />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

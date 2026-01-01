@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import UserBadge from './UserBadge'
 import { Avatar } from '@/components/ui/Avatar'
+import { safeAvatar } from '@/lib/avatar-constants'
 
 interface SearchUser {
   id: string
@@ -53,6 +54,10 @@ export function SearchResults({ results, onSelect, isLoading }: SearchResultsPro
             ? `/profile/${user.username}` 
             : `/profile/${user.id}`
           
+          // ✅ Avatar değerini güvenli şekilde normalize et
+          // ✅ safeAvatar fonksiyonu tüm geçersiz değerleri temizler
+          const avatarSrc = safeAvatar(user.avatarUrl || user.avatar)
+          
           return (
             <Link
               key={user.id}
@@ -64,9 +69,11 @@ export function SearchResults({ results, onSelect, isLoading }: SearchResultsPro
               }}
               className="block w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50/60 dark:hover:bg-orange-500/10 rounded-xl transition-colors text-left group no-underline hover:no-underline focus:no-underline text-inherit"
             >
-              {/* Avatar */}
+              {/* ✅ Avatar - Güvenli fallback ile */}
+              {/* ✅ Profil fotoğrafı yoksa beyaz profesyonel ikon kullanılır */}
+              {/* ✅ Kadın görseli hiçbir durumda görünmemeli */}
               <Avatar
-                src={user.avatarUrl || user.avatar}
+                src={avatarSrc}
                 alt={user.fullName || user.username}
                 className="w-9 h-9 flex-shrink-0"
               />

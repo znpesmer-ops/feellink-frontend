@@ -14,9 +14,10 @@ import DraftArticles from '@/components/draft-articles'
 import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit, Bookmark } from 'lucide-react'
 import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
-import UserBadge from '@/components/UserBadge'
-import { UserBadges } from '@/components/profile/UserBadges'
-import { ProRoleBadge } from '@/components/ProRoleBadge'
+// ✅ Legacy badge component'leri kaldırıldı - sadece activeRole gösterilecek
+// import UserBadge from '@/components/UserBadge'
+// import { UserBadges } from '@/components/profile/UserBadges'
+// import { ProRoleBadge } from '@/components/ProRoleBadge'
 import { ROLE_METADATA, normalizeRole } from '@/lib/role-utils'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
 import { ProfileArtworksGrid } from '@/components/profile/ProfileArtworksGrid'
@@ -26,6 +27,9 @@ import { ArtistHighlights } from '@/components/profile/ArtistHighlights'
 import { SavedArtworks } from '@/components/profile/SavedArtworks'
 import ZoomModal from '@/components/common/ZoomModal'
 import { EditPostModal } from '@/components/profile/EditPostModal'
+import { Avatar } from '@/components/ui/Avatar'
+import { safeAvatar } from '@/lib/avatar-constants'
+import { ProfileColorSignature } from '@/components/profile/ProfileColorSignature'
 
 function ProfileContent() {
   const params = useParams()
@@ -350,9 +354,19 @@ function ProfileContent() {
   
   // Helper function to check if user can upload artwork (capability-based)
   // ✅ KRİTİK: Yetki kontrolü HER ZAMAN giriş yapan kullanıcıdan (currentUser/me) okunur
+  // 🎯 Rol bazlı yetki kısıtları izole edildi (devre dışı, kod korunuyor)
+  // Tüm kullanıcılar tüm özelliklere erişebilir
+  const ALLOW_ALL_ROLES = true // Geri alınabilir flag
+
   // ❌ YANLIŞ: profile.role ile kontrol (başkasının profili olabilir)
   // ✅ DOĞRU: currentUser veya capabilities ile kontrol
   const canUploadArtwork = useMemo(() => {
+    // ✅ Tüm kullanıcılar eser yükleyebilir (rol kısıtı yok)
+    if (ALLOW_ALL_ROLES) {
+      return true
+    }
+
+    // 🔄 Orijinal kod (geri alınabilir)
     // Önce capabilities'den kontrol et (en güvenilir kaynak)
     if (capabilities?.permissions?.canCreateArtworks) {
       return true
@@ -1111,37 +1125,22 @@ function ProfileContent() {
       <div className="max-w-4xl mx-auto py-8 px-4">
         {/* Profile Header */}
         <div className="flex flex-col md:flex-row items-start md:items-start space-y-4 md:space-y-0 md:space-x-8 mb-8 bg-white dark:bg-gray-950 rounded-2xl p-6 md:p-8 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-          {/* Avatar */}
-          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0">
-            {(() => {
-              // Güvenli avatar URL kontrolü
-              const avatarSrc = profile?.avatar && profile.avatar.trim() !== '' 
-                ? resolveImageUrl(profile.avatar)
-                : '/images/avatar-placeholder.png'
-              
-              // Avatar varsa göster
-              if (profile?.avatar && profile.avatar.trim() !== '') {
-                return (
-                  <img
-                    src={avatarSrc}
-                    alt={profile?.username || 'Kullanıcı'}
-                    className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-105"
-                    onClick={() => setZoomImage(avatarSrc)}
-                    onError={(e) => {
-                      // Fallback: placeholder'a düş
-                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                    }}
-                  />
-                )
+          {/* ✅ Avatar - Güvenli fallback ile */}
+          <div 
+            className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 cursor-zoom-in transition-transform hover:scale-105"
+            onClick={() => {
+              // Avatar varsa zoom modal aç
+              const avatarSrc = profile?.avatar ? resolveImageUrl(profile.avatar) : null
+              if (avatarSrc) {
+                setZoomImage(avatarSrc)
               }
-              
-              // Avatar yoksa username'in ilk harfini göster
-              return (
-                <span className="text-3xl md:text-4xl text-gray-500 dark:text-gray-400">
-                  {profile?.username?.[0]?.toUpperCase() || '?'}
-                </span>
-              )
-            })()}
+            }}
+          >
+            <Avatar
+              src={profile?.avatar ? resolveImageUrl(profile.avatar) : null}
+              alt={profile?.username || 'Kullanıcı'}
+              className="w-full h-full"
+            />
           </div>
 
           {/* Profile Info */}
@@ -1152,11 +1151,19 @@ function ProfileContent() {
                   <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     {profile?.username || 'Kullanıcı'}
                     {profile?.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
-                    <UserBadge role={profile?.role} />
-                    <ProRoleBadge roles={profile?.roles} plan={null} />
+                    {/* ✅ Legacy badge component'leri kaldırıldı - sadece activeRole gösterilecek */}
                   </h1>
                 </div>
-                <UserBadges badges={profile?.badges} />
+                {/* ✅ Rol Badge - LED çerçeveli, username'in hemen altında */}
+                {profile?.activeRole && (
+                  <div className="group relative inline-block">
+                    <span className="role-badge-led">
+                      {profile.activeRole}
+                    </span>
+                    {/* 🔒 Rol değiştir linki kaldırıldı - Rol değişikliği artık sadece Admin Paneli üzerinden yapılacak */}
+                  </div>
+                )}
+                {/* ✅ Legacy UserBadges component'i kaldırıldı - sadece activeRole gösterilecek */}
               </div>
               {/* Sağ Buton Grubu - Profili Düzenle + İçerik Yükle */}
               {profile?.isOwnProfile && (
@@ -1319,24 +1326,14 @@ function ProfileContent() {
 
             {/* Bio */}
             <div>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">{profile?.fullName || profile?.username || 'Kullanıcı'}</p>
-              {/* ✅ Aktif Rol - Kullanıcı adının hemen altı, bio'nun üstü */}
-              {profile?.activeRole && (
-                <div className="group relative inline-block">
-                  <p className="mt-0.5 text-[12px] font-medium text-[#9CA3AF] dark:text-[#A1A1AA] opacity-80 tracking-[0.2px]">
-                    {profile.activeRole}
-                  </p>
-                  {/* ✅ Hover'da rol değiştir linki - sadece kendi profilinde */}
-                  {profile?.isOwnProfile && (
-                    <Link
-                      href="/select-role"
-                      className="absolute left-0 top-full mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[11px] text-[#ff7b00] dark:text-[#ff7b00] hover:underline whitespace-nowrap"
-                    >
-                      Rol değiştir
-                    </Link>
-                  )}
-                </div>
-              )}
+              {/* ✅ FullName ve Renk İmzası - Aynı satır, sağ tarafta renk kutuları */}
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">{profile?.fullName || profile?.username || 'Kullanıcı'}</p>
+                {/* 🎨 Renk İmzası - Sağ tarafta, minimal LED hissi - Sadece kullanıcı açmışsa göster */}
+                {username && username !== 'undefined' && username !== 'null' && profile?.showProfileColorSignature !== false && (
+                  <ProfileColorSignature username={username} />
+                )}
+              </div>
               {profile?.bio && <p className="mt-1 text-gray-900 dark:text-gray-100">{profile.bio}</p>}
             </div>
           </div>
@@ -1691,21 +1688,12 @@ function ProfileContent() {
                         router.push(`/profile/${follower.username}`)
                       }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {follower.avatar ? (
-                          <img
-                            src={resolveImageUrl(follower.avatar)}
-                            alt={follower.username}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                            }}
-                          />
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-300">
-                            {follower?.username?.[0]?.toUpperCase() || '?'}
-                          </span>
-                        )}
+                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                        <Avatar
+                          src={follower.avatar ? resolveImageUrl(follower.avatar) : null}
+                          alt={follower.username}
+                          className="w-full h-full"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follower.username}</p>
@@ -1819,21 +1807,12 @@ function ProfileContent() {
                         router.push(`/profile/${follow.username}`)
                       }}
                     >
-                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {follow.avatar ? (
-                          <img
-                            src={resolveImageUrl(follow.avatar)}
-                            alt={follow.username}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                            }}
-                          />
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-300">
-                            {follow?.username?.[0]?.toUpperCase() || '?'}
-                          </span>
-                        )}
+                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                        <Avatar
+                          src={follow.avatar ? resolveImageUrl(follow.avatar) : null}
+                          alt={follow.username}
+                          className="w-full h-full"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follow.username}</p>

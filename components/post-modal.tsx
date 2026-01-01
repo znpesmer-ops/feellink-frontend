@@ -1020,29 +1020,33 @@ export function PostModal({ postId, onClose, highlightCommentId }: PostModalProp
                 <MessageCircle size={24} className="text-gray-700 dark:text-gray-300" />
               </button>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
-              className="hover:text-brand-orange transition-colors"
-            >
-              <Bookmark
-                size={24}
-                className={`transition-all duration-300 ${
-                  post.isSaved
-                    ? 'fill-brand-orange text-brand-orange'
-                    : 'text-gray-700 dark:text-gray-300'
-                }`}
-              />
+            {/* ✅ Kaydet ve Koleksiyona Ekle - Yatay hizalı, yuvarlak ikon butonlar */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSave}
+                disabled={saveMutation.isPending}
+                className="relative w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-brand-orange/50 dark:hover:border-brand-orange/50 flex items-center justify-center transition-all duration-200 group"
+                title={post.isSaved ? "Kaydedildi" : "Kaydet"}
+              >
+                <Bookmark
+                  size={18}
+                  className={`transition-all duration-200 ${
+                    post.isSaved
+                      ? 'fill-brand-orange text-brand-orange'
+                      : 'text-gray-600 dark:text-gray-400 group-hover:text-brand-orange'
+                  }`}
+                />
+              </button>
               {canManageCollections && post?.type === 'artwork' && (
                 <button
                   onClick={() => setShowAddToCollectionModal(true)}
-                  className="hover:text-brand-orange transition-colors"
+                  className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-brand-orange/50 dark:hover:border-brand-orange/50 flex items-center justify-center transition-all duration-200 group"
                   title="Koleksiyona Ekle"
                 >
-                  <FolderPlus size={24} className="text-gray-700 dark:text-gray-300" />
+                  <FolderPlus size={18} className="text-gray-600 dark:text-gray-400 group-hover:text-brand-orange transition-colors duration-200" />
                 </button>
               )}
-            </button>
+            </div>
           </div>
 
 

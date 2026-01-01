@@ -261,15 +261,13 @@ function NotificationsContent() {
     return page.notifications || page
   }) || []
 
+  // 🔥 KRİTİK: profile_incomplete bildirimini bul (en üstte sabit gösterilecek)
+  const profileIncompleteNotification = notifications.find((n: any) => n.type === 'profile_incomplete')
+
   // Filter notifications (profile_incomplete bildirimini normal listeden çıkar - en üstte sabit gösterilecek)
   const filteredNotifications = notifications.filter((n: any) => {
-    // 🔥 KRİTİK: profile_incomplete bildirimini normal listeden çıkar (en üstte gösterilecek)
-    // Ayrıca profil tamamlandıysa (profileCompleted: true) veya isRead: true ise hiç gösterme
+    // profile_incomplete bildirimini normal listeden çıkar (en üstte gösterilecek)
     if (n.type === 'profile_incomplete') {
-      // Profil tamamlandıysa bu bildirimi hiç gösterme
-      if (user?.profileCompleted === true) return false
-      // isRead: true ise de gösterme (zaten kapatılmış)
-      if (n.isRead === true) return false
       return false // Normal listeden çıkar, en üstte gösterilecek
     }
     
@@ -445,7 +443,7 @@ function NotificationsContent() {
       case 'job_application_status_changed':
         return notification.message || 'başvuru durumu güncellendi'
       case 'profile_incomplete':
-        return notification.message || 'Feellink\'i tam kullanabilmek için bazı bilgilerin eksik.'
+        return notification.message || 'Profil bilgilerini tamamladığında Feellink deneyimin çok daha güçlü hale gelir.'
       default:
         return notification.message || 'yeni bildirim gönderdi'
     }
@@ -506,8 +504,8 @@ function NotificationsContent() {
       </div>
 
       {/* Profil Eksikliği Bildirimi (En Üstte, Sabit) */}
-      {/* 🔥 KRİTİK: Sadece profileCompleted false ise göster (tek otorite) */}
-      {user && user.profileCompleted === false && (
+      {/* 🔥 KRİTİK: Backend'den gelen profile_incomplete bildirimi varsa göster */}
+      {profileIncompleteNotification && (
         <div className="mb-6 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
@@ -515,16 +513,16 @@ function NotificationsContent() {
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-semibold text-orange-900 dark:text-orange-200 mb-1">
-                🔔 Profilini Tamamla
+                Profilini tamamla
               </h3>
               <p className="text-sm text-orange-800 dark:text-orange-300 mb-3">
-                Feellink'i tam kullanabilmek için bazı zorunlu bilgiler eksik.
+                {profileIncompleteNotification.message || 'Profil bilgilerini tamamladığında Feellink deneyimin çok daha güçlü hale gelir.'}
               </p>
               <button
-                onClick={() => router.push('/profile/edit?required=true')}
+                onClick={() => router.push(profileIncompleteNotification.targetPath || profileIncompleteNotification.targetUrl || '/settings')}
                 className="px-4 py-2 text-sm font-medium bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
               >
-                🧡 Profili Düzenle
+                Profili Düzenle
               </button>
             </div>
           </div>
@@ -551,8 +549,14 @@ function NotificationsContent() {
                         await markAsRead(notification.id)
                       }
                       
-                      // 🔥 KRİTİK: Yönlendirme - öncelik sırası: targetPath > targetUrl > type-based fallback
-                      // 1) Eğer bildirimde targetPath varsa → direkt oraya git (EN ÖNCELİKLİ)
+                      // 🔥 KRİTİK: Yönlendirme - öncelik sırası: rol bildirimleri > type-specific > targetPath > targetUrl > type-based fallback
+                      // 0) Rol değişikliği bildirimleri → /settings (EN ÖNCELİKLİ - targetPath'den önce kontrol edilmeli)
+                      if (notification.type === 'ROLE_CHANGE_APPROVED' || notification.type === 'ROLE_CHANGE_REJECTED') {
+                        router.push('/settings')
+                        return
+                      }
+                      
+                      // 1) Eğer bildirimde targetPath varsa → direkt oraya git (rol bildirimlerinden sonra)
                       if (notification.targetPath) {
                         router.push(notification.targetPath)
                         return
@@ -564,9 +568,8 @@ function NotificationsContent() {
                         return
                       }
                       
-                      // 3) Fallback - job application bildirimleri için
+                      // 3) Type-specific bildirimler
                       if (notification.type === 'job_application_received') {
-                        // targetPath yoksa fallback: public sayfasına git (404 vermez)
                         router.push('/fellink/public')
                         return
                       }
@@ -593,8 +596,9 @@ function NotificationsContent() {
                         return
                       }
                       
-                      // 5) En kötü fallback (404 asla vermez)
-                      router.push('/fellink/public')
+                      // 5) Fallback - rol bildirimleri buraya düşmemeli (yukarıda yakalandı)
+                      // Eğer hiçbir yönlendirme yoksa, hiçbir şey yapma (sayfa değişmez)
+                      // router.push('/fellink/public') // ❌ KALDIRILDI - rol bildirimleri buraya düşmemeli
                     }}
                   >
                     <div className="flex items-start gap-3">
@@ -648,7 +652,7 @@ function NotificationsContent() {
                             // Sistem bildirimi - sender yok
                             <>
                               <span className="font-semibold text-orange-500 dark:text-orange-400">
-                                Profilini Tamamla
+                                Profilini tamamla
                               </span>
                               <span>{getNotificationText(notification)}</span>
                             </>
@@ -682,7 +686,7 @@ function NotificationsContent() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              router.push('/profile/edit?required=true')
+                              router.push('/settings')
                             }}
                             className="mt-2 px-4 py-1.5 text-xs font-medium bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
                           >

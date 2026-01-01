@@ -1,6 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { useAuthStore } from './store'
+// 🔥 Lazy import - circular dependency'yi önlemek için
+// import { useAuthStore } from './store'
 import { CapabilitySummary, SidebarVisibility } from '@/types/capabilities'
+import { safeAvatar } from './avatar-constants'
 
 let isRefreshing = false
 let failedQueue: Array<{
@@ -55,69 +57,128 @@ const getBaseURL = (): string => {
   return 'http://localhost:3002'
 }
 
-const baseURL = getBaseURL()
+// 🔥 Lazy evaluation - sadece gerektiğinde baseURL'i hesapla
+let cachedBaseURL: string | null = null
 
-if (!baseURL) {
-  console.error('NEXT_PUBLIC_API_URL tanımlı değil!')
+const getCachedBaseURL = (): string => {
+  if (cachedBaseURL === null) {
+    cachedBaseURL = getBaseURL()
+    if (!cachedBaseURL) {
+      // 🔥 Server-side'da console.error kullanma
+      if (typeof window !== 'undefined') {
+        console.error('NEXT_PUBLIC_API_URL tanımlı değil!')
+      }
+      cachedBaseURL = 'http://localhost:3002' // Fallback
+    }
+    
+    // Debug logging (sadece client-side)
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.info('[api] ✅ base URL (client):', cachedBaseURL, '← Bu URL kullanılıyor!')
+      try {
+        const savedURL = localStorage.getItem('backend_url')
+        if (savedURL && savedURL !== cachedBaseURL) {
+          console.warn('[api] ⚠️ localStorage backend_url:', savedURL, '(kullanılmıyor, baseURL kullanılıyor)')
+        }
+      } catch (err) {
+        // localStorage erişilemezse sessizce devam et
+      }
+    }
+  }
+  return cachedBaseURL
 }
 
 // getApiBaseURL fonksiyonunu export et (socket.ts ve diğer dosyalar için)
 export const getApiBaseURL = (): string => {
-  return baseURL
+  return getCachedBaseURL()
 }
 
-if (typeof window === 'undefined') {
-  console.info('[api] base URL:', baseURL)
-} else {
-  console.info('[api] ✅ base URL (client):', baseURL, '← Bu URL kullanılıyor!')
-  // Debug: localStorage'daki backend URL'ini de göster
-  const savedURL = localStorage.getItem('backend_url')
-  if (savedURL && savedURL !== baseURL) {
-    console.warn('[api] ⚠️ localStorage backend_url:', savedURL, '(kullanılmıyor, baseURL kullanılıyor)')
+// 🔥 Lazy axios instance - sadece gerektiğinde oluştur
+let apiInstance: ReturnType<typeof axios.create> | null = null
+
+const getApiInstance = () => {
+  if (!apiInstance) {
+    apiInstance = axios.create({
+      baseURL: getCachedBaseURL(),
+      withCredentials: true,
+      timeout: 60000, // 60 saniye timeout (MongoDB bağlantı sorunları için)
+      // 🔥 Network error'ları önlemek için retry mekanizması
+      validateStatus: (status) => {
+        // 2xx ve 3xx status kodlarını başarılı kabul et
+        return status >= 200 && status < 400
+      },
+    })
   }
+  return apiInstance
 }
 
-const api = axios.create({
-  baseURL,
-  withCredentials: true,
-  timeout: 30000, // 30 saniye timeout (network error'ları azaltmak için artırıldı)
-  // 🔥 Network error'ları önlemek için retry mekanizması
-  validateStatus: (status) => {
-    // 2xx ve 3xx status kodlarını başarılı kabul et
-    return status >= 200 && status < 400
-  },
-})
-
-// Add token to requests
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  // Önce store'dan token al
-  const state = useAuthStore.getState()
-  let token = state.accessToken
+// ✅ Avatar URL'lerini normalize et
+function normalizeAvatarInData(data: any): any {
+  if (!data || typeof data !== 'object') return data
   
-  // Store'da yoksa localStorage'dan kontrol et (hydration sorunları için)
-  if (!token && typeof window !== 'undefined') {
-    token = localStorage.getItem('access_token')
+  if (Array.isArray(data)) {
+    return data.map(item => normalizeAvatarInData(item))
   }
   
-  // Token varsa header'a ekle
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-    // Debug: development modunda logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[API] ✅ Token gönderiliyor:', token.substring(0, 20) + '...')
-    }
-  } else {
-    // Debug: token yoksa uyarı ver
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[API] ⚠️ Token bulunamadı! Store:', !!state.accessToken, 'localStorage:', typeof window !== 'undefined' ? !!localStorage.getItem('access_token') : 'N/A')
+  const normalized: any = {}
+  for (const [key, value] of Object.entries(data)) {
+    // Avatar ile ilgili key'leri normalize et
+    if (key.toLowerCase().includes('avatar') || key.toLowerCase().includes('profileimage')) {
+      normalized[key] = safeAvatar(value as string)
+    } else if (typeof value === 'object' && value !== null) {
+      // Nested object'leri recursive normalize et
+      normalized[key] = normalizeAvatarInData(value)
+    } else {
+      normalized[key] = value
     }
   }
   
-  return config
-})
+  return normalized
+}
 
-// Handle empty responses and JSON parse errors
-api.interceptors.response.use(
+// 🔥 Interceptor'ları lazy olarak ekle
+let interceptorsInitialized = false
+
+const initializeInterceptors = () => {
+  if (interceptorsInitialized) return
+  interceptorsInitialized = true
+  
+  const instance = getApiInstance()
+  
+  // Add token to requests
+  instance.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+    // 🔥 Lazy import - circular dependency'yi önlemek için
+    const { useAuthStore } = await import('./store')
+    // Önce store'dan token al
+    const state = useAuthStore.getState()
+    let token = state.accessToken
+    
+    // Store'da yoksa localStorage'dan kontrol et (hydration sorunları için)
+    if (!token && typeof window !== 'undefined') {
+      try {
+        token = localStorage.getItem('access_token')
+      } catch (err) {
+        // localStorage erişilemezse sessizce devam et
+      }
+    }
+    
+    // Token varsa header'a ekle
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+      // Debug: development modunda logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[API] ✅ Token gönderiliyor:', token.substring(0, 20) + '...')
+      }
+    } else {
+      // 🔥 GEÇİCİ: Login sırasında token doğal olarak yoktur, uyarı verme
+      // Token yoksa sadece devam et (auth guard değil, sadece log)
+      // Login sırasında bu normal bir durum
+    }
+    
+    return config
+  })
+  
+  // Handle empty responses and JSON parse errors
+  instance.interceptors.response.use(
   (response) => {
     // Boş response'ları güvenli bir şekilde handle et
     // Axios bazen boş string veya null döndürebilir
@@ -128,48 +189,35 @@ api.interceptors.response.use(
       } else {
         response.data = {}
       }
+    } else if (response.data && typeof response.data === 'object') {
+      // ✅ Backend'den gelen tüm avatar URL'lerini normalize et
+      response.data = normalizeAvatarInData(response.data)
     }
     return response
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
-    // Network/Connection errors - daha anlaşılır hata mesajı ver
+    // 🔥 4. Network/Connection errors - DB kopunca localhost çökmesin
     if (!error.response) {
       // Network hatası (bağlantı yok, timeout, vs.)
-      // DETAYLI LOG - kullanıcının istediği bilgi
-      console.error('[API] ❌ Network Error:', {
-        message: error.message,
-        code: error.code,
-        status: 'NO_RESPONSE',
-        url: error.config?.url,
-        baseURL: error.config?.baseURL || baseURL,
-        method: error.config?.method?.toUpperCase(),
-        hasToken: !!error.config?.headers?.Authorization,
-        tokenPreview: typeof error.config?.headers?.Authorization === 'string' 
-          ? error.config.headers.Authorization.substring(0, 20) + '...' 
-          : 'NO_TOKEN',
-      })
-      
-      // 🔥 Backend bağlantısını kontrol et
-      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.warn('[API] ⚠️ Backend bağlantı kontrolü:', {
-          baseURL: baseURL,
-          expectedBackend: 'http://localhost:3002',
-          suggestion: 'Backend çalışıyor mu kontrol edin: curl http://localhost:3002/health',
+      // Sadece development'ta detaylı log
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[API] ❌ Network Error:', {
+          message: error.message,
+          code: error.code,
+          status: 'NO_RESPONSE',
+          url: error.config?.url,
+          baseURL: error.config?.baseURL || getCachedBaseURL(),
         })
       }
-
-      // Network error'ları handle et - kullanıcı dostu mesaj
+      
+      // 🔥 DB kopunca localhost çökmesin - kullanıcı dostu mesaj
       const networkError: AxiosError = {
         ...error,
         response: {
           data: {
-            message: error.code === 'ECONNABORTED' || error.message?.includes('timeout')
-              ? 'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
-              : error.code === 'ERR_NETWORK' || error.message === 'Network Error' || error.message?.includes('Network')
-              ? 'Backend bağlantısı kurulamadı. Lütfen backend\'in çalıştığından emin olun ve tekrar deneyin.'
-              : 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.',
+            message: 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.',
           },
           status: 0,
           statusText: 'Network Error',
@@ -180,6 +228,28 @@ api.interceptors.response.use(
         toJSON: () => ({}),
       }
       return Promise.reject(networkError)
+    }
+
+    // 🔒 Hesap askıya alma kontrolü (403 ACCOUNT_SUSPENDED)
+    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_SUSPENDED') {
+      const suspensionData = error.response.data
+      // Global event dispatch (modal component dinleyecek)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('account-suspended', {
+            detail: {
+              reason: suspensionData.reason || 'Belirtilmemiş',
+              until: suspensionData.until || null,
+            },
+          })
+        )
+      }
+      // Hata mesajını özel olarak işle
+      return Promise.reject({
+        ...error,
+        isSuspended: true,
+        suspensionData,
+      })
     }
 
     // If error is 401 and we haven't tried to refresh yet
@@ -193,7 +263,7 @@ api.interceptors.response.use(
             if (originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${token}`
             }
-            return api(originalRequest)
+            return getApiInstance()(originalRequest)
           })
           .catch((err) => {
             return Promise.reject(err)
@@ -203,6 +273,8 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
+      // 🔥 Lazy import - circular dependency'yi önlemek için
+      const { useAuthStore } = await import('./store')
       const state = useAuthStore.getState()
       const refreshToken = state.refreshToken
 
@@ -215,7 +287,7 @@ api.interceptors.response.use(
 
       try {
         // api instance'ını kullan (baseURL zaten ayarlı)
-        const response = await api.post(
+        const response = await getApiInstance().post(
           '/auth/refresh',
           { refreshToken }
         )
@@ -229,6 +301,7 @@ api.interceptors.response.use(
         }
 
         // Update tokens and user in store
+        // useAuthStore zaten yukarıda import edildi
         useAuthStore.getState().setAuth(user, accessToken, newRefreshToken, capabilities ?? null, sidebar ?? null)
 
         // Update authorization header
@@ -238,10 +311,11 @@ api.interceptors.response.use(
 
         processQueue(null, accessToken)
 
-        return api(originalRequest)
+        return getApiInstance()(originalRequest)
       } catch (refreshError) {
         // Refresh failed, logout
         processQueue(refreshError, null)
+        // useAuthStore zaten yukarıda import edildi
         useAuthStore.getState().clearAuth()
         window.location.href = '/login'
         return Promise.reject(refreshError)
@@ -262,8 +336,64 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error)
+  })
+}
+
+// Export api - lazy evaluation ile Proxy kullan
+// 🔥 Client-side only - server-side'da kullanılmamalı
+// Server-side'da dummy object, client-side'da gerçek API
+let apiProxy: ReturnType<typeof axios.create> | null = null
+
+const getApiProxy = () => {
+  // 🔥 Server-side'da dummy object döndür (sadece import hatası önlemek için)
+  if (typeof window === 'undefined') {
+    return {
+      get: () => Promise.reject(new Error('API cannot be used on server-side')),
+      post: () => Promise.reject(new Error('API cannot be used on server-side')),
+      put: () => Promise.reject(new Error('API cannot be used on server-side')),
+      patch: () => Promise.reject(new Error('API cannot be used on server-side')),
+      delete: () => Promise.reject(new Error('API cannot be used on server-side')),
+      defaults: { baseURL: '' },
+    } as any
   }
-)
+  
+  if (!apiProxy) {
+    // Client-side'da gerçek Proxy
+    apiProxy = new Proxy({} as ReturnType<typeof axios.create>, {
+      get(target, prop) {
+        // İlk kullanımda interceptor'ları initialize et
+        initializeInterceptors()
+        const instance = getApiInstance()
+        const value = instance[prop as keyof typeof instance]
+        
+        // Function ise bind et
+        if (typeof value === 'function') {
+          return value.bind(instance)
+        }
+        
+        return value
+      }
+    }) as any
+  }
+  
+  return apiProxy
+}
+
+// Export api - lazy evaluation ile Proxy (sadece client-side'da çalışır)
+const api = typeof window !== 'undefined' 
+  ? new Proxy({} as ReturnType<typeof axios.create>, {
+      get(target, prop) {
+        return getApiProxy()[prop as keyof ReturnType<typeof axios.create>]
+      }
+    })
+  : ({
+      get: () => Promise.reject(new Error('API cannot be used on server-side')),
+      post: () => Promise.reject(new Error('API cannot be used on server-side')),
+      put: () => Promise.reject(new Error('API cannot be used on server-side')),
+      patch: () => Promise.reject(new Error('API cannot be used on server-side')),
+      delete: () => Promise.reject(new Error('API cannot be used on server-side')),
+      defaults: { baseURL: '' },
+    } as any)
 
 // Utility function to extract user-friendly error messages
 export const getErrorMessage = (error: any, options?: { isLogin?: boolean }): string => {
@@ -279,8 +409,27 @@ export const getErrorMessage = (error: any, options?: { isLogin?: boolean }): st
   }
 
   // 🔒 GÜVENLİK: Login hataları için tek bir güvenli mesaj (user enumeration önleme)
-  if (options?.isLogin && (error.response?.status === 401 || error.response?.status === 403)) {
-    return 'E-posta adresi veya şifre hatalı.'
+  // ⚠️ AMA: Askıya alınmış hesap hatası (403 + ACCOUNT_SUSPENDED) özel olarak handle edilmeli
+  if (options?.isLogin) {
+    // Askıya alınmış hesap hatası - özel mesaj göster (frontend'de zaten handle ediliyor)
+    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_SUSPENDED') {
+      // Bu durumda frontend'de özel mesaj gösterilecek, buraya gelmemeli
+      // Ama yine de fallback mesaj ver
+      return error.response?.data?.message || 'Hesabınız askıya alınmıştır.'
+    }
+    
+    // ✅ Veritabanı bağlantı hatası - özel mesaj göster
+    const responseMessage = error.response?.data?.message || '';
+    if (responseMessage.includes('Veritabanı bağlantı hatası') || 
+        responseMessage.includes('Veritabanı') || 
+        responseMessage.includes('bağlantı hatası')) {
+      return 'Veritabanı bağlantı hatası. Lütfen tekrar deneyin.';
+    }
+    
+    // Diğer 401/403 hataları için güvenli mesaj
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      return 'E-posta adresi veya şifre hatalı.'
+    }
   }
 
   // Backend error responses

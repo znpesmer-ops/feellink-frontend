@@ -7,8 +7,12 @@ import { useAuthStore } from '@/lib/store'
 import { useNotificationStore } from '@/lib/store-notifications'
 import { ThemeProvider } from '@/lib/theme-context'
 import { initSocket, disconnectSocket } from '@/lib/socket'
-import api from '@/lib/api'
+// 🔥 Lazy import - server-side render sorunlarını önlemek için
+// import api from '@/lib/api'
 import { LayoutConditional } from '@/components/layout-conditional'
+import { AccountSuspendedModal } from '@/components/AccountSuspendedModal'
+// 🔥 Lazy import - server-side render sorunlarını önlemek için
+// import '@/lib/avatar-cleanup' // ✅ Avatar cleanup'ı otomatik çalıştır
 
 // Global error handler for unhandled promise rejections
 if (typeof window !== 'undefined') {
@@ -49,7 +53,12 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
 
     // İlk yüklemede okunmamış bildirim sayısını al
     const loadUnreadCount = async () => {
+      // 🔥 Client-side kontrolü
+      if (typeof window === 'undefined') return
+      
       try {
+        // 🔥 Lazy import - server-side render sorunlarını önlemek için
+        const { default: api } = await import('@/lib/api')
         const response = await api.get('/notifications/unread-count')
         setUnreadCount(response.data.count || 0)
       } catch (error: any) {
@@ -73,6 +82,12 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // 🔥 Avatar cleanup'ı client-side'da çalıştır
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('@/lib/avatar-cleanup').catch(() => {})
+    }
+  }, [])
   // QueryClient'i en üstte oluştur - her zaman hazır olmalı
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -103,6 +118,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthInitializer>
           <LayoutConditional>{children}</LayoutConditional>
         </AuthInitializer>
+        <AccountSuspendedModal />
         <Toaster
           position="top-center"
           toastOptions={{

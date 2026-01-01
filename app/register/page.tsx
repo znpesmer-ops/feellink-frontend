@@ -30,6 +30,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [isChecking, setIsChecking] = useState(true)
   const [mode, setMode] = useState<'user' | 'corporate'>('user')
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [showTerms, setShowTerms] = useState(false) // ✅ Sözleşme alanını göster/gizle
 
   // Register sayfasında olduğumuz için, sayfa yüklendiğinde eski auth state'i temizle
   // Ama sadece eğer zaten giriş yapılmamışsa
@@ -78,6 +80,7 @@ export default function RegisterPage() {
         username: data.username.trim(),
         password: data.password,
         ...(data.fullName && data.fullName.trim() ? { fullName: data.fullName.trim() } : {}),
+        termsAccepted: true, // Kullanıcı sözleşmesi onayı
       }
       
       // Debug: Gönderilen datayı logla
@@ -227,11 +230,125 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          {/* ✅ Kullanıcı Sözleşmesi Checkbox ve Inline Sözleşme */}
+          <div className="space-y-3">
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                id="termsAccepted"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-1 h-4 w-4 text-[#ff7b00] focus:ring-[#ff7b00] border-gray-300 dark:border-gray-600 rounded"
+              />
+              <label htmlFor="termsAccepted" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                <button
+                  type="button"
+                  onClick={() => setShowTerms(!showTerms)}
+                  className="text-[#ff7b00] hover:text-[#e36f00] underline"
+                >
+                  Kullanıcı Sözleşmesini
+                </button>
+                {' '}okudum ve kabul ediyorum.
+              </label>
+            </div>
+
+            {/* ✅ Inline Sözleşme Alanı */}
+            {showTerms && (
+              <div
+                className="rounded-lg border p-4 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                style={{ maxHeight: '280px', overflowY: 'auto' }}
+              >
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <h3 className="font-semibold mb-2 text-gray-900 dark:text-gray-200">
+                      FEELLINK KULLANICI SÖZLEŞMESİ
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Son güncelleme tarihi: 28 Aralık 2025
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Taraflar ve Kapsam
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Bu Kullanıcı Sözleşmesi ("Sözleşme"), Feellink platformunu kullanan gerçek kişiler ("Kullanıcı") ile Feellink arasında, platformun kullanım şartlarını belirlemek amacıyla düzenlenmiştir. Feellink'e kayıt olan her kullanıcı, bu sözleşmeyi okuduğunu, anladığını ve kabul ettiğini beyan eder.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Hizmet Tanımı
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Feellink; sanat eserlerinin paylaşılabildiği, koleksiyonların oluşturulabildiği, ilan ve etkinliklerin yayınlanabildiği, kullanıcılar arasında etkileşim kurulmasını sağlayan dijital bir sanat ve kültür platformudur.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Kullanıcı Yükümlülükleri
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Kullanıcılar: Platformu hukuka ve dürüstlük kurallarına uygun şekilde kullanmayı, kendilerine ait olmayan içerikleri izinsiz paylaşmamayı, diğer kullanıcıların haklarını ihlal etmemeyi, platformun işleyişini bozacak davranışlardan kaçınmayı kabul eder.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Hesap Güvenliği
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Feellink, kullanıcı hesaplarının güvenliği için gerekli teknik ve idari önlemleri alır. Kullanıcılar ise hesap bilgilerini gizli tutmakla yükümlüdür. Kullanıcının kendi ihmali sonucu üçüncü kişilerin hesaba erişim sağlamasından doğabilecek zararlardan Feellink sorumlu tutulamaz.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      İçerikler ve Paylaşımlar
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Kullanıcılar tarafından paylaşılan içeriklerin hukuki sorumluluğu ilgili kullanıcıya aittir. Feellink, hukuka aykırı veya platform kurallarına uygun olmayan içerikleri kaldırma veya erişimini sınırlandırma hakkını saklı tutar.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Hizmette Değişiklikler
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Feellink, platformun işleyişini geliştirmek amacıyla teknik ve içeriksel değişiklikler yapabilir. Bu değişiklikler kullanıcı deneyimini iyileştirmeye yöneliktir.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-1 text-gray-800 dark:text-gray-300">
+                      Yürürlük
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Bu sözleşme, kullanıcının kayıt sırasında onay vermesiyle yürürlüğe girer.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 p-3 rounded bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                    <p className="text-xs font-medium text-orange-900 dark:text-orange-200">
+                      Onay Metni:
+                    </p>
+                    <p className="text-xs mt-1 text-orange-800 dark:text-orange-300">
+                      "Feellink Kullanıcı Sözleşmesini okudum, anladım ve kabul ediyorum."
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#ff7b00] hover:bg-[#e36f00] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ff7b00] disabled:opacity-50"
+              disabled={isSubmitting || !termsAccepted}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-[#ff7b00] hover:bg-[#e36f00] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ff7b00] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Creating account...' : mode === 'corporate' ? 'Kurumsal Kayıt Oluştur' : 'Kayıt Ol'}
             </button>

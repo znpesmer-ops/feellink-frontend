@@ -3,6 +3,8 @@ import {
   RoleFeatureFlags,
   UserRoleCode,
 } from '@/types/capabilities'
+import { Building2, Layers, Brush, Heart } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 export type PrimaryRole = 'admin' | UserRoleCode
 
@@ -16,28 +18,38 @@ const ROLE_ROUTES: Record<PrimaryRole, string> = {
   art_lover: '/feed',
 }
 
-export const ROLE_METADATA: Record<UserRoleCode, { label: string; emoji: string; color: string; badgeEmoji: string }> = {
+export const ROLE_METADATA: Record<UserRoleCode, { 
+  label: string; 
+  emoji: string; // Backward compatibility için korunuyor
+  icon: LucideIcon; // ✅ Yeni: Monokrom ikon
+  color: string; 
+  badgeEmoji: string 
+}> = {
   art_lover: {
     label: 'Sanat Sever',
     emoji: '🎨',
+    icon: Heart,
     color: '#ff7b00',
     badgeEmoji: '🟠',
   },
   corporate: {
     label: 'Kurumsal',
     emoji: '🏢',
+    icon: Building2,
     color: '#2563eb',
     badgeEmoji: '🟧',
   },
   collector: {
     label: 'Koleksiyoner',
     emoji: '🗝️',
+    icon: Layers,
     color: '#7c3aed',
     badgeEmoji: '🟣',
   },
   artist: {
     label: 'Sanatçı',
     emoji: '🖌️',
+    icon: Brush,
     color: '#ec4899',
     badgeEmoji: '🟡',
   },

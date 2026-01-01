@@ -949,3 +949,30 @@ button[class*="bg-brand-orange"]:not([disabled]):active {
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* ✅ Rol Badge - LED çerçeveli, minimal, glow efekti */
+.role-badge-led {
+  display: inline-block;
+  margin-top: 6px;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  color: #ff9f43; /* Feelink orange */
+  background: transparent;
+  border: 1px solid rgba(255, 159, 67, 0.6);
+  border-radius: 999px;
+  box-shadow:
+    0 0 6px rgba(255, 159, 67, 0.35),
+    inset 0 0 4px rgba(255, 159, 67, 0.25);
+  text-transform: capitalize;
+}
+
+.dark .role-badge-led {
+  color: #ff9f43;
+  border-color: rgba(255, 159, 67, 0.6);
+  box-shadow:
+    0 0 8px rgba(255, 159, 67, 0.4),
+    inset 0 0 6px rgba(255, 159, 67, 0.2);
+}
+

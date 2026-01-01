@@ -150,7 +150,7 @@ const ROLE_CONFIG: RoleConfig[] = [
     icon: Brush,
     plans: {
       free: ['Ayda 5 etkinlik/ilan', 'Temel analizler', 'Topluluk etkileşimi'],
-      pro: ['Sınırsız sergi & etkinlik', 'İlan açma ve bilet yönetimi', 'Pro panel erişimi'],
+      pro: ['Sınırsız sergi & etkinlik', 'İlan açma', 'Pro panel erişimi'],
     },
     highlights: {
       free: 'Kitlenle tanışmaya başla.',
@@ -188,9 +188,9 @@ const EXTRA_PACKAGES: Record<string, ExtraPackage> = {
   artist: {
     id: 'artist',
     label: 'Sanatçı Paketini Ekleyin',
-    cta: 'Etkinlik oluşturma, ilan açma ve bilet yönetimini etkinleştirir.',
-    summary: 'Etkinlik Oluşturma, Bilet Oluşturma, İlan Açma',
-    features: ['Etkinlik Oluşturma', 'Bilet Oluşturma', 'İlan Açma'],
+    cta: 'Etkinlik oluşturma ve ilan açma özelliklerini etkinleştirir.',
+    summary: 'Etkinlik Oluşturma, İlan Açma',
+    features: ['Etkinlik Oluşturma', 'İlan Açma'],
   },
 }
 
@@ -201,14 +201,14 @@ const EXTRA_PACKAGE_PRICING: Record<string, number> = {
 
 const ROLE_MODULES: Record<string, string[]> = {
   art_lover: ['Keşfet', 'Topluluk Etkileşimi', 'Öneriler'],
-  corporate: ['Etkinlik Oluştur', 'Etkinliklerim', 'Analizler', 'Bilet Yönetimi'],
+  corporate: ['Etkinlik Oluştur', 'Etkinliklerim', 'Analizler'],
   collector: ['Koleksiyonlarım', 'Koleksiyon Yönetimi', 'Portföy', 'Analizler'],
-  artist: ['Etkinlik Oluştur', 'Bilet Oluştur', 'İlan Aç', 'Analizler'],
+  artist: ['Etkinlik Oluştur', 'İlan Aç', 'Analizler'],
 }
 
 const COMBO_FEATURES: Record<string, string[]> = {
   'artist+collector': ['Koleksiyon Yönetimi', 'Portföy', 'Analizler'],
-  'collector+artist': ['Etkinlik Oluştur', 'Bilet Oluştur', 'İlan Aç'],
+  'collector+artist': ['Etkinlik Oluştur', 'İlan Aç'],
 }
 
 export default function SelectRolePage() {
@@ -295,7 +295,8 @@ export default function SelectRolePage() {
         setCapabilities(capabilities, sidebar ?? null)
       }
 
-      router.push('/dashboard')
+      // 🎯 Rol seçildikten sonra ana sayfaya yönlendir (onboarding akışı tamamlandı)
+      router.push('/feed')
     } catch (error) {
       console.error('[SelectRole] Rol güncellemesi başarısız:', error)
       setMutationError('Rol seçiminiz kaydedilemedi. Lütfen tekrar deneyin.')
@@ -304,7 +305,9 @@ export default function SelectRolePage() {
     }
   }
 
-  const hasExtraPackages = Boolean(activeRole?.allowedExtras?.length)
+  // 🎯 Ek Paket UI bileşenleri izole edildi (görünmez, kod korunuyor)
+  // const hasExtraPackages = Boolean(activeRole?.allowedExtras?.length)
+  const hasExtraPackages = false // UI seviyesinde gizlendi, geri alınabilir
   const gridColsClass = hasExtraPackages ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
 
   return (

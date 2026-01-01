@@ -880,10 +880,48 @@ export default function MessagesPage() {
         // Yeni listede olan conversation'lar + korunan conversation'lar (silinenler hariç)
         const merged = [...filteredLoaded, ...filteredKept]
         
-        // Duplicate'leri kaldır
-        const unique = merged.filter((conv, index, self) => 
+        // ✅ KRİTİK: ID bazlı duplicate'leri kaldır
+        const uniqueById = merged.filter((conv, index, self) => 
           index === self.findIndex((c) => c.id === conv.id)
         )
+        
+        // ✅ KRİTİK: Participant bazlı duplicate'leri kaldır (aynı kullanıcıyla birden fazla conversation varsa, en güncel olanı tut)
+        // Her conversation için diğer participant'ı bul
+        const participantMap = new Map<string, Conversation>()
+        
+        uniqueById.forEach((conv) => {
+          const otherParticipant = getOtherParticipant(conv)
+          if (otherParticipant?.user?.id) {
+            const otherUserId = otherParticipant.user.id
+            const existing = participantMap.get(otherUserId)
+            
+            if (!existing) {
+              // İlk conversation, direkt ekle
+              participantMap.set(otherUserId, conv)
+            } else {
+              // Aynı kullanıcıyla başka bir conversation var, en güncel olanı tut
+              const existingTime = new Date(existing.updatedAt).getTime()
+              const currentTime = new Date(conv.updatedAt).getTime()
+              
+              if (currentTime > existingTime) {
+                // Mevcut conversation daha güncel, değiştir
+                participantMap.set(otherUserId, conv)
+                console.log(`🔄 [Frontend] Replaced duplicate conversation for user ${otherUserId}: ${existing.id} -> ${conv.id}`)
+              } else {
+                console.log(`⚠️ [Frontend] Skipped duplicate conversation for user ${otherUserId}: ${conv.id} (existing ${existing.id} is newer)`)
+              }
+            }
+          } else {
+            // Participant bulunamadı, direkt ekle (group conversation olabilir)
+            const uniqueKey = `no_participant_${conv.id}`
+            if (!participantMap.has(uniqueKey)) {
+              participantMap.set(uniqueKey, conv)
+            }
+          }
+        })
+        
+        // Map'ten conversation'ları çıkar
+        const unique = Array.from(participantMap.values())
         
         // updatedAt'e göre sırala (en yeni en üstte)
         unique.sort((a, b) => {
@@ -891,6 +929,8 @@ export default function MessagesPage() {
           const bTime = new Date(b.updatedAt).getTime()
           return bTime - aTime
         })
+        
+        console.log(`✅ [Frontend] Filtered duplicates: ${uniqueById.length} -> ${unique.length} conversations`)
         
         // ✅ KRİTİK: React Query cache'i güncelle (silinen conversation'lar filtrelenmiş olarak)
         queryClient.setQueryData(['conversations', accessToken], unique)
@@ -1816,8 +1856,16 @@ export default function MessagesPage() {
 
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
   }
+
+  // ✅ Mesajlar değiştiğinde otomatik olarak en alta scroll (kronolojik sıralama için)
+  // Mesajlar zaten doğru sırada (eski → yeni), sadece scroll'u en alta odaklıyoruz
+  useEffect(() => {
+    if (messages.length > 0 && messagesEndRef.current) {
+      scrollToBottom()
+    }
+  }, [messages.length, conversationId])
 
   // Mesaj düzenleme
   const handleEditMessage = async (messageId: string, oldContent: string | null) => {
@@ -1928,6 +1976,19 @@ export default function MessagesPage() {
   }, [activeConversation?.id])
 
   const getLastMessage = (conversation: Conversation) => {
+    // ✅ KRİTİK: Önce conversation.lastMessage alanını kullan (backend'den geliyor)
+    // Eğer yoksa, messages array'inden al (fallback)
+    if (conversation.lastMessage) {
+      // Backend'den gelen lastMessage string'i var, ama UI için Message objesi formatında döndürmeliyiz
+      // Eğer messages array'inde son mesaj varsa onu kullan, yoksa lastMessage string'ini kullan
+      if (conversation.messages && conversation.messages.length > 0) {
+        return conversation.messages[0]
+      }
+      // lastMessage string'i var ama messages array'i yok, o zaman lastMessage'ı göster
+      // Ama UI'da Message objesi bekliyor, bu yüzden null döndürüp UI'da lastMessage string'ini kullanacağız
+      return null
+    }
+    // lastMessage yoksa, messages array'inden al (fallback)
     if (conversation.messages && conversation.messages.length > 0) {
       return conversation.messages[0]
     }
@@ -2094,7 +2155,12 @@ export default function MessagesPage() {
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2">
-                        {lastMessage ? (
+                        {/* ✅ KRİTİK: conversation.lastMessage alanını kullan (backend'den geliyor) */}
+                        {conversation.lastMessage ? (
+                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
+                            {conversation.lastMessage}
+                          </p>
+                        ) : lastMessage ? (
                           <p className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
                             {lastMessage.imageUrl ? (
                               <span className="flex items-center gap-1">
