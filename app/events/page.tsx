@@ -1,18 +1,17 @@
-"use client";
+import dynamic from "next/dynamic";
 
-import { Suspense } from "react";
-import EventsFeedClient from "./EventsFeedClient";
+const EventsFeedClient = dynamic(
+  () => import("./EventsFeedClient"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center min-h-screen">
+        Yükleniyor...
+      </div>
+    ),
+  }
+);
 
 export default function EventsPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          Yükleniyor...
-        </div>
-      }
-    >
-      <EventsFeedClient />
-    </Suspense>
-  );
+  return <EventsFeedClient />;
 }
