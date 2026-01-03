@@ -2,8 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { Suspense } from 'react'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { Calendar, Users } from 'lucide-react'
 
@@ -25,6 +24,10 @@ interface Event {
   }
 }
 
+/**
+ * ASIL İÇERİK – CLIENT COMPONENT
+ * Burada hook kullanmak serbest
+ */
 function AdminEventsContent() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,21 +35,23 @@ function AdminEventsContent() {
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true)
+        const response = await api.get(
+          `/admin/events?page=${page}&limit=20`
+        )
+        setEvents(response.data.events)
+        setTotal(response.data.total)
+      } catch (error) {
+        console.error('Error fetching events:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchEvents()
   }, [page])
-
-  const fetchEvents = async () => {
-    try {
-      setLoading(true)
-      const response = await api.get(`/admin/events?page=${page}&limit=20`)
-      setEvents(response.data.events)
-      setTotal(response.data.total)
-    } catch (error) {
-      console.error('Error fetching events:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -94,23 +99,21 @@ function AdminEventsContent() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-2">
-                {event.owner.avatar ? (
-                  <img
-                    src={event.owner.avatar}
-                    alt={event.owner.username}
-                    className="w-6 h-6 rounded-full"
-                  />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-[#ff7b00] flex items-center justify-center text-white text-xs font-semibold">
-                    {event.owner.username.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <span className="text-xs dark:text-gray-400 text-gray-600">
-                  {event.owner.username}
-                </span>
-              </div>
+            <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+              {event.owner.avatar ? (
+                <img
+                  src={event.owner.avatar}
+                  alt={event.owner.username}
+                  className="w-6 h-6 rounded-full"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-[#ff7b00] flex items-center justify-center text-white text-xs font-semibold">
+                  {event.owner.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-xs dark:text-gray-400 text-gray-600">
+                {event.owner.username}
+              </span>
             </div>
           </div>
         ))}
@@ -126,7 +129,7 @@ function AdminEventsContent() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-[#0d0d0d] bg-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition-colors"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0d0d0d] text-sm disabled:opacity-50"
           >
             Önceki
           </button>
@@ -134,7 +137,7 @@ function AdminEventsContent() {
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * 20 >= total}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-[#0d0d0d] bg-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition-colors"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0d0d0d] text-sm disabled:opacity-50"
           >
             Sonraki
           </button>
@@ -144,7 +147,11 @@ function AdminEventsContent() {
   )
 }
 
-export default function AdminEvents() {
+/**
+ * PAGE – SADECE SUSPENSE SARMALAYICI
+ * Build hatası burada çözülür
+ */
+export default function AdminEventsPage() {
   return (
     <Suspense fallback={<div>Yükleniyor...</div>}>
       <AdminEventsContent />
