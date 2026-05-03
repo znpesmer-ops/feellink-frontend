@@ -40,11 +40,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // 🔥 GEÇİCİ OLARAK DEVRE DIŞI - localStorage kullanıyoruz, cookie değil
-  // İleride HTTP-only cookie'ye geçildiğinde bu aktif edilecek
   matcher: [
-    // Sadece login ve register sayfaları için çalışsın (token varsa redirect)
-    '/login',
-    '/register',
+    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
   ],
 }

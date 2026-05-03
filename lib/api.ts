@@ -150,28 +150,10 @@ const initializeInterceptors = () => {
     const { useAuthStore } = await import('./store')
     // Önce store'dan token al
     const state = useAuthStore.getState()
-    let token = state.accessToken
-    
-    // Store'da yoksa localStorage'dan kontrol et (hydration sorunları için)
-    if (!token && typeof window !== 'undefined') {
-      try {
-        token = localStorage.getItem('access_token')
-      } catch (err) {
-        // localStorage erişilemezse sessizce devam et
-      }
-    }
-    
-    // Token varsa header'a ekle
+    const token = state.accessToken
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-      // Debug: development modunda logla
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[API] ✅ Token gönderiliyor:', token.substring(0, 20) + '...')
-      }
-    } else {
-      // 🔥 GEÇİCİ: Login sırasında token doğal olarak yoktur, uyarı verme
-      // Token yoksa sadece devam et (auth guard değil, sadece log)
-      // Login sırasında bu normal bir durum
     }
     
     return config
