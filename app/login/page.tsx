@@ -421,14 +421,13 @@ export default function LoginPage() {
   }
 
 
-  // 🔥 Güvenlik: isLoggingIn 10 saniyeden fazla sürerse otomatik kapat
+  // Güvenlik: isLoggingIn 65 saniyeden fazla sürerse otomatik kapat (Vercel cold start ~30s)
   useEffect(() => {
     if (isLoggingIn) {
       const timeout = setTimeout(() => {
-        console.warn('[LOGIN] ⚠️ Login işlemi 10 saniyeden fazla sürdü, loading state kapatılıyor')
         setIsLoggingIn(false)
-      }, 10000) // 10 saniye timeout
-      
+      }, 65000)
+
       return () => clearTimeout(timeout)
     }
   }, [isLoggingIn])

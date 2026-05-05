@@ -22,39 +22,35 @@ const processQueue = (error: any, token: string | null = null) => {
 }
 
 // API base URL - dinamik olarak belirle
-// Client-side'da window.location'dan, server-side'da env'den al
+const PRODUCTION_BACKEND_URL = 'https://feellink-backend.vercel.app'
+
 const getBaseURL = (): string => {
-  // ENV'den al - öncelik sırası: .env.local > .env > varsayılan
   const envURL = process.env.NEXT_PUBLIC_API_URL
-  
+
   // Server-side (SSR)
   if (typeof window === 'undefined') {
-    return envURL || 'http://localhost:3002'
+    return envURL || PRODUCTION_BACKEND_URL
   }
-  
+
   // Client-side - ENV URL'i varsa kullan
   if (envURL) {
     return envURL
   }
-  
-  // 🔥 Client-side'da window.location'dan backend URL'ini tespit et
-  // Eğer frontend localhost:3000'de çalışıyorsa, backend localhost:3002'de olmalı
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname
-    const protocol = window.location.protocol
-    
-    // Localhost veya 127.0.0.1 ise backend'i localhost:3002 olarak ayarla
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3002'
-    }
-    
-    // Network IP ise backend'i aynı IP'de port 3002 olarak ayarla
-    // Örnek: http://192.168.1.6:3000 -> http://192.168.1.6:3002
-    return `${protocol}//${hostname}:3002`
+
+  const hostname = window.location.hostname
+
+  // Local development
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3002'
   }
-  
-  // Fallback: localhost:3002 (backend şu an burada)
-  return 'http://localhost:3002'
+
+  // Local network IP (dev)
+  if (/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
+    return `${window.location.protocol}//${hostname}:3002`
+  }
+
+  // Production: her zaman gerçek backend URL'ini kullan
+  return PRODUCTION_BACKEND_URL
 }
 
 // 🔥 Lazy evaluation - sadece gerektiğinde baseURL'i hesapla
