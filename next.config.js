@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// Deploy trigger: login fix - 2026-05-05
 const nextConfig = {
   reactStrictMode: true,
   typescript: {
