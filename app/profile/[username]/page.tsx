@@ -62,8 +62,8 @@ function ProfileContent() {
   }, [isMe, currentUser?.username, paramUsername])
   
   // Aktif tab'ı URL query parameter'ından oku (sayfa yenilendiğinde korunur)
-  const validTabs: Array<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved'> = ['posts', 'articles', 'comments', 'artworks', 'events', 'drafts', 'saved']
-  const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | null
+  const validTabs: Array<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery'> = ['posts', 'articles', 'comments', 'artworks', 'events', 'drafts', 'saved', 'gallery']
+  const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery' | null
   const initialTab = (tabFromUrl && validTabs.includes(tabFromUrl)) ? tabFromUrl : 'posts'
   
   const [showFollowers, setShowFollowers] = useState(false)
@@ -73,12 +73,13 @@ function ProfileContent() {
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery'>(initialTab)
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
-  
+  const [galleryCarouselIdx, setGalleryCarouselIdx] = useState(0)
+
   // Tab değiştiğinde URL'yi güncelle (sayfa yenilendiğinde korunur)
-  const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved') => {
+  const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery') => {
     setActiveTab(tab)
     // URL query parameter'ını güncelle (replace kullanarak history'ye ekleme)
     const currentUrl = new URL(window.location.href)
@@ -93,7 +94,7 @@ function ProfileContent() {
   
   // URL'den tab değiştiğinde state'i güncelle (sadece ilk yüklemede)
   useEffect(() => {
-    const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | null
+    const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery' | null
     if (tabFromUrl && validTabs.includes(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl)
     }
@@ -1366,7 +1367,7 @@ function ProfileContent() {
                 onMouseLeave={() => setHoveredTab(null)}
               >
                 <button
-                  onClick={() => { if (tab.key === 'gallery') { setGalleryOpen(true) } else { handleTabChange(tab.key as any) } }}
+                  onClick={() => handleTabChange(tab.key as any)}
                   className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
                     isActive
                       ? 'text-brand-orange'
@@ -1402,7 +1403,87 @@ function ProfileContent() {
         </div>
 
         {/* Sekme İçerikleri */}
-        {activeTab === 'articles' ? (
+        {activeTab === 'gallery' ? (
+          <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-orange/10 text-brand-orange rounded-full text-xs font-medium">
+                  <Sparkles size={12} />
+                  Sergi
+                </span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{username} sergisi</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isMe && canUploadArtwork && (
+                  <button
+                    onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand-orange hover:text-brand-orange transition-colors"
+                  >
+                    <Plus size={12} />
+                    Eser yükle
+                  </button>
+                )}
+                {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
+                  <button
+                    onClick={() => setGalleryOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors"
+                  >
+                    <Sparkles size={12} />
+                    Tur
+                  </button>
+                )}
+              </div>
+            </div>
+            {isLoadingArtworks ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="w-6 h-6 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length === 0 ? (
+              <div className="text-center py-16 px-6">
+                <div className="text-5xl mb-3">🖼️</div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Henüz eser yüklenmemiş</p>
+                {isMe && canUploadArtwork && (
+                  <button
+                    onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
+                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-orange text-white rounded-lg text-sm font-medium hover:bg-brand-orange/90 transition-colors"
+                  >
+                    <Plus size={14} />
+                    İlk eseri yükle
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="p-4">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+                  {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length} eser · Tur butonuyla 3D galeride gez
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).map((artwork: any) => (
+                    <div
+                      key={artwork.id}
+                      className="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 cursor-pointer group relative"
+                      onClick={() => setGalleryOpen(true)}
+                    >
+                      <img
+                        src={resolveImageUrl(artwork.media[0].url)}
+                        alt={artwork.title || 'Eser'}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end">
+                        {artwork.title && (
+                          <div className="w-full px-2 py-1.5 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-white text-xs font-medium truncate">{artwork.title}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'articles' ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             <UserArticles key={`articles-${profile.id}-${activeTab}`} authorId={profile.id} />
           </div>

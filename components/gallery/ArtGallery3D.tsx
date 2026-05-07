@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Component, type ReactNode } from 'react'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
-import { X, ZoomIn, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react'
+import { X, ZoomIn, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, AlertTriangle, RefreshCw } from 'lucide-react'
 
 interface Artwork {
   id: string
@@ -15,6 +15,50 @@ interface ArtGallery3DProps {
   artworks: Artwork[]
   isOpen: boolean
   onClose: () => void
+}
+
+// ── Error Boundary ─────────────────────────────────────────────────────────────
+class Gallery3DBoundary extends Component<
+  { children: ReactNode; onClose: () => void },
+  { crashed: boolean }
+> {
+  state = { crashed: false }
+
+  static getDerivedStateFromError() {
+    return { crashed: true }
+  }
+
+  reset = () => this.setState({ crashed: false })
+
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center gap-5 p-6">
+          <button
+            onClick={this.props.onClose}
+            className="absolute top-5 right-5 text-white/50 hover:text-white transition-colors"
+          >
+            <X size={22} />
+          </button>
+          <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <AlertTriangle size={24} className="text-amber-400" />
+          </div>
+          <div className="text-center max-w-sm">
+            <p className="text-white font-semibold text-base mb-1">Sergi takılmadan açıldı</p>
+            <p className="text-white/50 text-sm">3D sergi şu anda başlatılamadı. Sayfayı yenileyerek tekrar deneyebilirsiniz.</p>
+          </div>
+          <button
+            onClick={this.reset}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-medium text-sm transition-colors"
+          >
+            <RefreshCw size={14} />
+            Tekrar dene
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 // ── Room dimensions ────────────────────────────────────────────────────────────
@@ -291,8 +335,8 @@ function Wall({
   )
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
-export function ArtGallery3D({ artworks, isOpen, onClose }: ArtGallery3DProps) {
+// ── Main (inner) ───────────────────────────────────────────────────────────────
+function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   const [rotY,    setRotY]    = useState(0)
   const [camZ,    setCamZ]    = useState(0)
   const [room,    setRoom]    = useState(0)
@@ -689,5 +733,15 @@ export function ArtGallery3D({ artworks, isOpen, onClose }: ArtGallery3DProps) {
         )}
       </div>
     </>
+  )
+}
+
+// ── Exported wrapper with error boundary ───────────────────────────────────────
+export function ArtGallery3D({ artworks, isOpen, onClose }: ArtGallery3DProps) {
+  if (!isOpen) return null
+  return (
+    <Gallery3DBoundary onClose={onClose}>
+      <ArtGallery3DInner artworks={artworks} isOpen={isOpen} onClose={onClose} />
+    </Gallery3DBoundary>
   )
 }
