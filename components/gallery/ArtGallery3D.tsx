@@ -632,8 +632,8 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
             </div>
           </div>
 
-          {/* Enter button — hidden during walkin */}
-          {phase !== 'walkin' && (
+          {/* Enter button */}
+          {(
             <button
               onClick={openDoor}
               disabled={phase === 'opening'}
