@@ -90,74 +90,79 @@ const CSS = `
   @keyframes gIn         { from{opacity:0} to{opacity:1} }
   @keyframes trackGlow   { 0%,100%{opacity:.55;transform:translateX(-50%) scale(1)} 50%{opacity:.9;transform:translateX(-50%) scale(1.15)} }
   @keyframes haloGlow    { 0%,100%{opacity:.55} 50%{opacity:.85} }
-  @keyframes walkIn      { 0%{opacity:0;transform:scale(1.18)} 100%{opacity:1;transform:scale(1)} }
+  @keyframes cinemReveal { 0%{opacity:0;transform:scale(1.06)} 100%{opacity:1;transform:scale(1)} }
+  @keyframes overlayOut  { 0%{opacity:1} 100%{opacity:0} }
 `
 
-// ── Audio helpers ──────────────────────────────────────────────────────────────
-function playDoorCreak() {
+// ── Premium door sound (sine-based, no harsh sawtooth) ─────────────────────────
+function playDoorSound() {
   if (typeof window === 'undefined') return
   try {
     const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
     if (!AudioCtx) return
     const ctx = new AudioCtx() as AudioContext
     ctx.resume()
+    const t = ctx.currentTime
 
-    // Primary creak — sawtooth with pitch envelope
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'sawtooth'
-    osc.frequency.setValueAtTime(155, ctx.currentTime)
-    osc.frequency.exponentialRampToValueAtTime(88, ctx.currentTime + 0.38)
-    osc.frequency.exponentialRampToValueAtTime(138, ctx.currentTime + 0.72)
-    osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 1.05)
-    gain.gain.setValueAtTime(0.001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.06)
-    gain.gain.exponentialRampToValueAtTime(0.10, ctx.currentTime + 0.55)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2)
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.start(); osc.stop(ctx.currentTime + 1.2)
+    // 1. Heavy thud — door mass releasing the latch (sine, sub-bass)
+    const thud = ctx.createOscillator()
+    const thudG = ctx.createGain()
+    thud.type = 'sine'
+    thud.frequency.setValueAtTime(110, t)
+    thud.frequency.exponentialRampToValueAtTime(52, t + 0.45)
+    thudG.gain.setValueAtTime(0, t)
+    thudG.gain.linearRampToValueAtTime(0.45, t + 0.025)
+    thudG.gain.exponentialRampToValueAtTime(0.001, t + 0.5)
+    thud.connect(thudG); thudG.connect(ctx.destination)
+    thud.start(t); thud.stop(t + 0.5)
 
-    // Low mechanical groan
-    const osc2 = ctx.createOscillator()
-    const gain2 = ctx.createGain()
-    osc2.type = 'triangle'
-    osc2.frequency.setValueAtTime(58, ctx.currentTime)
-    osc2.frequency.exponentialRampToValueAtTime(42, ctx.currentTime + 1.0)
-    gain2.gain.setValueAtTime(0.001, ctx.currentTime)
-    gain2.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 0.1)
-    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1)
-    osc2.connect(gain2); gain2.connect(ctx.destination)
-    osc2.start(); osc2.stop(ctx.currentTime + 1.1)
-  } catch { /* audio blocked — silently skip */ }
-}
+    // 2. Smooth hinge sweep — sine only, organ-like weight
+    const hinge = ctx.createOscillator()
+    const hingeG = ctx.createGain()
+    hinge.type = 'sine'
+    hinge.frequency.setValueAtTime(240, t + 0.04)
+    hinge.frequency.linearRampToValueAtTime(170, t + 0.45)
+    hinge.frequency.linearRampToValueAtTime(205, t + 0.78)
+    hinge.frequency.linearRampToValueAtTime(148, t + 1.05)
+    hingeG.gain.setValueAtTime(0, t + 0.04)
+    hingeG.gain.linearRampToValueAtTime(0.07, t + 0.12)
+    hingeG.gain.linearRampToValueAtTime(0.045, t + 0.65)
+    hingeG.gain.exponentialRampToValueAtTime(0.001, t + 1.1)
+    hinge.connect(hingeG)
+    // Subtle reverb tail
+    const delayNode = ctx.createDelay(0.3)
+    delayNode.delayTime.value = 0.13
+    const revG = ctx.createGain(); revG.gain.value = 0.22
+    hingeG.connect(delayNode); delayNode.connect(revG); revG.connect(ctx.destination)
+    hingeG.connect(ctx.destination)
+    hinge.start(t + 0.04); hinge.stop(t + 1.1)
 
-function playWalkIn() {
-  if (typeof window === 'undefined') return
-  try {
-    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
-    if (!AudioCtx) return
-    const ctx = new AudioCtx() as AudioContext
-    ctx.resume()
+    // 3. Air displacement — low-pass filtered noise, gentle
+    const bufLen = Math.ceil(ctx.sampleRate * 0.8)
+    const noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate)
+    const nd = noiseBuf.getChannelData(0)
+    for (let i = 0; i < bufLen; i++) nd[i] = Math.random() * 2 - 1
+    const nSrc = ctx.createBufferSource(); nSrc.buffer = noiseBuf
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600
+    const nG = ctx.createGain()
+    nG.gain.setValueAtTime(0, t + 0.08)
+    nG.gain.linearRampToValueAtTime(0.038, t + 0.28)
+    nG.gain.exponentialRampToValueAtTime(0.001, t + 0.82)
+    nSrc.connect(lp); lp.connect(nG); nG.connect(ctx.destination)
+    nSrc.start(t + 0.08)
 
-    // White-noise whoosh filtered to a whomp
-    const sampleRate = ctx.sampleRate
-    const len = Math.ceil(sampleRate * 0.75)
-    const buffer = ctx.createBuffer(1, len, sampleRate)
-    const data = buffer.getChannelData(0)
-    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len)
-    const src = ctx.createBufferSource()
-    src.buffer = buffer
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'bandpass'
-    filter.frequency.setValueAtTime(900, ctx.currentTime)
-    filter.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.65)
-    filter.Q.value = 0.6
-    const gain = ctx.createGain()
-    gain.gain.setValueAtTime(0.18, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.75)
-    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination)
-    src.start()
-  } catch { /* audio blocked — silently skip */ }
+    // 4. Soft stop thud when door settles (delayed)
+    const stop = ctx.createOscillator()
+    const stopG = ctx.createGain()
+    stop.type = 'sine'
+    stop.frequency.setValueAtTime(80, t + 0.92)
+    stop.frequency.exponentialRampToValueAtTime(45, t + 1.1)
+    stopG.gain.setValueAtTime(0, t + 0.92)
+    stopG.gain.linearRampToValueAtTime(0.18, t + 0.94)
+    stopG.gain.exponentialRampToValueAtTime(0.001, t + 1.12)
+    stop.connect(stopG); stopG.connect(ctx.destination)
+    stop.start(t + 0.92); stop.stop(t + 1.12)
+  } catch { /* audio blocked */ }
 }
 
 // ── Frame ──────────────────────────────────────────────────────────────────────
@@ -405,7 +410,7 @@ function Wall({
 
 // ── Main (inner) ───────────────────────────────────────────────────────────────
 function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
-  const [phase,   setPhase]   = useState<'door' | 'opening' | 'walkin' | 'gallery'>('door')
+  const [phase,   setPhase]   = useState<'door' | 'opening' | 'black' | 'gallery'>('door')
   const [rotY,    setRotY]    = useState(0)
   const [camZ,    setCamZ]    = useState(0)
   const [room,    setRoom]    = useState(0)
@@ -417,16 +422,12 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   const [dragging, setDragging] = useState(false)
 
   const openDoor = useCallback(() => {
-    playDoorCreak()
+    playDoorSound()
     setPhase('opening')
-    setTimeout(() => {
-      playWalkIn()
-      setPhase('walkin')
-      setTimeout(() => {
-        setPhase('gallery')
-        setVisible(true)
-      }, 750)
-    }, 1000)
+    // Door fully open → cut to black
+    setTimeout(() => setPhase('black'), 950)
+    // Hold black briefly → cinematic gallery reveal
+    setTimeout(() => { setPhase('gallery'); setVisible(true) }, 1150)
   }, [])
 
   const imgs       = artworks.filter(a => a.media?.[0]?.url)
@@ -492,8 +493,7 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
       setRotY(0); setCamZ(0); setRoom(0); setLiveRot(0)
       return
     }
-    setVisible(false)
-    setPhase('door')
+    setVisible(false); setPhase('door')
     document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
@@ -501,7 +501,11 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   if (!isOpen) return null
 
   // ── Door entrance screen ───────────────────────────────────────────────────
-  if (phase === 'door' || phase === 'opening' || phase === 'walkin') {
+  if (phase === 'black') {
+    return <div style={{ position:'fixed', inset:0, zIndex:100, background:'#000' }} />
+  }
+
+  if (phase === 'door' || phase === 'opening') {
     return (
       <>
         <style>{CSS}</style>
@@ -651,14 +655,6 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
             </button>
           )}
 
-          {/* Walk-in: gallery rushes toward viewer */}
-          {phase === 'walkin' && (
-            <div style={{
-              position:'fixed', inset:0, zIndex:5,
-              animation:'walkIn 0.75s cubic-bezier(0.2,0,0.4,1) forwards',
-              background:'radial-gradient(ellipse 110% 80% at 50% 55%, #0d1220 0%, #060810 100%)',
-            }} />
-          )}
 
           {/* Close */}
           <button
@@ -698,7 +694,7 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
           position:'fixed', inset:0, zIndex:100,
           background:'radial-gradient(ellipse 110% 90% at 50% 60%, #0d1220 0%, #060810 100%)',
           overflow:'hidden', userSelect:'none',
-          animation: visible ? 'walkIn 0.85s cubic-bezier(0.2,0,0.35,1) forwards' : 'none',
+          animation: visible ? 'cinemReveal 1.5s cubic-bezier(0.25,0.1,0.25,1) forwards' : 'none',
           opacity: visible ? undefined : 0,
           cursor: dragging ? 'grabbing' : 'grab',
         }}
@@ -715,6 +711,15 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
           position:'absolute', inset:0, pointerEvents:'none', zIndex:6,
           background:'radial-gradient(ellipse 88% 88% at 50% 50%, transparent 38%, rgba(0,0,0,.75) 100%)',
         }} />
+
+        {/* Cinematic reveal overlay — fades out slowly giving "lights coming up" feel */}
+        {visible && (
+          <div style={{
+            position:'absolute', inset:0, zIndex:7, pointerEvents:'none',
+            background:'#000',
+            animation:'overlayOut 1.8s cubic-bezier(0.4,0,0.6,1) 0.1s forwards',
+          }} />
+        )}
 
         {/* ── Header HUD ── */}
         <div style={{
