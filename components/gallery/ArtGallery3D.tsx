@@ -81,17 +81,22 @@ const SIDE_FRAMES = [
   { left: 590, top: 340, w: 230, h: 480 },
 ]
 
-// Gold gradient for frames
-const GOLD_H = 'linear-gradient(90deg,#7a5512 0%,#c8952c 18%,#f0c860 38%,#d4a030 55%,#8b6218 72%,#c8952c 88%,#7a5512 100%)'
-const GOLD_V = 'linear-gradient(180deg,#7a5512 0%,#c8952c 18%,#f0c860 38%,#d4a030 55%,#8b6218 72%,#c8952c 88%,#7a5512 100%)'
+// Brand gradient bars for door frame (purple → orange)
+const BRAND_H = 'linear-gradient(90deg,#3b0764 0%,#6d28d9 22%,#a78bfa 42%,#fb923c 62%,#ea580c 80%,#7c3aed 100%)'
+const BRAND_V = 'linear-gradient(180deg,#3b0764 0%,#6d28d9 22%,#a78bfa 42%,#fb923c 62%,#ea580c 80%,#7c3aed 100%)'
 
 const CSS = `
-  @keyframes spotBreath  { 0%,100%{opacity:.65} 50%{opacity:1} }
-  @keyframes gIn         { from{opacity:0} to{opacity:1} }
-  @keyframes trackGlow   { 0%,100%{opacity:.55;transform:translateX(-50%) scale(1)} 50%{opacity:.9;transform:translateX(-50%) scale(1.15)} }
-  @keyframes haloGlow    { 0%,100%{opacity:.55} 50%{opacity:.85} }
-  @keyframes cinemReveal { 0%{opacity:0;transform:scale(1.06)} 100%{opacity:1;transform:scale(1)} }
-  @keyframes overlayOut  { 0%{opacity:1} 100%{opacity:0} }
+  @keyframes spotBreath   { 0%,100%{opacity:.65} 50%{opacity:1} }
+  @keyframes gIn          { from{opacity:0} to{opacity:1} }
+  @keyframes trackGlow    { 0%,100%{opacity:.55;transform:translateX(-50%) scale(1)} 50%{opacity:.9;transform:translateX(-50%) scale(1.15)} }
+  @keyframes haloGlow     { 0%,100%{opacity:.55} 50%{opacity:.85} }
+  @keyframes scaleReveal  { 0%{transform:scale(1.04)} 100%{transform:scale(1)} }
+  @keyframes filmPeel     { 0%{transform:scaleY(1)} 100%{transform:scaleY(0)} }
+  @keyframes auraBreath   { 0%,100%{opacity:.22;transform:scale(1)} 50%{opacity:.45;transform:scale(1.08)} }
+  @keyframes auraBreath2  { 0%,100%{opacity:.12;transform:scale(1)} 50%{opacity:.28;transform:scale(1.14)} }
+  @keyframes doorFloat    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  @keyframes particleUp   { 0%{opacity:0;transform:translateY(0) scale(0.5)} 30%{opacity:1} 100%{opacity:0;transform:translateY(-80px) scale(1)} }
+  @keyframes shimmer      { 0%{background-position:200% center} 100%{background-position:-200% center} }
 `
 
 // ── Premium door sound (sine-based, no harsh sawtooth) ─────────────────────────
@@ -424,10 +429,9 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   const openDoor = useCallback(() => {
     playDoorSound()
     setPhase('opening')
-    // Door fully open → cut to black
     setTimeout(() => setPhase('black'), 950)
-    // Hold black briefly → cinematic gallery reveal
-    setTimeout(() => { setPhase('gallery'); setVisible(true) }, 1150)
+    // Longer black hold so film strips have time to prepare
+    setTimeout(() => { setPhase('gallery'); setVisible(true) }, 1380)
   }, [])
 
   const imgs       = artworks.filter(a => a.media?.[0]?.url)
@@ -506,165 +510,214 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   }
 
   if (phase === 'door' || phase === 'opening') {
+    // Floating particle positions (deterministic)
+    const PARTICLES = [
+      {x:18,y:72,size:3,dur:3.2,delay:0,   color:'rgba(167,139,250,0.7)'},
+      {x:78,y:58,size:2,dur:2.8,delay:0.6, color:'rgba(251,146,60,0.7)'},
+      {x:32,y:40,size:2,dur:3.6,delay:1.1, color:'rgba(167,139,250,0.5)'},
+      {x:62,y:80,size:3,dur:2.5,delay:0.3, color:'rgba(251,146,60,0.5)'},
+      {x:85,y:35,size:2,dur:3.9,delay:1.8, color:'rgba(196,181,253,0.6)'},
+      {x:48,y:20,size:2,dur:2.2,delay:0.9, color:'rgba(253,186,116,0.5)'},
+      {x:12,y:50,size:2,dur:3.4,delay:1.5, color:'rgba(167,139,250,0.4)'},
+      {x:90,y:65,size:2,dur:2.9,delay:0.4, color:'rgba(251,146,60,0.4)'},
+    ]
     return (
       <>
         <style>{CSS}</style>
         <div style={{
           position:'fixed', inset:0, zIndex:100,
-          background:'radial-gradient(ellipse 130% 90% at 50% 35%, #13192a 0%, #080b12 100%)',
+          background:'radial-gradient(ellipse 140% 80% at 50% -5%, rgba(76,29,149,0.45) 0%, #09051a 38%, #060210 100%)',
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-          gap:0, userSelect:'none',
+          userSelect:'none', overflow:'hidden',
         }}>
-          {/* Ambient floor glow */}
-          <div style={{
-            position:'absolute', bottom:0, left:0, right:0, height:'40%',
-            background:'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%)',
-            pointerEvents:'none',
-          }} />
-          {/* Ceiling light halo */}
+          {/* Purple top glow */}
           <div style={{
             position:'absolute', top:0, left:'50%', transform:'translateX(-50%)',
-            width:300, height:200,
-            background:'radial-gradient(ellipse at 50% 0%, rgba(201,165,80,0.07), transparent 70%)',
+            width:'60%', height:'45%',
+            background:'radial-gradient(ellipse at 50% 0%, rgba(109,40,217,0.25) 0%, transparent 70%)',
+            pointerEvents:'none',
+          }} />
+          {/* Orange bottom warm glow */}
+          <div style={{
+            position:'absolute', bottom:0, left:'50%', transform:'translateX(-50%)',
+            width:'50%', height:'35%',
+            background:'radial-gradient(ellipse at 50% 100%, rgba(234,88,12,0.14) 0%, transparent 70%)',
+            pointerEvents:'none',
+          }} />
+          {/* Floor gradient */}
+          <div style={{
+            position:'absolute', bottom:0, left:0, right:0, height:'30%',
+            background:'linear-gradient(0deg, rgba(6,2,16,0.8) 0%, transparent 100%)',
             pointerEvents:'none',
           }} />
 
+          {/* Floating particles */}
+          {PARTICLES.map((p,i) => (
+            <div key={i} style={{
+              position:'absolute', left:`${p.x}%`, bottom:`${p.y}px`,
+              width:p.size, height:p.size, borderRadius:'50%',
+              background:p.color,
+              boxShadow:`0 0 ${p.size*3}px ${p.color}`,
+              animation:`particleUp ${p.dur}s ease-in-out ${p.delay}s infinite`,
+              pointerEvents:'none',
+            }} />
+          ))}
+
           {/* Label */}
           <p style={{
-            color:'rgba(201,165,80,0.35)', fontSize:10, letterSpacing:'0.38em',
-            textTransform:'uppercase', fontFamily:'Georgia,serif', marginBottom:28,
+            color:'rgba(167,139,250,0.5)', fontSize:9.5, letterSpacing:'0.42em',
+            textTransform:'uppercase', fontFamily:'Georgia,serif', marginBottom:32,
+            background:'linear-gradient(90deg,rgba(167,139,250,0.5),rgba(253,186,116,0.5))',
+            WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
+            backgroundSize:'200% auto', animation:'shimmer 4s linear infinite',
           }}>
             Sanal Sergi
           </p>
 
           {/* Door scene */}
-          <div style={{ position:'relative', perspective:'900px', perspectiveOrigin:'50% 50%' }}>
+          <div style={{
+            position:'relative', perspective:'900px', perspectiveOrigin:'50% 50%',
+            animation: phase === 'door' ? 'doorFloat 4s ease-in-out infinite' : 'none',
+          }}>
             <div style={{ position:'relative', width:200, height:340 }}>
 
-              {/* Glow from inside the gallery */}
+              {/* Purple aura ring 1 */}
               <div style={{
-                position:'absolute', inset:0,
-                background:'radial-gradient(ellipse 70% 80% at 50% 40%, rgba(255,200,90,0.13), transparent 70%)',
+                position:'absolute', inset:-28, borderRadius:6,
+                border:'1px solid rgba(124,58,237,0.22)',
+                animation:'auraBreath 3s ease-in-out infinite',
+                pointerEvents:'none',
+              }} />
+              {/* Orange aura ring 2 */}
+              <div style={{
+                position:'absolute', inset:-52, borderRadius:8,
+                border:'1px solid rgba(234,88,12,0.12)',
+                animation:'auraBreath2 3s ease-in-out 0.9s infinite',
                 pointerEvents:'none',
               }} />
 
-              {/* Frame — gold border */}
-              <div style={{ position:'absolute', inset:0, boxSizing:'border-box',
-                border:'10px solid transparent',
-                background:'transparent',
-                outline:'none',
-                boxShadow:'inset 0 0 0 10px rgba(201,165,80,0.0)',
-              }}>
-                {/* Top */}
-                <div style={{ position:'absolute', top:0, left:0, right:0, height:10, background:GOLD_H }} />
-                {/* Bottom */}
-                <div style={{ position:'absolute', bottom:0, left:0, right:0, height:10, background:GOLD_H }} />
-                {/* Left */}
-                <div style={{ position:'absolute', top:0, left:0, bottom:0, width:10, background:GOLD_V }} />
-                {/* Right */}
-                <div style={{ position:'absolute', top:0, right:0, bottom:0, width:10, background:GOLD_V }} />
-                {/* Corners */}
+              {/* Glow from inside (warm light behind door) */}
+              <div style={{
+                position:'absolute', inset:0,
+                background:'radial-gradient(ellipse 60% 70% at 50% 40%, rgba(251,146,60,0.11), transparent 70%)',
+                pointerEvents:'none',
+              }} />
+
+              {/* Frame — brand gradient border */}
+              <div style={{ position:'absolute', inset:0 }}>
+                <div style={{ position:'absolute', top:0, left:0, right:0, height:8, background:BRAND_H }} />
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, height:8, background:BRAND_H }} />
+                <div style={{ position:'absolute', top:0, left:0, bottom:0, width:8, background:BRAND_V }} />
+                <div style={{ position:'absolute', top:0, right:0, bottom:0, width:8, background:BRAND_V }} />
+                {/* Corner gems */}
                 {([{top:0,left:0},{top:0,right:0},{bottom:0,left:0},{bottom:0,right:0}] as React.CSSProperties[]).map((s,i) => (
                   <div key={i} style={{
-                    position:'absolute', ...s, width:14, height:14, zIndex:1,
-                    background:'radial-gradient(circle at 40% 40%, #f0c860, #7a5512)',
-                    boxShadow:'0 0 6px rgba(201,165,80,0.5)',
+                    position:'absolute', ...s, width:12, height:12, zIndex:1,
+                    background: i<2
+                      ? 'radial-gradient(circle at 35% 35%, #a78bfa, #4c1d95)'
+                      : 'radial-gradient(circle at 35% 35%, #fb923c, #92400e)',
+                    boxShadow: i<2
+                      ? '0 0 8px rgba(124,58,237,0.7)'
+                      : '0 0 8px rgba(234,88,12,0.7)',
                   }} />
                 ))}
               </div>
 
-              {/* Door panel */}
+              {/* Door panel with 3D swing */}
               <div style={{
-                position:'absolute', inset:10,
+                position:'absolute', inset:8,
                 transformOrigin:'left center',
                 transform: phase === 'opening' ? 'rotateY(-82deg)' : 'rotateY(0deg)',
                 transition:'transform 1.1s cubic-bezier(0.4,0,0.2,1)',
                 transformStyle:'preserve-3d',
-                boxShadow: phase === 'opening' ? '12px 0 40px rgba(0,0,0,0.8)' : '0 0 0',
+                boxShadow: phase === 'opening' ? '14px 0 45px rgba(0,0,0,0.9)' : 'none',
               }}>
                 {/* Front face */}
                 <div style={{
                   position:'absolute', inset:0, backfaceVisibility:'hidden',
-                  background:'linear-gradient(160deg, #1e1408 0%, #110d04 45%, #1a1008 75%, #0d0804 100%)',
+                  background:'linear-gradient(160deg, #130820 0%, #0a0516 45%, #0f0618 75%, #07030e 100%)',
                 }}>
-                  {/* Upper panel recess */}
-                  <div style={{ position:'absolute', top:14, left:14, right:14, height:'36%',
-                    border:'1.5px solid rgba(201,165,80,0.13)',
-                    background:'rgba(0,0,0,0.25)',
-                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.5)',
+                  {/* Purple tint on left side, orange on right */}
+                  <div style={{
+                    position:'absolute', inset:0,
+                    background:'linear-gradient(90deg, rgba(76,29,149,0.08) 0%, transparent 50%, rgba(124,45,12,0.06) 100%)',
+                    pointerEvents:'none',
                   }} />
-                  {/* Lower panel recess */}
-                  <div style={{ position:'absolute', bottom:14, left:14, right:14, top:'calc(36% + 28px)',
-                    border:'1.5px solid rgba(201,165,80,0.13)',
-                    background:'rgba(0,0,0,0.25)',
-                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.5)',
+                  {/* Upper panel */}
+                  <div style={{ position:'absolute', top:14, left:14, right:14, height:'36%',
+                    border:'1px solid rgba(124,58,237,0.12)',
+                    background:'rgba(0,0,0,0.3)',
+                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.6)',
+                  }} />
+                  {/* Lower panel */}
+                  <div style={{ position:'absolute', bottom:14, left:14, right:14, top:'calc(36% + 26px)',
+                    border:'1px solid rgba(234,88,12,0.1)',
+                    background:'rgba(0,0,0,0.3)',
+                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.6)',
                   }} />
                   {/* Center divider */}
                   <div style={{ position:'absolute', top:0, bottom:0, left:'50%', width:1,
-                    background:'rgba(201,165,80,0.06)',
+                    background:'linear-gradient(180deg,rgba(124,58,237,0.08),rgba(234,88,12,0.06))',
                   }} />
-                  {/* Handle */}
+                  {/* Handle — orange */}
                   <div style={{ position:'absolute', right:16, top:'52%', transform:'translateY(-50%)' }}>
                     <div style={{
-                      width:13, height:13, borderRadius:'50%',
-                      background:'radial-gradient(circle at 35% 35%, #f0c860, #7a5512)',
-                      boxShadow:'0 0 10px rgba(201,165,80,0.5), 0 2px 4px rgba(0,0,0,0.6)',
+                      width:12, height:12, borderRadius:'50%',
+                      background:'radial-gradient(circle at 35% 35%, #fb923c, #92400e)',
+                      boxShadow:'0 0 10px rgba(234,88,12,0.6), 0 2px 4px rgba(0,0,0,0.6)',
                     }} />
-                    <div style={{ width:2, height:20, background:'linear-gradient(180deg,#c8952c,#7a5512)', margin:'3px auto 0', borderRadius:1 }} />
+                    <div style={{ width:2, height:18, background:'linear-gradient(180deg,#fb923c,#7c2d12)', margin:'3px auto 0', borderRadius:1 }} />
                   </div>
                 </div>
-                {/* Back face (inner door edge, visible when ajar) */}
+                {/* Back face */}
                 <div style={{
                   position:'absolute', inset:0,
                   transform:'rotateY(180deg)', backfaceVisibility:'hidden',
-                  background:'#120e06',
+                  background:'#08040f',
                 }} />
               </div>
 
-              {/* Light leak through door crack (shows when opening) */}
+              {/* Light leak when opening — warm orange */}
               {phase === 'opening' && (
                 <div style={{
-                  position:'absolute', top:10, left:10, bottom:10, width:4,
-                  background:'linear-gradient(90deg, rgba(255,200,90,0.35), transparent)',
-                  animation:'gIn .3s ease',
+                  position:'absolute', top:8, left:8, bottom:8, width:5,
+                  background:'linear-gradient(90deg, rgba(251,146,60,0.45), rgba(167,139,250,0.15), transparent)',
+                  animation:'gIn .25s ease',
                 }} />
               )}
             </div>
           </div>
 
-          {/* Enter button */}
-          {(
-            <button
-              onClick={openDoor}
-              disabled={phase === 'opening'}
-              style={{
-                marginTop:36,
-                padding:'12px 36px',
-                background: phase === 'opening'
-                  ? 'rgba(201,165,80,0.08)'
-                  : 'linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.1))',
-                border:'1px solid rgba(201,165,80,' + (phase === 'opening' ? '0.12' : '0.35') + ')',
-                borderRadius:3,
-                color: phase === 'opening' ? 'rgba(201,165,80,0.3)' : 'rgba(201,165,80,0.9)',
-                fontSize:11, letterSpacing:'0.3em', textTransform:'uppercase',
-                fontFamily:'Georgia,serif', cursor: phase === 'opening' ? 'default' : 'pointer',
-                transition:'all .25s',
-              }}
-            >
-              {phase === 'opening' ? 'Açılıyor…' : 'Kapıyı Aç'}
-            </button>
-          )}
-
+          {/* CTA button — purple to orange gradient */}
+          <button
+            onClick={openDoor}
+            disabled={phase === 'opening'}
+            style={{
+              marginTop:40, padding:'13px 42px',
+              background: phase === 'opening'
+                ? 'rgba(124,58,237,0.06)'
+                : 'linear-gradient(135deg, rgba(109,40,217,0.28) 0%, rgba(234,88,12,0.18) 100%)',
+              border: `1px solid ${phase === 'opening' ? 'rgba(124,58,237,0.1)' : 'rgba(167,139,250,0.38)'}`,
+              borderRadius:4,
+              color: phase === 'opening' ? 'rgba(167,139,250,0.25)' : 'rgba(221,214,254,0.92)',
+              fontSize:10.5, letterSpacing:'0.32em', textTransform:'uppercase',
+              fontFamily:'Georgia,serif', cursor: phase === 'opening' ? 'default' : 'pointer',
+              transition:'all .3s',
+              boxShadow: phase === 'opening' ? 'none' : '0 0 24px rgba(109,40,217,0.18), 0 0 48px rgba(234,88,12,0.08)',
+            }}
+          >
+            {phase === 'opening' ? 'Açılıyor…' : 'Kapıyı Aç'}
+          </button>
 
           {/* Close */}
           <button
             onClick={onClose}
             style={{
               position:'absolute', top:18, right:22, zIndex:25,
-              background:'rgba(255,255,255,.04)', border:'1px solid rgba(201,165,80,.15)',
+              background:'rgba(255,255,255,.03)', border:'1px solid rgba(124,58,237,.2)',
               borderRadius:'50%', width:34, height:34,
               display:'flex', alignItems:'center', justifyContent:'center',
-              cursor:'pointer', color:'rgba(201,165,80,.45)',
+              cursor:'pointer', color:'rgba(167,139,250,.45)',
             }}
           >
             <X size={14} />
@@ -694,8 +747,8 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
           position:'fixed', inset:0, zIndex:100,
           background:'radial-gradient(ellipse 110% 90% at 50% 60%, #0d1220 0%, #060810 100%)',
           overflow:'hidden', userSelect:'none',
-          animation: visible ? 'cinemReveal 1.5s cubic-bezier(0.25,0.1,0.25,1) forwards' : 'none',
-          opacity: visible ? undefined : 0,
+          animation: visible ? 'scaleReveal 1.2s cubic-bezier(0.25,0.1,0.25,1) forwards' : 'none',
+          opacity: 1,
           cursor: dragging ? 'grabbing' : 'grab',
         }}
         onMouseDown={onMouseDown}
@@ -712,14 +765,20 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
           background:'radial-gradient(ellipse 88% 88% at 50% 50%, transparent 38%, rgba(0,0,0,.75) 100%)',
         }} />
 
-        {/* Cinematic reveal overlay — fades out slowly giving "lights coming up" feel */}
-        {visible && (
-          <div style={{
-            position:'absolute', inset:0, zIndex:7, pointerEvents:'none',
-            background:'#000',
-            animation:'overlayOut 1.8s cubic-bezier(0.4,0,0.6,1) 0.1s forwards',
+        {/* Film strip transition — 14 horizontal bars peel away top-to-bottom */}
+        {visible && Array.from({length:14}, (_,i) => (
+          <div key={i} style={{
+            position:'absolute', left:0, right:0, zIndex:8, pointerEvents:'none',
+            top:`${(i/14)*100}%`,
+            height:`calc(100% / 14 + 2px)`,
+            background: i%2===0
+              ? 'linear-gradient(90deg,#0c0520,#09031a,#0c0520)'
+              : 'linear-gradient(90deg,#0a0418,#060213,#0a0418)',
+            transformOrigin:'top center',
+            animation:`filmPeel 0.38s cubic-bezier(0.6,0,0.8,1) ${i*48}ms forwards`,
+            willChange:'transform',
           }} />
-        )}
+        ))}
 
         {/* ── Header HUD ── */}
         <div style={{
