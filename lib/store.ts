@@ -63,10 +63,6 @@ export const useAuthStore = create<AuthState>()(
       unreadCount: 0,
       unreadMessageCount: 0,
       setAuth: (user, accessToken, refreshToken, capabilities = null, sidebar = null) => {
-        // Token'ı localStorage'a kaydet (middleware ve diğer kontroller için)
-        if (typeof window !== 'undefined' && accessToken) {
-          localStorage.setItem('access_token', accessToken)
-        }
         set({ user, accessToken, refreshToken, capabilities, sidebar })
       },
       setUser: (user, capabilities = null, sidebar = null) => {
@@ -84,10 +80,6 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({ ...state, sidebar }))
       },
       updateTokens: (accessToken, refreshToken) => {
-        // Token'ı localStorage'a kaydet (API interceptor için)
-        if (typeof window !== 'undefined' && accessToken) {
-          localStorage.setItem('access_token', accessToken)
-        }
         set((state) => ({
           accessToken,
           refreshToken: refreshToken || state.refreshToken,
@@ -95,10 +87,8 @@ export const useAuthStore = create<AuthState>()(
       },
       clearAuth: () => {
         set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0, unreadMessageCount: 0 })
-        // 🔥 Logout durumunda localStorage'dan rolleri ve token'ı temizle
         if (typeof window !== 'undefined') {
           localStorage.removeItem('feellink_roles')
-          localStorage.removeItem('access_token')
         }
       },
       refreshUser: async () => {
@@ -128,6 +118,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      partialize: (state) => ({
+        user: state.user,
+        capabilities: state.capabilities,
+        sidebar: state.sidebar,
+      }),
     }
   )
 )

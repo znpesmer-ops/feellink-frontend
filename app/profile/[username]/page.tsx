@@ -11,7 +11,7 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit, Bookmark } from 'lucide-react'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit, Bookmark, Sparkles } from 'lucide-react'
 import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 // ✅ Legacy badge component'leri kaldırıldı - sadece activeRole gösterilecek
@@ -30,6 +30,7 @@ import { EditPostModal } from '@/components/profile/EditPostModal'
 import { Avatar } from '@/components/ui/Avatar'
 import { safeAvatar } from '@/lib/avatar-constants'
 import { ProfileColorSignature } from '@/components/profile/ProfileColorSignature'
+import { ArtGallery3D } from '@/components/gallery/ArtGallery3D'
 
 function ProfileContent() {
   const params = useParams()
@@ -74,6 +75,7 @@ function ProfileContent() {
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved'>(initialTab)
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
+  const [galleryOpen, setGalleryOpen] = useState(false)
   
   // Tab değiştiğinde URL'yi güncelle (sayfa yenilendiğinde korunur)
   const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved') => {
@@ -407,6 +409,7 @@ function ProfileContent() {
     { key: 'events', label: 'Etkinlikler', icon: FiCalendar },
     // Kaydedilenler sekmesi sadece kendi profili için görünür
     ...(isMe ? [{ key: 'saved', label: 'Kaydedilenler', icon: Bookmark }] : []),
+    { key: 'gallery', label: 'Sergi', icon: Sparkles },
   ]
   
   // Plan kontrolü kaldırıldı - artık tüm sekmeler herkes için görünür
@@ -1363,7 +1366,7 @@ function ProfileContent() {
                 onMouseLeave={() => setHoveredTab(null)}
               >
                 <button
-                  onClick={() => handleTabChange(tab.key as any)}
+                  onClick={() => { if (tab.key === 'gallery') { setGalleryOpen(true) } else { handleTabChange(tab.key as any) } }}
                   className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
                     isActive
                       ? 'text-brand-orange'
@@ -1990,6 +1993,12 @@ function ProfileContent() {
           </div>
         </div>
       )}
+
+      <ArtGallery3D
+        artworks={userArtworks || []}
+        isOpen={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+      />
     </>
   )
 }
