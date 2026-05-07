@@ -1272,18 +1272,15 @@ export default function MessagesPage() {
           return cachedMessages
         }
         
-        // Aynı conversation ise, merge yap (socket'ten gelen yeni mesajları koru)
+        // Aynı conversation ise, merge yap — pending (temp) mesajları koru
         const merged = [...cachedMessages]
         const loadedIds = new Set(cachedMessages.map((m: Message) => m.id))
-        
-        // Socket'ten gelen ama henüz API'de olmayan mesajları ekle
+
+        // Sunucudan gelmeyen mesajları koru (optimistic + socket mesajları)
         prev.forEach((prevMsg) => {
           if (prevMsg.conversationId === conversationId && !loadedIds.has(prevMsg.id)) {
-            // Temp mesajlar hariç (bunlar zaten gerçek mesajla değiştirilecek)
-            if (!prevMsg.id.startsWith('temp_')) {
-              console.log('📥 [Frontend] Keeping socket message that not yet in API:', prevMsg.id)
-              merged.push(prevMsg)
-            }
+            // Temp/pending mesajları da koru — sunucuya ulaşmadan polling gelirse kaybolmasın
+            merged.push(prevMsg)
           }
         })
         
