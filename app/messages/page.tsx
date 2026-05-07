@@ -147,10 +147,11 @@ export default function MessagesPage() {
       return response.data || []
     },
     enabled: !!accessToken,
-    staleTime: Infinity, // ✅ Conversations her zaman fresh kabul edilsin
+    staleTime: 5000,
     gcTime: Infinity, // ✅ Cache hiç temizlenmesin (kalıcılık için - route değişiminde kaybolmasın)
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, // ✅ Cache'den yükle, her mount'ta refetch yapma (kalıcılık için)
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    refetchInterval: 8000,
     retry: 3,
     // ✅ KRİTİK: Placeholder data'yı cache'den oku (route değişiminde kaybolmasın)
     placeholderData: () => {

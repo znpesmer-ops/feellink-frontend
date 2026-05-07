@@ -103,6 +103,10 @@ export const initSocket = (token: string): Socket => {
 }
 
 export const initChatSocket = (token: string): Socket => {
+  // Chat socket disabled in production (Vercel serverless incompatible), REST polling used instead
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return { on: () => {}, off: () => {}, emit: () => {}, connected: false, disconnect: () => {} } as any
+  }
   // Eğer socket zaten bağlıysa ve token aynıysa, mevcut socket'i döndür
   const currentAuth = chatSocket?.auth as { token?: string } | undefined
   if (chatSocket?.connected && currentAuth?.token === token) {

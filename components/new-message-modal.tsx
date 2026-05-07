@@ -45,7 +45,9 @@ export function NewMessageModal({ onClose, onSelect }: NewMessageModalProps) {
     setLoading(true)
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const response = await api.get(`/users/search?q=${encodeURIComponent(query.trim())}`)
+        const response = await api.get('/search/users', {
+          params: { q: query.trim(), limit: 20 },
+        })
         setResults(response.data || [])
       } catch (error) {
         console.error('Failed to search users:', error)

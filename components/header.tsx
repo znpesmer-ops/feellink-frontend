@@ -65,11 +65,12 @@ export function Header({ forceMobile = false }: HeaderProps = {}) {
         const response = await api.get<SearchUser[]>('/search/users', {
           params: { q: searchQuery.trim(), limit: 10 },
         })
-        setSearchResults(response.data)
+        setSearchResults(response.data || [])
         setIsSearchOpen(true)
       } catch (error) {
         console.error('Search error:', error)
         setSearchResults([])
+        setIsSearchOpen(true)
       } finally {
         setIsLoading(false)
       }
