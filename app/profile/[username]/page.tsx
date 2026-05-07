@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ProfileSortableThreeColumnGrid } from '@/components/profile/ProfileSortableThreeColumnGrid'
 import api from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { AuthGuard } from '@/lib/auth-guard'
@@ -11,491 +12,672 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, Edit, Bookmark, Sparkles } from 'lucide-react'
-import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock } from 'react-icons/fi'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, BarChart3, Lock, Sparkles } from 'lucide-react'
+import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock, FiBookmark } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
-// ✅ Legacy badge component'leri kaldırıldı - sadece activeRole gösterilecek
-// import UserBadge from '@/components/UserBadge'
-// import { UserBadges } from '@/components/profile/UserBadges'
-// import { ProRoleBadge } from '@/components/ProRoleBadge'
+import { UserBadges } from '@/components/profile/UserBadges'
+import { FeellinkRoleBadge } from '@/components/FeellinkRoleBadge'
 import { ROLE_METADATA, normalizeRole } from '@/lib/role-utils'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
+import { GC_STANDARD, STALE_SHORT } from '@/lib/query-config'
 import { ProfileArtworksGrid } from '@/components/profile/ProfileArtworksGrid'
 import toast from 'react-hot-toast'
 import { ProfileCommentsList } from '@/components/profile/ProfileCommentsList'
 import { ArtistHighlights } from '@/components/profile/ArtistHighlights'
-import { SavedArtworks } from '@/components/profile/SavedArtworks'
-import ZoomModal from '@/components/common/ZoomModal'
-import { EditPostModal } from '@/components/profile/EditPostModal'
-import { Avatar } from '@/components/ui/Avatar'
-import { safeAvatar } from '@/lib/avatar-constants'
-import { ProfileColorSignature } from '@/components/profile/ProfileColorSignature'
+import { ProfileAnalysisPanel } from '@/components/profile/ProfileAnalysisPanel'
 import { ArtGallery3D } from '@/components/gallery/ArtGallery3D'
+import ZoomModal from '@/components/common/ZoomModal'
+import {
+  type ProfileGridSortMode,
+  sortProfileItems,
+  applyPostReorderInUserPostsCache,
+  applyArtworkReorderInUserPostsCache,
+} from '@/lib/profileGridSort'
+
+const LS_PROFILE_SORT_POSTS = 'feellink-profile-sort-posts'
+const LS_PROFILE_SORT_ARTWORKS = 'feellink-profile-sort-artworks'
+
+function readProfileGridSortMode(key: string): ProfileGridSortMode {
+  if (typeof window === 'undefined') return 'newest'
+  try {
+    const v = localStorage.getItem(key)
+    if (v === 'newest' || v === 'oldest' || v === 'custom') return v
+  } catch {
+    /* ignore */
+  }
+  return 'newest'
+}
+
+function persistProfileGridSortMode(key: string, mode: ProfileGridSortMode) {
+  try {
+    localStorage.setItem(key, mode)
+  } catch {
+    /* ignore */
+  }
+}
+
+// 🔖 Kaydedilenler Grid Component
+function SavedPostsGrid() {
+  const queryClient = useQueryClient()
+  const { accessToken, user } = useAuthStore() // ✅ user ekle!
+  const [selectedPost, setSelectedPost] = useState<any>(null)
+
+  // Get saved posts
+  const { data: savedPosts, isLoading, error } = useQuery({
+    queryKey: ['saved-posts'],
+    queryFn: async () => {
+      console.log('🔖 [SavedPostsGrid] Fetching saved posts...')
+      console.log('🔖 [SavedPostsGrid] API base URL:', api.defaults.baseURL)
+      console.log('🔖 [SavedPostsGrid] Full URL:', `${api.defaults.baseURL}/posts/saved`)
+      
+      // ✅ KRİTİK: localStorage'dan önceki data'yı yükle (sayfa yenilendiğinde korunur!)
+      const localStorageKey = `saved-posts-${user?.id || 'anonymous'}`;
+      let localStorageData: any[] | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem(localStorageKey);
+          if (stored) {
+            localStorageData = JSON.parse(stored);
+            console.log('✅ [SavedPostsGrid] localStorage\'dan yüklendi:', localStorageData?.length || 0, 'posts');
+          }
+        } catch (e) {
+          console.warn('⚠️ [SavedPostsGrid] localStorage parse hatası:', e);
+        }
+      }
+      
+      try {
+        const response = await api.get('/posts/saved')
+        console.log('✅ [SavedPostsGrid] SUCCESS - Response:', {
+          status: response.status,
+          dataType: typeof response.data,
+          isArray: Array.isArray(response.data),
+          length: Array.isArray(response.data) ? response.data.length : 'N/A',
+          data: response.data,
+        })
+        
+        // ✅ EĞER BOŞ İSE DAHA DETAYLI LOG!
+        if (Array.isArray(response.data) && response.data.length === 0) {
+          console.warn('⚠️ [SavedPostsGrid] BACKEND BOŞ DÖNDÜ!')
+          console.warn('⚠️ [SavedPostsGrid] Muhtemel sebepler:')
+          console.warn('   1. Hiç kayıtlı post yok (DB query boş)')
+          console.warn('   2. Backend filter çok katı (media yok diye atıyor)')
+          console.warn('   3. User ID mapping hatası')
+          console.warn('⚠️ [SavedPostsGrid] Vercel backend log\'larını kontrol et!')
+        }
+        
+        const result = Array.isArray(response.data) ? response.data : (response.data?.posts || [])
+        console.log('✅ [SavedPostsGrid] Final result:', result.length, 'posts')
+        
+        // ✅ KRİTİK: Backend boş array döndü ama localStorage'da data varsa, localStorage'ı kullan!
+        if (result.length === 0 && localStorageData && localStorageData.length > 0) {
+          console.warn('⚠️ [SavedPostsGrid] Backend boş döndü ama localStorage\'da data var, localStorage kullanılıyor!');
+          console.warn('⚠️ [SavedPostsGrid] localStorage\'daki post sayısı:', localStorageData.length);
+          return localStorageData; // ✅ localStorage'daki data'yı koru!
+        }
+        
+        // ✅ Backend'den data geldiyse localStorage'a kaydet!
+        if (result.length > 0 && typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(localStorageKey, JSON.stringify(result));
+            console.log('✅ [SavedPostsGrid] localStorage\'a kaydedildi:', result.length, 'posts');
+          } catch (e) {
+            console.warn('⚠️ [SavedPostsGrid] localStorage kaydetme hatası:', e);
+          }
+        }
+        
+        // ✅ İlk post detayı
+        if (result.length > 0) {
+          console.log('✅ [SavedPostsGrid] İLK POST:', {
+            id: result[0]?.id,
+            hasMedia: !!result[0]?.media,
+            mediaLength: result[0]?.media?.length,
+            firstMediaUrl: result[0]?.media?.[0]?.url,
+          })
+        }
+        
+        return result
+      } catch (fetchError: any) {
+        console.error('❌ [SavedPostsGrid] ========== FETCH ERROR ==========');
+        console.error('❌ [SavedPostsGrid] Error message:', fetchError?.message);
+        console.error('❌ [SavedPostsGrid] Status code:', fetchError?.response?.status);
+        console.error('❌ [SavedPostsGrid] Status text:', fetchError?.response?.statusText);
+        console.error('❌ [SavedPostsGrid] Error data:', fetchError?.response?.data);
+        console.error('❌ [SavedPostsGrid] Request URL:', fetchError?.config?.url);
+        console.error('❌ [SavedPostsGrid] Full error:', fetchError);
+        
+        // STATUS CODE KONTROLÜ (logout yok; auth sadece global interceptor'da yönetilir)
+        if (fetchError?.response?.status === 401) {
+          console.warn('🚨 [SavedPostsGrid] 401 UNAUTHORIZED - auth interceptor handles logout if needed');
+        } else if (fetchError?.response?.status === 500) {
+          console.error('🚨 [SavedPostsGrid] 500 INTERNAL SERVER ERROR!');
+          console.error('🚨 [SavedPostsGrid] Backend crash oluyor!');
+          console.error('🚨 [SavedPostsGrid] Vercel backend log\'larını kontrol et!');
+        } else if (!fetchError?.response) {
+          console.error('🚨 [SavedPostsGrid] NETWORK ERROR!');
+          console.error('🚨 [SavedPostsGrid] Backend\'e erişilemiyor veya CORS hatası!');
+        }
+        
+        console.error('❌ [SavedPostsGrid] ========== END ERROR ==========');
+        
+        // ✅ KRİTİK: Error durumunda localStorage'dan yükle!
+        if (localStorageData && localStorageData.length > 0) {
+          console.warn('⚠️ [SavedPostsGrid] Error ama localStorage\'da data var, localStorage kullanılıyor!');
+          return localStorageData; // ✅ localStorage'daki data'yı koru!
+        }
+        
+        // ❌ BOŞ ARRAY DÖNME! Mevcut cache'i koru!
+        const cachedData = queryClient.getQueryData(['saved-posts']) as any[] | undefined;
+        if (cachedData && cachedData.length > 0) {
+          console.warn('⚠️ [SavedPostsGrid] Error ama cache\'de data var, cache kullanılıyor!');
+          return cachedData; // ✅ Cache'deki data'yı koru!
+        }
+        return [] // Sadece cache yoksa boş array dön
+      }
+    },
+    enabled: !!accessToken && !!user?.id, // ✅ KRİTİK: Token VE user.id varsa query çalışsın!
+    staleTime: 5 * 60 * 1000, // ✅ 5 dakika stale time (sayfa yenilendiğinde cache kullan)
+    refetchOnMount: true, // ✅ Mount olduğunda refetch (fresh data için)
+    refetchOnWindowFocus: false, // ❌ Window focus'ta refetch YOK! (optimistic update'i bozmamak için)
+    refetchOnReconnect: true, // ✅ Reconnect olduğunda refetch
+    gcTime: 10 * 60 * 1000, // ✅ 10 dakika cache'de tut
+    // ✅ KRİTİK: placeholderData ile cache korunur! Boş array ile overwrite ETME!
+    placeholderData: (previousData) => {
+      // Eğer önceki data varsa onu kullan (sayfa yenilendiğinde kaybolmasın!)
+      if (previousData && Array.isArray(previousData) && previousData.length > 0) {
+        console.log('✅ [SavedPostsGrid] Using cached placeholder data:', previousData.length, 'posts');
+        return previousData;
+      }
+      return undefined; // Cache yoksa undefined dön, query çalışsın
+    },
+  })
+
+  // Debug log - DETAYLI
+  console.log('🔖 [SavedPostsGrid] Render state:', {
+    isLoading,
+    hasError: !!error,
+    errorDetails: error,
+    savedPostsCount: savedPosts?.length || 0,
+    savedPosts,
+    firstPost: savedPosts?.[0],
+  })
+  
+  // Backend'den gelen data yapısını kontrol et
+  if (savedPosts && savedPosts.length > 0) {
+    console.log('✅ [SavedPostsGrid] İLK POST DETAYI:', {
+      id: savedPosts[0]?.id,
+      caption: savedPosts[0]?.caption?.substring(0, 50),
+      hasMedia: !!savedPosts[0]?.media,
+      mediaCount: savedPosts[0]?.media?.length,
+      user: savedPosts[0]?.user?.username,
+      counts: savedPosts[0]?._count,
+    })
+  }
+
+  // Unsave mutation
+  const unsaveMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      await api.delete(`/posts/${postId}/save`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-posts'] })
+      toast.success('Kayıtlı gönderilerden kaldırıldı')
+    },
+  })
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange mx-auto"></div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Kaydedilenler yükleniyor...</p>
+      </div>
+    )
+  }
+
+  if (!savedPosts || savedPosts.length === 0) {
+    console.warn('⚠️ [SavedPostsGrid] BOŞ ARRAY - Backend query başarısız veya hiç kayıtlı post yok')
+    return (
+      <div className="text-center py-16">
+        <FiBookmark className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+        <p className="text-gray-500 dark:text-gray-400 font-medium">Henüz kayıtlı gönderi yok</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+          Beğendiğin gönderileri kaydet, buradan tekrar bak
+        </p>
+      </div>
+    )
+  }
+  
+  console.log(`✅ [SavedPostsGrid] GRID RENDER EDİLİYOR: ${savedPosts.length} posts`)
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2">
+        {savedPosts.map((savedPost: any) => {
+          const post = savedPost.post || savedPost
+          const firstMedia = post?.media?.[0]
+
+          return (
+            <div
+              key={post.id}
+              className="relative aspect-square bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden cursor-pointer group"
+              onClick={() => setSelectedPost(post)}
+            >
+              {firstMedia ? (
+                <img
+                  src={resolveImageUrl(firstMedia.url)}
+                  alt=""
+                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700">
+                  <ImageIcon className="w-8 h-8 text-gray-400" />
+                </div>
+              )}
+
+              {/* Hover overlay */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <div className="flex items-center gap-4 text-white">
+                  <div className="flex items-center gap-1">
+                    <Heart size={20} fill="white" />
+                    <span className="font-semibold">{post._count?.likes || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MessageCircle size={20} fill="white" />
+                    <span className="font-semibold">{post._count?.comments || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unsave button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  unsaveMutation.mutate(post.id)
+                }}
+                className="absolute top-2 right-2 p-2 rounded-full bg-white/90 dark:bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-black/80"
+                title="Kayıtlılardan kaldır"
+              >
+                <FiBookmark className="w-4 h-4 text-brand-orange" fill="currentColor" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Post Modal */}
+      {selectedPost && (
+        <PostModal
+          postId={selectedPost.id}
+          onClose={() => setSelectedPost(null)}
+        />
+      )}
+    </>
+  )
+}
 
 function ProfileContent() {
   const params = useParams()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { accessToken, user: currentUser, capabilities } = useAuthStore()
   const queryClient = useQueryClient()
   
-  // 🔥 KRİTİK: Parametreyi array olabilir kontrolü ile string'e zorla ve decode et
+  // 🔥 KRİTİK: Parametreyi array olabilir kontrolü ile string'e zorla
   const rawParam = params.username
-  const rawParamString = Array.isArray(rawParam) ? rawParam[0] : (rawParam || '')
-  const decodedParam = decodeURIComponent(rawParamString) // URL decode (Sude%20Esmer -> Sude Esmer)
+  const paramUsername = Array.isArray(rawParam) ? rawParam[0] : (rawParam || '')
   
-  // Parametreyi al - backend'den kontrol edilecek, frontend tahmin etmeyecek
-  const paramUsername = decodedParam || ''
+  // 🔥 KRİTİK: "me" parametresini currentUser.username'e çevir - GARANTİLİ DÖNÜŞÜM
+  // Eğer "me" ise ve currentUser.username yoksa, /users/me endpoint'ini kullan
+  const isMe = paramUsername === 'me'
+  const username = isMe ? (currentUser?.username || '') : paramUsername
   
-  // isMe'yi useMemo ile memoize et - infinite loop'u önlemek için
-  const isMe = useMemo(() => {
-    if (!currentUser?.id) return false
-    return paramUsername === 'me' || paramUsername === currentUser.id || paramUsername === currentUser.username
-  }, [paramUsername, currentUser?.id, currentUser?.username])
-  
-  // Username değişkenini güvenli şekilde tanımla
-  const username: string = useMemo(() => {
-    if (isMe && currentUser?.username) {
-      return currentUser.username
-    }
-    return paramUsername || ''
-  }, [isMe, currentUser?.username, paramUsername])
-  
-  // Aktif tab'ı URL query parameter'ından oku (sayfa yenilendiğinde korunur)
-  const validTabs: Array<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery'> = ['posts', 'articles', 'comments', 'artworks', 'events', 'drafts', 'saved', 'gallery']
-  const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery' | null
-  const initialTab = (tabFromUrl && validTabs.includes(tabFromUrl)) ? tabFromUrl : 'posts'
-  
+  // 🔥 KRİTİK: Parametre geçersizse erken return
+  if (!paramUsername && !isMe) {
+    return (
+      <div className="text-center py-12">
+        <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-semibold mb-2">Geçersiz profil adresi</p>
+          <p className="text-xs">Profil sayfası yüklenemedi. Lütfen tekrar deneyin.</p>
+        </div>
+      </div>
+    )
+  }
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [postType, setPostType] = useState<'post' | 'artwork'>('post')
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [postType, setPostType] = useState<'post' | 'artwork'>('post')
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery'>(initialTab)
-  const [hoveredTab, setHoveredTab] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'analysis' | 'gallery'>('posts')
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [galleryCarouselIdx, setGalleryCarouselIdx] = useState(0)
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null)
+  const [postsSortMode, setPostsSortModeState] = useState<ProfileGridSortMode>(() =>
+    readProfileGridSortMode(LS_PROFILE_SORT_POSTS),
+  )
+  const [artworksSortMode, setArtworksSortModeState] = useState<ProfileGridSortMode>(() =>
+    readProfileGridSortMode(LS_PROFILE_SORT_ARTWORKS),
+  )
 
-  // Tab değiştiğinde URL'yi güncelle (sayfa yenilendiğinde korunur)
-  const handleTabChange = (tab: 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery') => {
-    setActiveTab(tab)
-    // URL query parameter'ını güncelle (replace kullanarak history'ye ekleme)
-    const currentUrl = new URL(window.location.href)
-    if (tab === 'posts') {
-      // 'posts' varsayılan tab, URL'den kaldır
-      currentUrl.searchParams.delete('tab')
-    } else {
-      currentUrl.searchParams.set('tab', tab)
-    }
-    router.replace(currentUrl.pathname + currentUrl.search, { scroll: false })
+  const setPostsSortMode = (m: ProfileGridSortMode) => {
+    setPostsSortModeState(m)
+    persistProfileGridSortMode(LS_PROFILE_SORT_POSTS, m)
   }
-  
-  // URL'den tab değiştiğinde state'i güncelle (sadece ilk yüklemede)
-  useEffect(() => {
-    const tabFromUrl = searchParams.get('tab') as 'posts' | 'articles' | 'comments' | 'artworks' | 'events' | 'drafts' | 'saved' | 'gallery' | null
-    if (tabFromUrl && validTabs.includes(tabFromUrl) && tabFromUrl !== activeTab) {
-      setActiveTab(tabFromUrl)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Sadece ilk yüklemede çalış
-
-  // Eserler sekmesinde action=upload kontrolü - Eser yükleme modalını aç
-  useEffect(() => {
-    const action = searchParams.get('action')
-    if (activeTab === 'artworks' && action === 'upload') {
-      setPostType('artwork')
-      setShowCreateModal(true)
-      // URL'den action parametresini kaldır (temiz URL)
-      const currentUrl = new URL(window.location.href)
-      currentUrl.searchParams.delete('action')
-      router.replace(currentUrl.pathname + currentUrl.search, { scroll: false })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, searchParams])
-  const [profilePosts, setProfilePosts] = useState<any[]>([])
+  const setArtworksSortMode = (m: ProfileGridSortMode) => {
+    setArtworksSortModeState(m)
+    persistProfileGridSortMode(LS_PROFILE_SORT_ARTWORKS, m)
+  }
   const [zoomImage, setZoomImage] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [editingPost, setEditingPost] = useState<any | null>(null)
-  const [showBlockModal, setShowBlockModal] = useState(false)
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
-  // 🔥 KRİTİK: Token yoksa hemen login'e yönlendir
-  useEffect(() => {
-    if (!accessToken) {
-      const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-      if (!tokenFromStorage) {
-        // Hemen redirect yap - bekleme
-        window.location.href = '/login'
-      }
-    }
-  }, [accessToken, router])
+  // Profil isteği zaman aşımı (sonsuz loading önlenir) — Vercel cold-start için 25s
+  const PROFILE_FETCH_TIMEOUT_MS = 25000
 
   // Get profile data
   const { data: profile, isLoading, error: profileError } = useQuery({
     queryKey: ['profile', username, paramUsername, currentUser?.id],
     queryFn: async () => {
-      // 🔥 KRİTİK: "me" parametresi için önce /users/me endpoint'ini dene
-      if (paramUsername === 'me') {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Profil yüklenemedi. Zaman aşımı. Lütfen sayfayı yenileyin.')), PROFILE_FETCH_TIMEOUT_MS)
+      )
+      const fetchProfile = async () => {
+        // "me" parametresi için önce /users/me endpoint'ini dene
+        if (paramUsername === 'me') {
+          try {
+            const meResponse = await api.get('/users/me')
+            const meData = meResponse.data
+            if (!meData) throw new Error('Kullanıcı bilgisi alınamadı')
+            if (meData?.username) {
+              const profileResponse = await api.get(`/users/profile/${meData.username}`)
+              if (profileResponse.data) return profileResponse.data
+            }
+            throw new Error('Kullanıcı adı bulunamadı')
+          } catch (err: any) {
+            if (currentUser?.username) {
+              try {
+                const response = await api.get(`/users/profile/${currentUser.username}`)
+                if (response.data) return response.data
+              } catch {
+                throw new Error('Profil yüklenemedi.')
+              }
+            }
+            const status = err?.response?.status
+            const isAuthError = status === 401 || status === 403
+            const fallbackMessage = isAuthError
+              ? 'Oturum geçersiz. Lütfen tekrar giriş yapın.'
+              : 'Profil yüklenemedi.'
+            throw new Error(err?.response?.data?.message || err?.message || fallbackMessage)
+          }
+        }
+        if (!username || username === 'undefined' || username === 'null') {
+          throw new Error('Geçersiz kullanıcı adı')
+        }
         try {
-          // Önce /users/me ile kullanıcı bilgisini al
-          const meResponse = await api.get('/users/me')
-          const meData = meResponse.data
-          
-          // 🔥 KRİTİK: Response kontrolü
-          if (!meData) {
-            throw new Error('Kullanıcı bilgisi alınamadı')
-          }
-          
-          if (meData?.username) {
-            // Username bulundu, profile endpoint'ini kullan
-            const profileResponse = await api.get(`/users/profile/${meData.username}`)
-            if (profileResponse.data) {
-              console.log('🔍 Profile Data:', {
-                activeRole: profileResponse.data.activeRole,
-                roles: profileResponse.data.roles,
-                isAdmin: profileResponse.data.isAdmin,
-              })
-            }
-            return profileResponse.data
-          }
-          
-          throw new Error('Kullanıcı adı bulunamadı')
+          const response = await api.get(`/users/profile/${username}`)
+          return response.data
         } catch (err: any) {
-          // 401 hatası durumunda login'e yönlendir
-          if (err?.response?.status === 401) {
-            console.error('[Profile] Unauthorized - redirecting to login')
-            useAuthStore.getState().clearAuth()
-            router.push('/login')
-            throw err
-          }
-          
-          console.warn('Failed to fetch /users/me, falling back to username:', err)
-          
-          // Fallback 1: currentUser.username kullan
-          if (currentUser?.username) {
-            try {
-              const response = await api.get(`/users/profile/${currentUser.username}`)
-              if (response.data) {
-                console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
-              }
-              return response.data
-            } catch (fallbackErr: any) {
-              // 401 hatası durumunda login'e yönlendir
-              if (fallbackErr?.response?.status === 401) {
-                console.error('[Profile] Unauthorized in fallback - redirecting to login')
-                useAuthStore.getState().clearAuth()
-                router.push('/login')
-                throw fallbackErr
-              }
-              
-              // Fallback 2: currentUser.id kullan
-              if (currentUser?.id) {
-                try {
-                  const response = await api.get(`/users/profile/${currentUser.id}`)
-                  if (response.data) {
-                    return response.data
-                  }
-                } catch (idErr: any) {
-                  // 401 hatası durumunda login'e yönlendir
-                  if (idErr?.response?.status === 401) {
-                    console.error('[Profile] Unauthorized in id fallback - redirecting to login')
-                    useAuthStore.getState().clearAuth()
-                    router.push('/login')
-                    throw idErr
-                  }
-                  
-                  // Son fallback: Backend'den gelen hata mesajını kullan
-                  throw new Error(fallbackErr?.response?.data?.message || idErr?.response?.data?.message || 'Profil yüklenemedi')
-                }
-              }
-              throw new Error(fallbackErr?.response?.data?.message || 'Profil yüklenemedi')
-            }
-          }
-          
-          // Fallback 3: currentUser.id ile dene
-          if (currentUser?.id) {
-            try {
-              const response = await api.get(`/users/profile/${currentUser.id}`)
-              if (response.data) {
-                return response.data
-              }
-            } catch (idErr: any) {
-              if (idErr?.response?.status === 401) {
-                useAuthStore.getState().clearAuth()
-                router.push('/login')
-                throw idErr
-              }
-              throw new Error(idErr?.response?.data?.message || err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı')
-            }
-          }
-          
-          throw new Error(err?.response?.data?.message || err?.message || 'Kullanıcı bilgisi bulunamadı')
+          throw new Error(err?.response?.data?.message || err?.message || 'Profil yüklenemedi')
         }
       }
-      
-      // Normal username veya id ile profil çek - backend kontrol edecek
-      if (!username || username === 'undefined' || username === 'null') {
-        throw new Error('Geçersiz kullanıcı adı.')
-      }
-      
-      try {
-        // Backend hem username hem id ile çalışacak şekilde güncellenecek
-        const response = await api.get(`/users/profile/${encodeURIComponent(username)}`)
-        // Debug: Log profile data to check role value
-        if (response.data) {
-          console.log('🔍 Profile Role:', response.data.role, 'Type:', typeof response.data.role)
-        }
-        return response.data
-      } catch (err: any) {
-        // 401 hatası durumunda login'e yönlendir
-        if (err?.response?.status === 401) {
-          console.error('[Profile] Unauthorized - redirecting to login')
-          useAuthStore.getState().clearAuth()
-          router.push('/login')
-          throw err
-        }
-        
-        // Backend'den gelen hata mesajını kullan
-        throw new Error(err?.response?.data?.message || err?.message || 'Profil yüklenemedi')
-      }
+      return Promise.race([fetchProfile(), timeoutPromise])
     },
-    // Query enabled koşulu: accessToken varsa ve (username varsa veya "me" parametresi varsa)
-    // "me" durumunda username currentUser'dan gelecek, bu yüzden enabled her zaman true olmalı
-    // Sayfa yenilendiğinde username boş olabilir, bu durumda query çalışmamalı (redirect'i engelle)
-    enabled: !!accessToken && (paramUsername === 'me' ? !!currentUser?.id : (!!username && username !== 'undefined' && username !== 'null')),
-    // Profil query'si invalidate edildiğinde refetch sırasında boş gelmesini engelle
-    // placeholderData ile stale data'yı göster, böylece sayfa yenilendiğinde redirect olmaz
-    placeholderData: (previousData) => previousData,
+    enabled: !!accessToken && (!!username || paramUsername === 'me'),
     retry: (failureCount, error: any) => {
-      // 401 hatası için retry yapma
-      if (error?.response?.status === 401) {
-        return false
-      }
-      // Geçersiz parametreler için retry yapma
-      if (error?.message?.includes('Geçersiz') || error?.message?.includes('bulunamadı')) {
-        return false
-      }
+      if (error?.message?.includes('Geçersiz') || error?.message?.includes('bulunamadı')) return false
+      // Timeout: 1 otomatik retry (cold-start için)
+      if (error?.message?.includes('Zaman aşımı')) return failureCount < 1
       return failureCount < 2
     },
+    retryDelay: 1500,
+    staleTime: STALE_SHORT,
+    gcTime: GC_STANDARD,
   })
-
-  // 🔒 401 hatası durumunda login'e yönlendir - HEMEN!
-  useEffect(() => {
-    if (profileError && (profileError as any)?.response?.status === 401) {
-      console.error('[Profile] Unauthorized error detected - redirecting to login')
-      useAuthStore.getState().clearAuth()
-      // Hemen redirect yap - bekleme
-      window.location.href = '/login'
-      return
-    }
-  }, [profileError, router])
-
-  // 🔒 GÜVENLİ REDIRECT - Sadece gerekli durumlarda ve guard'larla
-  useEffect(() => {
-    // Guard: currentUser yoksa hiçbir şey yapma
-    if (!currentUser?.id) return
-    
-    // Guard: Zaten /profile/me'deyse redirect yapma (infinite loop önleme)
-    if (paramUsername === 'me') return
-    
-    // Guard: isLoading devam ediyorsa bekle
-    if (isLoading) return
-    
-    // Guard: Sadece kendi profiliyse (username veya id ile) ve profil yüklenemezse redirect et
-    // paramUsername === 'me' kontrolü yukarıda yapıldı, burada sadece username/id kontrolü yap
-    const isOwnProfile = paramUsername === currentUser.username || paramUsername === currentUser.id
-    if (!profile && isOwnProfile) {
-      router.replace('/profile/me')
-    }
-  }, [isLoading, profile, currentUser?.id, currentUser?.username, paramUsername, router])
-
-  // Profil hatası durumunda kendi profiliyse redirect et (güvenli)
-  useEffect(() => {
-    // Guard: currentUser yoksa hiçbir şey yapma
-    if (!currentUser?.id) return
-    
-    // Guard: Zaten /profile/me'deyse redirect yapma (infinite loop önleme)
-    if (paramUsername === 'me') return
-    
-    // Guard: Hata yoksa veya hala yükleniyorsa bekle
-    if (!profileError || isLoading) return
-    
-    // Guard: Sadece kendi profiliyse (username veya id ile) redirect et
-    const isOwnProfile = paramUsername === currentUser.username || paramUsername === currentUser.id
-    if (isOwnProfile) {
-      router.replace('/profile/me')
-    }
-  }, [profileError, isLoading, currentUser?.id, currentUser?.username, paramUsername, router])
-
-  // Boşluklu isim veya geçersiz kullanıcı adı hatası için redirect (güvenli)
-  useEffect(() => {
-    // Guard: currentUser yoksa hiçbir şey yapma
-    if (!currentUser?.username) return
-    
-    // Guard: Zaten /profile/me'deyse redirect yapma
-    if (paramUsername === 'me') return
-    
-    // Guard: Hata yoksa veya hala yükleniyorsa bekle
-    if (!profileError || isLoading) return
-    
-    const errorMessage = profileError instanceof Error ? profileError.message : ''
-    const rawParamString = Array.isArray(params.username) ? params.username[0] : (params.username || '')
-    const decodedParamCheck = decodeURIComponent(rawParamString)
-    
-    // Sadece geçersiz kullanıcı adı hatası varsa redirect et
-    if ((errorMessage.includes('Geçersiz kullanıcı adı') || decodedParamCheck?.includes(' '))) {
-      router.replace('/profile/me')
-    }
-  }, [profileError, isLoading, currentUser?.username, params.username, paramUsername, router])
 
   // Helper function to check if user is corporate
   const isCorporateUser = profile?.role?.toUpperCase() === 'CORPORATE'
   
-  // Helper function to check if user can upload artwork (capability-based)
-  // ✅ KRİTİK: Yetki kontrolü HER ZAMAN giriş yapan kullanıcıdan (currentUser/me) okunur
-  // 🎯 Rol bazlı yetki kısıtları izole edildi (devre dışı, kod korunuyor)
-  // Tüm kullanıcılar tüm özelliklere erişebilir
-  const ALLOW_ALL_ROLES = true // Geri alınabilir flag
+  // Helper function to check if user is artist or corporate (plan kontrolü kaldırıldı)
+  // Profile yüklenene kadar güvenli kontrol
+  const isProArtist = profile 
+    ? (() => {
+        // Role string kontrolü (case-insensitive)
+        const roleStr = String(profile.role || '').toLowerCase()
+        const isRoleMatch = roleStr === 'artist' || roleStr === 'corporate'
+        
+        // Roles array kontrolü
+        const hasRoleInArray = Array.isArray(profile.roles) && (
+          profile.roles.includes('artist') || 
+          profile.roles.includes('corporate') ||
+          profile.roles.some((r: string) => String(r).toLowerCase() === 'artist') ||
+          profile.roles.some((r: string) => String(r).toLowerCase() === 'corporate')
+        )
+        
+        // Plan kontrolü kaldırıldı - artık sadece rol bazlı
+        const isArtistRole = profile.role === 'artist' || profile.role === 'ARTIST' || 
+                            (Array.isArray(profile.roles) && profile.roles.includes('artist'))
+        const isCorporateRole = profile.role === 'corporate' || profile.role === 'CORPORATE' ||
+                               (Array.isArray(profile.roles) && profile.roles.includes('corporate'))
+        
+        const result = isRoleMatch || hasRoleInArray || isArtistRole || isCorporateRole
+        
+        return result
+      })()
+    : false
 
-  // ❌ YANLIŞ: profile.role ile kontrol (başkasının profili olabilir)
-  // ✅ DOĞRU: currentUser veya capabilities ile kontrol
-  const canUploadArtwork = useMemo(() => {
-    // ✅ Tüm kullanıcılar eser yükleyebilir (rol kısıtı yok)
-    if (ALLOW_ALL_ROLES) {
-      return true
-    }
+  // Backend capabilities ile hizalı: eser oluşturabilen tüm roller (art_lover/collector dahil)
+  const canShowProfileArtworks =
+    typeof profile?.capabilities?.permissions?.canCreateArtworks === 'boolean'
+      ? profile.capabilities.permissions.canCreateArtworks
+      : isProArtist
+  
+  const isOwnProfile = Boolean(profile?.isOwnProfile)
+  const canViewAnalytics =
+    isOwnProfile ||
+    !profile?.isPrivate ||
+    Boolean(profile?.isFollowing)
 
-    // 🔄 Orijinal kod (geri alınabilir)
-    // Önce capabilities'den kontrol et (en güvenilir kaynak)
-    if (capabilities?.permissions?.canCreateArtworks) {
-      return true
+  // Tab config: saved sadece kendi profilde; analiz herkeste görünür (içerik erişimi ayrı)
+  const profileTabs = [
+    { key: 'posts', label: 'Gönderiler', icon: FiGrid, visible: true },
+    { key: 'artworks', label: 'Eserler', icon: FiImage, visible: true },
+    { key: 'articles', label: 'Yazılar', icon: FiFileText, visible: true },
+    { key: 'comments', label: 'Yorumlar', icon: FiMessageCircle, visible: true },
+    { key: 'events', label: 'Etkinlikler', icon: FiCalendar, visible: true },
+    { key: 'saved', label: 'Kaydedilenler', icon: FiBookmark, visible: isOwnProfile },
+    { key: 'analysis', label: 'Analiz', icon: BarChart3, visible: true },
+    { key: 'gallery', label: 'Sergi', icon: Sparkles, visible: true },
+  ].filter((tab) => tab.visible)
+
+  const tabs = profileTabs
+
+  // Geçersiz activeTab ise posts'a düş (saved sadece kendi profilde; analysis herkeste)
+  useEffect(() => {
+    if (!profile) return
+    const allowedKeys = [
+      'posts',
+      'artworks',
+      'articles',
+      'comments',
+      'events',
+      'analysis',
+      'gallery',
+      ...(isOwnProfile ? ['saved'] : []),
+    ]
+    if (!allowedKeys.includes(activeTab)) {
+      setActiveTab('posts')
     }
-    
-    // Fallback: currentUser'dan kontrol et
-    if (!currentUser) {
-      return false
-    }
-    
-    // Eser yükleme yetkisi olan roller
-    const artworkUploadRoles = ['artist', 'corporate', 'collector', 'gallery']
-    
-    // Role string kontrolü (case-insensitive)
-    const roleStr = String(currentUser.role || '').toLowerCase()
-    const isRoleMatch = artworkUploadRoles.includes(roleStr)
-    
-    // Roles array kontrolü
-    const hasRoleInArray = Array.isArray(currentUser.roles) && (
-      currentUser.roles.some((r: string) => artworkUploadRoles.includes(String(r).toLowerCase()))
-    )
-    
-    // Direct role checks (case-insensitive)
-    const hasArtworkRole = artworkUploadRoles.some(role => 
-      currentUser.role?.toLowerCase() === role || 
-      (Array.isArray(currentUser.roles) && currentUser.roles.some((r: string) => String(r).toLowerCase() === role))
-    )
-    
-    return isRoleMatch || hasRoleInArray || hasArtworkRole
-  }, [capabilities?.permissions?.canCreateArtworks, currentUser])
-  
-  // Tab yapısı - Tüm sekmeler (herkes için görünür, plan kontrolü kaldırıldı)
-  const allTabs = [
-    { key: 'posts', label: 'Gönderiler', icon: FiGrid },
-    { key: 'artworks', label: 'Eserler', icon: FiImage },
-    { key: 'articles', label: 'Yazılar', icon: FiFileText },
-    { key: 'comments', label: 'Yorumlar', icon: FiMessageCircle },
-    { key: 'events', label: 'Etkinlikler', icon: FiCalendar },
-    // Kaydedilenler sekmesi sadece kendi profili için görünür
-    ...(isMe ? [{ key: 'saved', label: 'Kaydedilenler', icon: Bookmark }] : []),
-    { key: 'gallery', label: 'Sergi', icon: Sparkles },
-  ]
-  
-  // Plan kontrolü kaldırıldı - artık tüm sekmeler herkes için görünür
-  const tabs = allTabs
+  }, [profile?.id, isOwnProfile, activeTab])
   
   // Debug: Tab'ların oluşturulmasını kontrol et (development'ta)
   useEffect(() => {
     if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && profile) {
       console.log('🔍 Profile Tab Debug:', {
         hasProfile: !!profile,
+        isOwnProfile,
         profileRole: profile?.role,
-        profileRoles: profile?.roles,
-        profilePlan: profile?.plan,
-        canUploadArtwork,
-        allTabsCount: allTabs.length,
-        filteredTabsCount: tabs.length,
         tabKeys: tabs.map(t => t.key),
-        tabs: tabs.map(t => ({ key: t.key, label: t.label, requiresPro: (t as any).requiresPro || false }))
       })
     }
-  }, [profile, canUploadArtwork])
+  }, [profile, isOwnProfile])
 
   // Get user posts - with fallback endpoint support
-  // ✅ Posts tab için: sadece type='post' olanları getir
   const { data: userPostsData, isLoading: isLoadingPosts, error: postsError } = useQuery({
-    queryKey: ['user-posts', profile?.id, 'post'],
+    queryKey: ['user-posts', profile?.id],
     queryFn: async () => {
       if (!profile?.id) return []
       
-      // ✅ Type filtresi ile sadece 'post' tipindekileri getir
-      const response = await api.get(`/posts/user/${profile.id}?type=post`)
-      const posts = response.data || []
-      
-      // Debug log
-      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.log('🔍 User Posts Query Debug (type=post):', {
-          userId: profile.id,
-          postsCount: posts.length,
-          posts: posts.map((p: any) => ({ id: p.id, type: p.type, hasMedia: !!p.media?.length }))
-        })
+      // Primary endpoint: /posts/user/:userId
+      try {
+        const response = await api.get(`/posts/user/${profile.id}`)
+        const posts = response.data || []
+        
+        // Debug log
+        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+          console.log('🔍 User Posts Query Debug:', {
+            userId: profile.id,
+            postsCount: posts.length,
+            posts: posts.map((p: any) => ({ id: p.id, type: p.type, hasMedia: !!p.media?.length }))
+          })
+        }
+        
+        return posts
+      } catch (error: any) {
+        // Fallback: Try username-based endpoint if userId fails
+        console.warn('Primary endpoint failed, trying fallback:', error)
+        try {
+          const response = await api.get(`/posts/user/${username}`)
+          return response.data || []
+        } catch (fallbackError) {
+          console.error('Both endpoints failed:', fallbackError)
+          return []
+        }
       }
-      
-      return posts
     },
     enabled: !!accessToken && !!profile?.id,
-    retry: 1, // Sadece 1 kez retry yap
-    retryOnMount: false, // Mount'ta retry yapma
+    staleTime: STALE_SHORT,
+    gcTime: GC_STANDARD,
   })
 
-  // Get user events (for corporate users and users who can upload artwork)
+  // Get user events (for corporate users and pro artists)
   const { data: userEvents } = useQuery({
     queryKey: ['user-events', profile?.id],
     queryFn: async () => {
-      if (!profile?.id || (!isCorporateUser && !canUploadArtwork)) return []
+      if (!profile?.id || (!isCorporateUser && !isProArtist)) return []
       const response = await api.get(`/events?authorId=${profile.id}`)
       return response.data
     },
-    enabled: !!accessToken && !!profile?.id && (isCorporateUser || canUploadArtwork),
+    enabled: !!accessToken && !!profile?.id && (isCorporateUser || isProArtist),
   })
 
-  // ✅ Artworks tab için: sadece type='artwork' olanları getir
-  const { data: userArtworks, isLoading: isLoadingArtworks } = useQuery({
-    queryKey: ['user-artworks', profile?.id, 'artwork'],
-    queryFn: async () => {
-      if (!profile?.id) return []
-      
-      // ✅ Type filtresi ile sadece 'artwork' tipindekileri getir
-      const response = await api.get(`/posts/user/${profile.id}?type=artwork`)
-      const posts = response.data || []
-      
-      // Debug log
-      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.log('🔍 User Artworks Query Debug (type=artwork):', {
-          userId: profile.id,
-          artworksCount: posts.length,
-          artworks: posts.map((p: any) => ({ id: p.id, type: p.type, hasMedia: !!p.media?.length }))
-        })
-      }
-      
-      return posts
+  // Eserler: user-posts ile aynı kaynak (tek istek, upload sonrası invalidate ile senkron)
+  const profileArtworksBase = useMemo(
+    () => (userPostsData || []).filter((p: any) => p.type === 'artwork'),
+    [userPostsData],
+  )
+
+  const rawProfilePostsOnly = useMemo(
+    () =>
+      (userPostsData || []).filter((p: any) => !p.type || p.type === 'post'),
+    [userPostsData],
+  )
+
+  const profilePostOrder = useMemo(
+    () => (Array.isArray(profile?.profilePostOrder) ? profile.profilePostOrder : []) as string[],
+    [profile?.profilePostOrder],
+  )
+  const profileArtworkOrder = useMemo(
+    () =>
+      (Array.isArray(profile?.profileArtworkOrder) ? profile.profileArtworkOrder : []) as string[],
+    [profile?.profileArtworkOrder],
+  )
+
+  const sortedProfilePosts = useMemo(
+    () => sortProfileItems(rawProfilePostsOnly, postsSortMode, profilePostOrder),
+    [rawProfilePostsOnly, postsSortMode, profilePostOrder],
+  )
+
+  const sortedProfileArtworks = useMemo(
+    () => sortProfileItems(profileArtworksBase, artworksSortMode, profileArtworkOrder),
+    [profileArtworksBase, artworksSortMode, profileArtworkOrder],
+  )
+
+  const patchGridOrderMutation = useMutation({
+    mutationFn: async (body: { postOrder?: string[]; artworkOrder?: string[] }) => {
+      const { data } = await api.patch('/users/me/profile-grid-order', body)
+      return data
     },
-    enabled: !!accessToken && !!profile?.id,
-    retry: 1,
-    retryOnMount: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'profile',
+      })
+    },
   })
+
+  const enablePostsDrag = isOwnProfile && postsSortMode === 'custom'
+  const enableArtworksDrag = isOwnProfile && artworksSortMode === 'custom'
+
+  const profileQueryKey = useMemo(
+    () => ['profile', username, paramUsername, currentUser?.id] as const,
+    [username, paramUsername, currentUser?.id],
+  )
+
+  const handleProfilePostsReorder = useCallback(
+    (items: any[]) => {
+      if (!enablePostsDrag || !profile?.id) return
+      const previousPosts = queryClient.getQueryData<any[]>(['user-posts', profile.id])
+      const previousProfile = queryClient.getQueryData<any>(profileQueryKey)
+      queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) =>
+        applyPostReorderInUserPostsCache(old, items),
+      )
+      queryClient.setQueryData(profileQueryKey, (old: any) =>
+        old && old.id === profile.id
+          ? { ...old, profilePostOrder: items.map((p: any) => String(p.id)) }
+          : old,
+      )
+      patchGridOrderMutation.mutate(
+        { postOrder: items.map((p) => p.id) },
+        {
+          onError: () => {
+            if (previousPosts) queryClient.setQueryData(['user-posts', profile.id], previousPosts)
+            if (previousProfile !== undefined) {
+              queryClient.setQueryData(profileQueryKey, previousProfile)
+            }
+            toast.error('Sıra kaydedilemedi')
+          },
+        },
+      )
+    },
+    [enablePostsDrag, profile?.id, profileQueryKey, queryClient, patchGridOrderMutation],
+  )
+
+  const handleArtworksReorder = useCallback(
+    (items: any[]) => {
+      if (!profile?.id) return
+      const previousPosts = queryClient.getQueryData<any[]>(['user-posts', profile.id])
+      const previousProfile = queryClient.getQueryData<any>(profileQueryKey)
+      queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) =>
+        applyArtworkReorderInUserPostsCache(old, items),
+      )
+      queryClient.setQueryData(profileQueryKey, (old: any) =>
+        old && old.id === profile.id
+          ? { ...old, profileArtworkOrder: items.map((a: any) => String(a.id)) }
+          : old,
+      )
+      patchGridOrderMutation.mutate(
+        { artworkOrder: items.map((a) => a.id) },
+        {
+          onError: () => {
+            if (previousPosts) queryClient.setQueryData(['user-posts', profile.id], previousPosts)
+            if (previousProfile !== undefined) {
+              queryClient.setQueryData(profileQueryKey, previousProfile)
+            }
+            toast.error('Sıra kaydedilemedi')
+          },
+        },
+      )
+    },
+    [profile?.id, profileQueryKey, queryClient, patchGridOrderMutation],
+  )
 
   // Delete post mutation
   const deletePostMutation = useMutation({
@@ -504,13 +686,31 @@ function ProfileContent() {
     },
     onSuccess: (_, postId) => {
       toast.success('Gönderi başarıyla silindi')
-      // Remove from local state
-      setProfilePosts((prev) => prev.filter((p) => p.id !== postId))
-      // Sadece ilgili query'leri invalidate et (profil query'sine dokunma - redirect'i engelle)
+      // 🎯 OPTIMISTIC UPDATE - Instagram mantığı: Anında sayacı azalt
+      queryClient.setQueriesData(
+        { 
+          predicate: (query) => {
+            const key = query.queryKey
+            return Array.isArray(key) && key[0] === 'profile'
+          }
+        },
+        (oldData: any) => {
+          if (!oldData) return oldData
+          return {
+            ...oldData,
+            _count: {
+              ...oldData._count,
+              posts: Math.max(0, (oldData._count?.posts || 0) - 1), // ✅ Anında -1 (min 0)
+            }
+          }
+        }
+      )
+      
+      // Invalidate queries (background refresh)
       queryClient.invalidateQueries({ queryKey: ['user-posts', profile?.id] })
+      queryClient.invalidateQueries({ queryKey: ['profile', username] })
       queryClient.invalidateQueries({ queryKey: ['posts'] })
       queryClient.invalidateQueries({ queryKey: ['feed'] })
-      // Profil query'sini invalidate etme - kullanıcı profil sayfasında kalmalı
       
       setMenuOpen(null)
       setConfirmDelete(null)
@@ -549,40 +749,15 @@ function ProfileContent() {
           setMenuOpen(null)
         }
       }
-      if (profileMenuOpen) {
-        const target = event.target as HTMLElement
-        if (!target.closest('.profile-menu-container')) {
-          setProfileMenuOpen(false)
-        }
-      }
     }
-    if (menuOpen || profileMenuOpen) {
+    if (menuOpen) {
       // Use capture phase to check before other handlers
       document.addEventListener('mousedown', handleClickOutside, true)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside, true)
       }
     }
-  }, [menuOpen, profileMenuOpen])
-
-  // ✅ Username değiştiğinde profilePosts'u sıfırla (çift render'ı önle)
-  useEffect(() => {
-    setProfilePosts([])
-  }, [username, profile?.id])
-
-  // ✅ Tab değiştiğinde doğru data'yı göster
-  useEffect(() => {
-    if (activeTab === 'posts') {
-      // Posts tab: backend'den zaten type=post filtrelenmiş geliyor
-      setProfilePosts(userPostsData || [])
-    } else if (activeTab === 'artworks') {
-      // Artworks tab: backend'den zaten type=artwork filtrelenmiş geliyor
-      setProfilePosts(userArtworks || [])
-    } else {
-      // Diğer tab'lar için boş
-      setProfilePosts([])
-    }
-  }, [activeTab, userPostsData, userArtworks])
+  }, [menuOpen])
 
   // 🔔 Socket.IO ile real-time post dinleme
   useEffect(() => {
@@ -591,38 +766,19 @@ function ProfileContent() {
     const postsSocket = initPostsSocket(accessToken)
 
     postsSocket.on('postCreated', (newPost: any) => {
-      // Eğer yeni gönderi bu profil kullanıcısına aitse listeye ekle
-      if (newPost.author?.id === profile?.id) {
-        // ✅ Type kontrolü: sadece aktif tab'a uygun olanları ekle
-        const shouldAdd = 
-          (activeTab === 'posts' && (!newPost.type || newPost.type === 'post')) ||
-          (activeTab === 'artworks' && newPost.type === 'artwork')
-        
-        if (shouldAdd) {
-          setProfilePosts((prev) => {
-            // Çift eklemeyi önle
-            if (prev.some((p) => p.id === newPost.id)) {
-              return prev
-            }
-            return [newPost, ...prev]
-          })
-        }
-        
-        // İlgili query'leri invalidate et
-        if (newPost.type === 'artwork') {
-          queryClient.invalidateQueries({ queryKey: ['user-artworks', profile?.id, 'artwork'] })
-        } else {
-          queryClient.invalidateQueries({ queryKey: ['user-posts', profile?.id, 'post'] })
-        }
+      if (newPost.author?.id === profile.id) {
+        queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) => {
+          if (old.some((p) => p.id === newPost.id)) return old
+          return [newPost, ...old]
+        })
         queryClient.invalidateQueries({ queryKey: ['profile', username] })
       }
     })
 
     // 🔔 Real-time beğeni güncellemeleri
     postsSocket.on('postLikeUpdated', (data: { postId: string; change: number; likeCount: number; isLiked: boolean; userId: string }) => {
-      // Profil postlarından bu post'u güncelle
-      setProfilePosts((prev) =>
-        prev.map((p: any) => {
+      queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) =>
+        old.map((p: any) => {
           if (p.id === data.postId) {
             return {
               ...p,
@@ -633,9 +789,8 @@ function ProfileContent() {
             }
           }
           return p
-        })
+        }),
       )
-      // Profil query'sini de güncelle
       queryClient.invalidateQueries({ queryKey: ['profile', username] })
       queryClient.invalidateQueries({ queryKey: ['user-posts', profile?.id] })
     })
@@ -643,9 +798,8 @@ function ProfileContent() {
     // 🔔 Real-time yorum güncellemeleri (yorum sayısı için)
     const commentsSocket = initCommentsSocket(accessToken)
     commentsSocket.on('commentCreated', (data: any) => {
-      // Profil postlarından bu post'un yorum sayısını güncelle
-      setProfilePosts((prev) =>
-        prev.map((p: any) => {
+      queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) =>
+        old.map((p: any) => {
           if (p.id === data.postId) {
             return {
               ...p,
@@ -656,28 +810,30 @@ function ProfileContent() {
             }
           }
           return p
-        })
+        }),
       )
       queryClient.invalidateQueries({ queryKey: ['profile', username] })
       // ✅ Yorumlar grid'ini de güncelle (eğer aktif sekme yorumlar ise)
       queryClient.invalidateQueries({ queryKey: ['user-comments', profile?.id] })
     })
 
-    commentsSocket.on('commentDeleted', (data: { id: string; postId: string }) => {
-      // Profil postlarından bu post'un yorum sayısını güncelle
-      setProfilePosts((prev) =>
-        prev.map((p: any) => {
+    commentsSocket.on(
+      'commentDeleted',
+      (data: { id: string; postId: string; deletedCount?: number }) => {
+      const dec = typeof data.deletedCount === 'number' && data.deletedCount > 0 ? data.deletedCount : 1
+      queryClient.setQueryData(['user-posts', profile.id], (old: any[] = []) =>
+        old.map((p: any) => {
           if (p.id === data.postId) {
             return {
               ...p,
               _count: {
                 ...p._count,
-                comments: Math.max(0, (p._count?.comments || 0) - 1),
+                comments: Math.max(0, (p._count?.comments || 0) - dec),
               },
             }
           }
           return p
-        })
+        }),
       )
       queryClient.invalidateQueries({ queryKey: ['profile', username] })
       // ✅ Yorumlar grid'ini de güncelle (eğer aktif sekme yorumlar ise)
@@ -705,7 +861,6 @@ function ProfileContent() {
   // Follow/Unfollow mutation
   const followMutation = useMutation({
     mutationFn: async (action: 'follow' | 'unfollow') => {
-      if (!profile?.id) throw new Error('Profile ID is required')
       if (action === 'follow') {
         const response = await api.post(`/follow/${profile.id}`)
         return response.data
@@ -753,65 +908,23 @@ function ProfileContent() {
   const { data: followers } = useQuery({
     queryKey: ['followers', profile?.id],
     queryFn: async () => {
-      if (!profile?.id) return []
       const response = await api.get(`/follow/${profile.id}/followers`)
-      return response.data || []
+      return response.data
     },
-    enabled: !!profile?.id && showFollowers,
+    enabled: !!profile && showFollowers,
   })
 
   // Get following
   const { data: following } = useQuery({
     queryKey: ['following', profile?.id],
     queryFn: async () => {
-      if (!profile?.id) return []
       const response = await api.get(`/follow/${profile.id}/following`)
       return response.data
     },
     enabled: !!profile && showFollowing,
   })
 
-  // Remove follower mutation (Instagram-style: remove someone who follows you)
-  const removeFollowerMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await api.delete(`/follow/remove-follower/${userId}`)
-    },
-    onSuccess: () => {
-      toast.success('Takipçi kaldırıldı')
-      queryClient.invalidateQueries({ queryKey: ['followers', profile?.id] })
-      queryClient.invalidateQueries({ queryKey: ['profile', username] })
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || 'Takipçi kaldırılamadı')
-    },
-  })
-
-  // Unfollow mutation (for following list)
-  const unfollowMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await api.delete(`/follow/${userId}`)
-    },
-    onSuccess: () => {
-      toast.success('Takip bırakıldı')
-      queryClient.invalidateQueries({ queryKey: ['following', profile?.id] })
-      queryClient.invalidateQueries({ queryKey: ['profile', username] })
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || 'Takip bırakılamadı')
-    },
-  })
-
-  // State for remove follower confirmation modal
-  const [showRemoveFollowerModal, setShowRemoveFollowerModal] = useState<{ userId: string; username: string } | null>(null)
-  
-  // State for unfollow confirmation modal
-  const [showUnfollowModal, setShowUnfollowModal] = useState<{ userId: string; username: string } | null>(null)
-
-  // State for dropdown menu in followers/following lists
-  const [listMenuOpen, setListMenuOpen] = useState<string | null>(null)
-
   const handleFollow = () => {
-    if (!profile?.id) return
     if (profile.isFollowing) {
       followMutation.mutate('unfollow')
     } else if (profile.hasRequested) {
@@ -823,7 +936,7 @@ function ProfileContent() {
   }
 
   const handleCancelRequest = async () => {
-    if (!profile?.id) return
+    if (!profile.id) return
     try {
       await api.post(`/follow/request/${profile.id}/cancel`)
       queryClient.invalidateQueries({ queryKey: ['profile', username] })
@@ -852,276 +965,87 @@ function ProfileContent() {
     }
   }
 
-  // Block user mutation
-  const blockUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await api.post(`/users/${userId}/block`)
-    },
-    onSuccess: () => {
-      toast.success('Kullanıcı engellendi')
-      setShowBlockModal(false)
-      setProfileMenuOpen(false)
-      // Ana sayfaya yönlendir
-      router.push('/')
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Kullanıcı engellenirken bir hata oluştu')
-    },
-  })
-
-  const handleBlockUser = () => {
-    if (!profile?.id) return
-    setShowBlockModal(true)
-    setProfileMenuOpen(false)
-  }
-
-  const handleConfirmBlock = () => {
-    if (!profile?.id) return
-    blockUserMutation.mutate(profile.id)
-  }
-
-  // Close dropdown menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (listMenuOpen) {
-        setListMenuOpen(null)
-      }
-    }
-
-    if (listMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [listMenuOpen])
-
-  // Early return kontrolleri - ASLA null dönme, her zaman UI göster
+  // Misafir: boş ekran yerine giriş CTA (derin link / modal sonrası profil tıklaması)
   if (!accessToken) {
+    const returnTo =
+      typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search || ''}` : '/feed'
+    const safeFrom =
+      returnTo.startsWith('/') && !returnTo.includes('//') ? returnTo : '/feed'
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-      </div>
-    )
-  }
-
-  // 🔥 KRİTİK: ÖNCE 401 hatası kontrolü - currentUser kontrolünden önce!
-  // 401 hatası varsa login'e yönlendir (loading gösterilmesin)
-  if (profileError && (profileError as any)?.response?.status === 401) {
-    // useEffect'te redirect yapıldı, burada sadece kısa loading göster
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto"></div>
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">Yönlendiriliyorsunuz...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // 🔥 KRİTİK: Token yoksa login'e yönlendir (loading gösterme)
-  if (!accessToken) {
-    const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-    if (!tokenFromStorage) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto"></div>
-            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">Yönlendiriliyorsunuz...</p>
-          </div>
-        </div>
-      )
-    }
-  }
-
-  // 🔥 KRİTİK: Query enabled koşulu kontrolü
-  // Query enabled koşulu: accessToken varsa ve (username varsa veya "me" parametresi varsa)
-  const isQueryEnabled = !!accessToken && (paramUsername === 'me' ? !!currentUser?.id : (!!username && username !== 'undefined' && username !== 'null'))
-  
-  // Query disabled ise ve token yoksa - hemen login'e yönlendir
-  if (!isQueryEnabled && !accessToken) {
-    const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-    if (!tokenFromStorage) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto"></div>
-            <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">Yönlendiriliyorsunuz...</p>
-          </div>
-        </div>
-      )
-    }
-  }
-  
-  // Query disabled ise ve token varsa ama currentUser yoksa - AuthGuard yükleniyor olabilir
-  if (!isQueryEnabled && accessToken && !currentUser?.id) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-      </div>
-    )
-  }
-  
-  // Query disabled ise ve profil yoksa - query çalışmıyor, null döndür
-  if (!isQueryEnabled && !profile) {
-    return null
-  }
-
-  // 🔥 KRİTİK: Önce loading kontrolü - sadece query enabled ise loading göster
-  if (isLoading && isQueryEnabled) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-      </div>
-    )
-  }
-
-  // 🔥 KRİTİK: Hata durumunu göster - loading false ve error varsa
-  if (profileError && !isLoading) {
-    const errorMessage = profileError instanceof Error ? profileError.message : 'Bilinmeyen bir hata oluştu'
-    const errorStatus = (profileError as any)?.response?.status
-    
-    // 🔥 KRİTİK: 404 hatası - kullanıcı bulunamadı (başkasının profili için)
-    if (errorStatus === 404 || errorMessage.includes('bulunamadı') || errorMessage.includes('not found')) {
-      return (
-        <div className="text-center py-12">
-          <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
-            <p className="font-semibold mb-2">Kullanıcı bulunamadı</p>
-            <p className="text-xs mb-4">
-              {paramUsername === 'me' 
-                ? 'Profil bilgileriniz yüklenemedi. Lütfen sayfayı yenileyin veya tekrar giriş yapın.'
-                : `@${paramUsername} kullanıcısı bulunamadı veya hesap silinmiş olabilir.`}
-            </p>
-            {paramUsername === 'me' && (
-              <button
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ['profile', username, paramUsername, currentUser?.id] })
-                  window.location.reload()
-                }}
-                className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
-              >
-                Sayfayı Yenile
-              </button>
-            )}
-          </div>
-        </div>
-      )
-    }
-    
-    // Kendi profiliyse ve /profile/me'de değilsek redirect yapılacak (useEffect'te)
-    // /profile/me'deysek normal akışa devam et (hata mesajını göster)
-    if (isMe && currentUser?.id && paramUsername !== 'me') {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-        </div>
-      )
-    }
-
-    // Boşluklu isim (fullName) hatası için otomatik yönlendirme
-    const rawParamString = Array.isArray(params.username) ? params.username[0] : (params.username || '')
-    const decodedParamCheck = decodeURIComponent(rawParamString)
-    if ((errorMessage.includes('Geçersiz kullanıcı adı') || decodedParamCheck?.includes(' ')) && currentUser?.username) {
-      // Redirect useEffect'te yapılacak, burada loading göster
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-        </div>
-      )
-    }
-    
-    // Network error'ları için daha yumuşak mesaj ve otomatik retry
-    const isNetworkError = errorMessage.includes('Bağlantı kurulamadı') || 
-                          errorMessage.includes('Sunucuya bağlanılamıyor') ||
-                          errorMessage.includes('Network Error') ||
-                          errorMessage.includes('ERR_NETWORK')
-    
-    if (isNetworkError) {
-      // Network error için daha yumuşak mesaj ve otomatik retry
-      return (
-        <div className="text-center py-12">
-          <div className="rounded-3xl border border-orange-200 bg-orange-50 px-6 py-8 text-center text-sm text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-300">
-            <p className="font-semibold mb-2">Bağlantı sorunu</p>
-            <p className="text-xs mb-4">Profil bilgileri yüklenemedi. Lütfen sayfayı yenileyin.</p>
-            <button
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['profile', username] })
-                window.location.reload()
-              }}
-              className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-950 px-4">
+        <div className="max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#111827] p-8 text-center shadow-sm">
+          <p className="text-gray-900 dark:text-white font-semibold mb-2">Profili görmek için giriş yapın</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+            Feellink&apos;te sanatçı profilleri ve içerikler giriş yaptıktan sonra görüntülenebilir.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href={`/login?from=${encodeURIComponent(safeFrom)}`}
+              className="inline-flex items-center justify-center rounded-full bg-brand-orange px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-orange/90 transition-colors"
             >
-              Sayfayı Yenile
-            </button>
+              Giriş yap
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-600 px-5 py-2.5 text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Kayıt ol
+            </Link>
           </div>
         </div>
-      )
-    }
-    
-    // Kendi profiliyse ve /profile/me'de değilsek otomatik redirect yap
-    if (isMe && currentUser?.id && paramUsername !== 'me') {
-      // Redirect useEffect'te yapılacak, burada loading göster
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-        </div>
-      )
-    }
+      </div>
+    )
+  }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+      </div>
+    )
+  }
+
+  // 🔥 KRİTİK: Hata durumunu göster
+  if (profileError) {
+    const errorMessage = profileError instanceof Error ? profileError.message : 'Bilinmeyen bir hata oluştu'
+    const isTimeout = errorMessage.includes('Zaman aşımı')
     return (
       <div className="text-center py-12">
         <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
           <p className="font-semibold mb-2">Profil yüklenemedi</p>
-          <p className="text-xs mb-4">{errorMessage}</p>
-          <div className="flex gap-2 justify-center">
-            <button
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['profile', username, paramUsername, currentUser?.id] })
-              }}
-              className="px-4 py-2 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-            >
-              Tekrar Dene
-            </button>
-            {isMe && (
-              <button
-                onClick={() => router.replace('/profile/me')}
-                className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
-              >
-                Profilime Git
-              </button>
-            )}
-          </div>
+          <p className="text-xs mb-4">{isTimeout ? 'Sunucu yanıt vermedi. Lütfen sayfayı yenileyin.' : errorMessage}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
+          >
+            Sayfayı Yenile
+          </button>
         </div>
       </div>
     )
   }
-  
-  // 🔥 KRİTİK: Profil yoksa ve error da yoksa - sadece query disabled olduğunda olabilir
-  // Bu durumda loading gösterme, query enabled olmadığı için veri gelmeyecek
-  if (!profile && !isLoading && !profileError) {
-    // Query enabled kontrolü yapılmış, burada sadece guard olarak kontrol
-    // Normalde buraya ulaşmamalı çünkü enabled koşulu var
-    return null
-  }
 
-  // 🔥 KRİTİK: Profile yoksa ve error yoksa ama loading false ise - bu durumda query disabled
-  // Token yoksa login'e yönlendir, token varsa ama profil yoksa loading göster
   if (!profile) {
-    // Token yoksa login'e yönlendir (zaten useEffect'te yapılıyor)
-    if (!accessToken) {
-      const tokenFromStorage = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-      if (!tokenFromStorage) {
-        return (
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-          </div>
-        )
-      }
-    }
-    // Token varsa ama profil yoksa - query disabled olabilir veya henüz yükleniyor
-    // Query enabled kontrolü yapılmış, burada sadece guard olarak kontrol
-    // Normalde buraya ulaşmamalı çünkü enabled koşulu var
-    return null
+    return (
+      <div className="text-center py-12">
+        <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-8 text-center text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-semibold mb-2">Kullanıcı bulunamadı</p>
+          <p className="text-xs mb-4">
+            {paramUsername === 'me' 
+              ? 'Profil bilgileriniz yüklenemedi. Lütfen sayfayı yenileyin veya tekrar giriş yapın.'
+              : 'Aradığınız kullanıcı bulunamadı veya hesap silinmiş olabilir.'}
+          </p>
+          {paramUsername === 'me' && (
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 text-xs font-medium bg-brand-orange text-white rounded-xl hover:bg-brand-orange/90 transition"
+            >
+              Sayfayı Yenile
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1129,22 +1053,30 @@ function ProfileContent() {
       <div className="max-w-4xl mx-auto py-8 px-4">
         {/* Profile Header */}
         <div className="flex flex-col md:flex-row items-start md:items-start space-y-4 md:space-y-0 md:space-x-8 mb-8 bg-white dark:bg-gray-950 rounded-2xl p-6 md:p-8 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-          {/* ✅ Avatar - Güvenli fallback ile */}
-          <div 
-            className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0 cursor-zoom-in transition-transform hover:scale-105"
-            onClick={() => {
-              // Avatar varsa zoom modal aç
-              const avatarSrc = profile?.avatar ? resolveImageUrl(profile.avatar) : null
-              if (avatarSrc) {
-                setZoomImage(avatarSrc)
-              }
-            }}
-          >
-            <Avatar
-              src={profile?.avatar ? resolveImageUrl(profile.avatar) : null}
-              alt={profile?.username || 'Kullanıcı'}
-              className="w-full h-full"
-            />
+          {/* Avatar */}
+          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {profile.avatar ? (
+              (() => {
+                const imageUrl = resolveImageUrl(profile.avatar)
+                console.log('Profile Avatar IMAGE URL:', imageUrl, 'Original:', profile.avatar)
+                return (
+                  <img
+                    src={imageUrl}
+                    alt={profile.username}
+                    className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-105"
+                    onClick={() => setZoomImage(imageUrl)}
+                    onError={(e) => {
+                      console.error('Profile Avatar Error:', imageUrl)
+                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                    }}
+                  />
+                )
+              })()
+            ) : (
+              <span className="text-3xl md:text-4xl text-gray-500 dark:text-gray-400">
+                {profile.username[0].toUpperCase()}
+              </span>
+            )}
           </div>
 
           {/* Profile Info */}
@@ -1152,39 +1084,31 @@ function ProfileContent() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    {profile?.username || 'Kullanıcı'}
-                    {profile?.isVerified && <span className="text-gray-900 dark:text-gray-100">✓</span>}
-                    {/* ✅ Legacy badge component'leri kaldırıldı - sadece activeRole gösterilecek */}
+                  <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-x-1 gap-y-2">
+                    <span className="inline-flex items-center gap-0">
+                      {profile.username}
+                      <FeellinkRoleBadge roles={profile.roles} />
+                    </span>
                   </h1>
                 </div>
-                {/* ✅ Rol Badge - LED çerçeveli, username'in hemen altında */}
-                {profile?.activeRole && (
-                  <div className="group relative inline-block">
-                    <span className="role-badge-led">
-                      {profile.activeRole}
-                    </span>
-                    {/* 🔒 Rol değiştir linki kaldırıldı - Rol değişikliği artık sadece Admin Paneli üzerinden yapılacak */}
-                  </div>
-                )}
-                {/* ✅ Legacy UserBadges component'i kaldırıldı - sadece activeRole gösterilecek */}
+                <UserBadges badges={profile.badges} />
               </div>
-              {/* Sağ Buton Grubu - Profili Düzenle + İçerik Yükle */}
-              {profile?.isOwnProfile && (
-                <div className="flex items-center gap-2">
-                  {/* ➕ İçerik Yükle - Dropdown Menü */}
+              {/* Sağ Buton Grubu - Profili Düzenle + Yeni Gönderi */}
+              {profile.isOwnProfile && (
+                <div className="flex items-center gap-3">
+                  {/* ➕ Yeni Gönderi/Eser - Açılır Menü */}
                   <div className="relative">
                     <button
                       onClick={() => setCreateMenuOpen(!createMenuOpen)}
-                      className="flex items-center justify-center w-10 h-10 rounded-full 
+                      className="flex items-center justify-center w-9 h-9 rounded-full 
                                  bg-[#FF8A00] text-white shadow-sm hover:bg-[#e67a00] 
                                  transition-all duration-200 hover:scale-105 active:scale-95"
-                      title="İçerik Yükle"
+                      title="Yeni İçerik"
                     >
-                      <Plus size={20} strokeWidth={2.5} />
+                      <Plus size={18} strokeWidth={2.5} />
                     </button>
 
-                    {/* Dropdown Menü */}
+                    {/* Açılır Menü */}
                     {createMenuOpen && (
                       <>
                         {/* Backdrop - menüyü kapatmak için */}
@@ -1193,15 +1117,7 @@ function ProfileContent() {
                           onClick={() => setCreateMenuOpen(false)}
                         />
                         {/* Menü */}
-                        <div className="absolute right-0 mt-2 bg-white dark:bg-[#1a1a1a] shadow-lg rounded-xl z-20 w-52 border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          {/* Menü Başlığı */}
-                          <div className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700">
-                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                              İçerik Yükle
-                            </p>
-                          </div>
-                          
-                          {/* Gönderi Yükle */}
+                        <div className="absolute right-0 mt-2 bg-white dark:bg-[#1a1a1a] shadow-lg rounded-xl z-20 w-48 border border-gray-200 dark:border-gray-700 overflow-hidden">
                           <button
                             onClick={() => {
                               setPostType('post')
@@ -1210,27 +1126,27 @@ function ProfileContent() {
                             }}
                             className="block w-full text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <FiGrid size={18} className="text-brand-orange" />
                               <span>Gönderi Yükle</span>
                             </div>
                           </button>
-                          
-                          {/* Eser Yükle */}
-                          <button
-                            onClick={() => {
-                              // Direkt eser yükleme modalını aç
-                              setPostType('artwork')
-                              setShowCreateModal(true)
-                              setCreateMenuOpen(false)
-                            }}
-                            className="block w-full text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border-t border-gray-200 dark:border-gray-700"
-                          >
-                            <div className="flex items-center gap-3">
-                              <FiImage size={18} className="text-brand-orange" />
-                              <span>Eser Yükle</span>
-                            </div>
-                          </button>
+                          {/* Eser yükleme butonu sadece eser oluşturma yetkisi olan kullanıcılar için */}
+                          {capabilities?.permissions.canCreateArtworks && (
+                            <button
+                              onClick={() => {
+                                setPostType('artwork')
+                                setShowCreateModal(true)
+                                setCreateMenuOpen(false)
+                              }}
+                              className="block w-full text-left px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border-t border-gray-200 dark:border-gray-700"
+                            >
+                              <div className="flex items-center gap-2">
+                                <FiImage size={18} className="text-brand-orange" />
+                                <span>Eser Yükle</span>
+                              </div>
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -1248,51 +1164,25 @@ function ProfileContent() {
               )}
             </div>
             
-            {/* Stats - Üst satır */}
-            <div className="flex space-x-6 mb-4">
-              <button
-                onClick={() => setShowFollowers(true)}
-                className="cursor-pointer"
-              >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile?._count?.posts ?? 0}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">posts</span>
-              </button>
-              <button
-                onClick={() => setShowFollowers(true)}
-                className="cursor-pointer"
-              >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile?.followerCount ?? profile?._count?.followers ?? 0}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">takipçi</span>
-              </button>
-              <button
-                onClick={() => setShowFollowing(true)}
-                className="cursor-pointer"
-              >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile?.followingCount ?? profile?._count?.following ?? 0}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">takip</span>
-              </button>
-            </div>
-
-            {/* Actions - Alt satır */}
-            <div className="flex items-center gap-2 mb-4">
-              {!profile?.isOwnProfile && (
+            <div className="flex items-center space-x-4 mb-4">
+              {!profile.isOwnProfile && (
                 <>
                   <button
                     onClick={handleFollow}
                     disabled={followMutation.isPending}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                      profile?.isFollowing
-                        ? 'bg-[#f97316] text-white hover:bg-[#ea580c] active:scale-[0.97]'
-                        : profile?.hasRequested
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                      profile.isFollowing
+                        ? 'border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200'
+                        : profile.hasRequested
                         ? 'bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
-                        : 'bg-[#f97316] text-white hover:bg-[#ea580c] active:scale-[0.97]'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        : 'bg-brand-orange text-white hover:bg-brand-orange/90'
+                    }`}
                   >
                     {followMutation.isPending
                       ? '...'
-                      : profile?.isFollowing
+                      : profile.isFollowing
                       ? 'Takibi Bırak'
-                      : profile?.hasRequested
+                      : profile.hasRequested
                       ? 'İstek Gönderildi (Geri Çek)'
                       : profile.isPrivate
                       ? 'Takip İsteği Gönder'
@@ -1301,144 +1191,147 @@ function ProfileContent() {
                   <button
                     onClick={handleMessage}
                     disabled={creatingConversation}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-[#f97316] text-white hover:bg-[#ea580c] active:scale-[0.97] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {creatingConversation ? '...' : 'Mesaj'}
                   </button>
-                  {/* Üç nokta menü */}
-                  <div className="relative profile-menu-container">
-                    <button
-                      onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                      className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <MoreVertical size={20} className="text-gray-700 dark:text-gray-300" />
-                    </button>
-                    {profileMenuOpen && (
-                      <div className="absolute right-0 mt-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[160px] z-50">
-                        <button
-                          onClick={handleBlockUser}
-                          className="w-full px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-sm font-medium transition-colors"
-                        >
-                          Engelle
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </>
               )}
             </div>
 
+            {/* Stats */}
+            <div className="flex space-x-6 mb-4">
+              <button
+                onClick={() => setShowFollowers(true)}
+                className="cursor-pointer"
+              >
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile._count.posts}</span>{' '}
+                <span className="text-gray-600 dark:text-gray-400">posts</span>
+              </button>
+              <button
+                onClick={() => setShowFollowers(true)}
+                className="cursor-pointer"
+              >
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile.followerCount ?? 0}</span>{' '}
+                <span className="text-gray-600 dark:text-gray-400">takipçi</span>
+              </button>
+              <button
+                onClick={() => setShowFollowing(true)}
+                className="cursor-pointer"
+              >
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile.followingCount ?? 0}</span>{' '}
+                <span className="text-gray-600 dark:text-gray-400">takip</span>
+              </button>
+            </div>
+
             {/* Bio */}
             <div>
-              {/* ✅ FullName ve Renk İmzası - Aynı satır, sağ tarafta renk kutuları */}
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{profile?.fullName || profile?.username || 'Kullanıcı'}</p>
-                {/* 🎨 Renk İmzası - Sağ tarafta, minimal LED hissi - Sadece kullanıcı açmışsa göster */}
-                {username && username !== 'undefined' && username !== 'null' && profile?.showProfileColorSignature !== false && (
-                  <ProfileColorSignature username={username} />
-                )}
-              </div>
-              {profile?.bio && <p className="mt-1 text-gray-900 dark:text-gray-100">{profile.bio}</p>}
+              <p className="font-semibold text-gray-900 dark:text-gray-100">{profile.fullName || profile.username}</p>
+              {profile.bio && <p className="mt-1 text-gray-900 dark:text-gray-100">{profile.bio}</p>}
+              {/* Role Label - Sadece whitelist'teki etiket; raw role asla basılmaz */}
+              {(() => {
+                const roleLabel = profile.role ? ROLE_METADATA[normalizeRole(profile.role)]?.label : null
+                return roleLabel ? (
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{roleLabel}</p>
+                ) : null
+              })()}
             </div>
           </div>
         </div>
 
-        {/* Öne Çıkan Temalar - Eser yükleme yetkisi olan tüm rollere açık */}
-        {/* Görünürlük mantığı:
-            - Kullanıcı kendi profilindeyse → Temalar görünsün
-            - Kullanıcı başkasının profiline bakıyorsa:
-              * Profil gizliyse → Temalar gizlensin
-              * Profil açıksa → Temalar görünsün */}
-        {canUploadArtwork && (profile.isOwnProfile || !profile.isPrivate) && (
-          <ArtistHighlights username={username} userId={profile?.id} isOwnProfile={profile.isOwnProfile} />
-        )}
+        {/* Öne Çıkan Temalar - Tüm kullanıcılarda görünür */}
+        <ArtistHighlights username={username} userId={profile?.id} isOwnProfile={profile.isOwnProfile} />
 
-        {/* Sekme Butonları - Instagram Tarzı İkonlu Sekmeler - Rol bazlı görünürlük */}
-        <div className="flex justify-center gap-10 mb-6 border-b border-gray-200 dark:border-gray-700 pb-3 relative">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.key
-            
-            return (
-              <div
-                key={tab.key}
-                className="relative flex flex-col items-center"
-                onMouseEnter={() => setHoveredTab(tab.key)}
-                onMouseLeave={() => setHoveredTab(null)}
-              >
-                <button
-                  onClick={() => handleTabChange(tab.key as any)}
-                  className={`flex items-center justify-center pb-2 px-3 transition-all relative group ${
-                    isActive
-                      ? 'text-brand-orange'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-brand-orange'
-                  }`}
-                  title={tab.label}
-                >
-                  <Icon 
-                    size={22} 
-                    className={`transition-all duration-200 ${
-                      isActive 
-                        ? 'scale-110' 
-                        : 'group-hover:scale-105'
-                    }`}
-                  />
-                  {/* Aktif sekme alt çizgisi */}
-                  {isActive && (
-                    <div className="absolute -bottom-3 left-0 right-0 h-[2px] bg-brand-orange rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"></div>
-                  )}
-                </button>
+        {/* Sekme Butonları — z-30 modalların (z-50) altında, içerik panellerinin (z-0) üstünde; overflow-x + pb tooltip kırpmasın */}
+        <div className="relative z-30 mb-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="overflow-x-auto overscroll-x-contain pt-1 pb-10">
+            <div className="flex items-center justify-center gap-6 md:gap-10 min-w-min px-2 mx-auto">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = activeTab === tab.key
 
-                {/* Tooltip */}
-                {hoveredTab === tab.key && (
-                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-medium text-brand-orange dark:text-brand-orange shadow-lg border border-gray-200/70 dark:border-gray-700/50 whitespace-nowrap z-10 animate-in fade-in slide-in-from-top-1 duration-150">
-                    {tab.label}
-                    {/* Tooltip ok */}
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 dark:bg-[#1a1a1a]/90 border-l border-t border-gray-200/70 dark:border-gray-700/50 rotate-45"></div>
+                return (
+                  <div
+                    key={tab.key}
+                    className="relative flex flex-col items-center shrink-0"
+                    onMouseEnter={() => setHoveredTab(tab.key)}
+                    onMouseLeave={() => setHoveredTab(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab(tab.key as any)}
+                      title={tab.label}
+                      aria-label={tab.label}
+                      className={`flex items-center justify-center min-w-[44px] min-h-[44px] pb-2 px-3 transition-all relative group ${
+                        isActive
+                          ? 'text-brand-orange'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-brand-orange'
+                      }`}
+                    >
+                      <Icon
+                        size={22}
+                        className={`transition-all duration-200 ${
+                          isActive ? 'scale-110' : 'group-hover:scale-105'
+                        }`}
+                      />
+                      {isActive && (
+                        <div
+                          className="absolute -bottom-3 left-0 right-0 h-[2px] bg-brand-orange rounded-full shadow-[0_1px_2px_rgba(255,123,0,0.3)]"
+                          aria-hidden
+                        />
+                      )}
+                    </button>
+
+                    {hoveredTab === tab.key && (
+                      <div
+                        className="absolute top-full left-1/2 z-40 mt-1.5 -translate-x-1/2 rounded-lg border border-gray-200/70 bg-white/95 px-3 py-1.5 text-xs font-medium text-brand-orange shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-1 duration-150 dark:border-gray-700/50 dark:bg-[#1a1a1a]/95 dark:text-brand-orange whitespace-nowrap pointer-events-none"
+                        role="tooltip"
+                      >
+                        {tab.label}
+                        <div
+                          className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rotate-45 border-l border-t border-gray-200/70 bg-white/95 dark:border-gray-700/50 dark:bg-[#1a1a1a]/95"
+                          aria-hidden
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          </div>
         </div>
 
-        {/* Sekme İçerikleri */}
+        {/* Sekme içerikleri — z-0 ile sekme şeridinin altında kalır (tooltip çakışması olmaz) */}
+        <div className="relative z-0">
         {activeTab === 'gallery' ? (
           <div className="rounded-2xl overflow-hidden" style={{ background:'linear-gradient(160deg,#0d1018,#080b12)', border:'1px solid rgba(201,165,80,0.1)' }}>
-            {/* Atmospheric ceiling glow */}
             <div className="pointer-events-none" style={{ height:3, background:'linear-gradient(90deg,transparent,rgba(201,165,80,0.2),transparent)' }} />
             <div className="flex flex-col items-center justify-center py-16 px-6 gap-6 relative">
-              {/* Background halo */}
               <div className="absolute inset-0 pointer-events-none" style={{ background:'radial-gradient(ellipse 70% 50% at 50% 40%, rgba(201,165,80,0.04), transparent 70%)' }} />
-              {/* Label */}
               <p style={{ color:'rgba(201,165,80,0.35)', fontSize:10, letterSpacing:'0.38em', textTransform:'uppercase', fontFamily:'Georgia,serif' }}>
                 Sanal Sergi
               </p>
-              {/* Title */}
               <div className="text-center">
                 <h2 style={{ color:'rgba(255,255,255,0.75)', fontSize:22, fontFamily:'Georgia,serif', fontWeight:400 }}>
                   {username} sergisi
                 </h2>
-                {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
+                {profileArtworksBase.filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
                   <p style={{ color:'rgba(201,165,80,0.3)', fontSize:11, marginTop:6, letterSpacing:'0.1em' }}>
-                    {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length} eser sergileniyor
+                    {profileArtworksBase.filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length} eser sergileniyor
                   </p>
                 )}
               </div>
-              {/* Enter button or empty state */}
-              {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 ? (
+              {profileArtworksBase.filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 ? (
                 <button
                   onClick={() => setGalleryOpen(true)}
                   style={{
                     padding:'13px 44px',
                     background:'linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.08))',
                     border:'1px solid rgba(201,165,80,0.4)',
-                    borderRadius:3,
-                    color:'rgba(201,165,80,0.9)',
+                    borderRadius:3, color:'rgba(201,165,80,0.9)',
                     fontSize:11, letterSpacing:'0.32em', textTransform:'uppercase',
                     fontFamily:'Georgia,serif', cursor:'pointer',
-                    boxShadow:'0 0 30px rgba(201,165,80,0.08)',
-                    transition:'all .25s',
+                    boxShadow:'0 0 30px rgba(201,165,80,0.08)', transition:'all .25s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background='linear-gradient(135deg,rgba(201,165,80,0.28),rgba(201,165,80,0.15))'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(201,165,80,0.7)' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background='linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.08))'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(201,165,80,0.4)' }}
@@ -1448,26 +1341,19 @@ function ProfileContent() {
               ) : (
                 <div className="text-center">
                   <p style={{ color:'rgba(255,255,255,0.25)', fontSize:13 }}>Henüz eser yüklenmemiş</p>
-                  {isMe && canUploadArtwork && (
+                  {isMe && canShowProfileArtworks && (
                     <button
-                      onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
-                      style={{
-                        marginTop:16, padding:'10px 28px',
-                        background:'rgba(201,165,80,0.12)',
-                        border:'1px solid rgba(201,165,80,0.3)',
-                        borderRadius:3, color:'rgba(201,165,80,0.7)',
-                        fontSize:11, letterSpacing:'0.2em', cursor:'pointer',
-                      }}
+                      onClick={() => setShowCreateModal(true)}
+                      style={{ marginTop:16, padding:'10px 28px', background:'rgba(201,165,80,0.12)', border:'1px solid rgba(201,165,80,0.3)', borderRadius:3, color:'rgba(201,165,80,0.7)', fontSize:11, letterSpacing:'0.2em', cursor:'pointer' }}
                     >
                       + Eser Yükle
                     </button>
                   )}
                 </div>
               )}
-              {/* Secondary upload button for own profile */}
-              {isMe && canUploadArtwork && (userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
+              {isMe && canShowProfileArtworks && profileArtworksBase.filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
                 <button
-                  onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
+                  onClick={() => setShowCreateModal(true)}
                   style={{ color:'rgba(201,165,80,0.3)', fontSize:10, letterSpacing:'0.2em', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase' }}
                 >
                   + Yeni Eser Ekle
@@ -1478,21 +1364,59 @@ function ProfileContent() {
           </div>
         ) : activeTab === 'articles' ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-            <UserArticles key={`articles-${profile.id}-${activeTab}`} authorId={profile.id} />
+            <UserArticles authorId={profile.id} />
           </div>
         ) : activeTab === 'comments' ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             <ProfileCommentsList username={username} userId={profile.id} />
           </div>
-        ) : activeTab === 'artworks' && canUploadArtwork ? (
+        ) : activeTab === 'artworks' && canShowProfileArtworks ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-            <ProfileArtworksGrid username={username} artworks={userArtworks || []} userId={profile?.id} />
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50/80 dark:bg-gray-900/50">
+                {(['newest', 'oldest', 'custom'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setArtworksSortMode(m)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      artworksSortMode === m
+                        ? 'bg-white dark:bg-gray-800 text-[#ff7b00] shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {m === 'newest' ? 'En Yeni' : m === 'oldest' ? 'En Eski' : 'Serbest Dizim'}
+                  </button>
+                ))}
+              </div>
+              {isOwnProfile && artworksSortMode === 'custom' && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 sm:text-right">
+                  Kartları sürükleyip bırakarak sıralayabilirsin.
+                </p>
+              )}
+            </div>
+            <ProfileArtworksGrid
+              username={username}
+              artworks={sortedProfileArtworks}
+              userId={profile?.id}
+              showColorPalette={false}
+              enableReorder={enableArtworksDrag}
+              onReorder={handleArtworksReorder}
+            />
           </div>
-        ) : activeTab === 'saved' && isMe ? (
-          <div className="bg-white dark:bg-gray-950 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-            <SavedArtworks userId={profile.id} />
+        ) : activeTab === 'artworks' && !canShowProfileArtworks ? (
+          <div className="bg-white dark:bg-gray-950 rounded-2xl p-8 md:p-10 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+              <ImageIcon className="h-7 w-7 text-gray-400 dark:text-gray-500" />
+            </div>
+            <p className="text-base font-medium text-gray-900 dark:text-gray-100">
+              Eserler bu hesap için görüntülenemiyor
+            </p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              Bu profil türünde eser galerisi gösterilmez. Gönderiler sekmesinden paylaşımları görebilirsiniz.
+            </p>
           </div>
-        ) : activeTab === 'events' && (isCorporateUser || canUploadArtwork) ? (
+        ) : activeTab === 'events' && (isCorporateUser || isProArtist) ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             {userEvents && userEvents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1579,6 +1503,24 @@ function ProfileContent() {
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
             <DraftArticles authorId={profile.id} />
           </div>
+        ) : activeTab === 'saved' && isOwnProfile ? (
+          <SavedPostsGrid />
+        ) : activeTab === 'analysis' ? (
+          canViewAnalytics ? (
+            <ProfileAnalysisPanel username={username} />
+          ) : (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-8 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60">
+                <Lock size={22} className="text-gray-400 dark:text-gray-500" />
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                Analiz içeriği gizli
+              </h3>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Bu hesabın analiz bölümü yalnızca profil sahibi ve takipçileri tarafından görüntülenebilir.
+              </p>
+            </div>
+          )
         ) : !profile.canViewPosts && profile.isPrivate && !profile.isOwnProfile ? (
           <div className="text-center py-12 border border-gray-100 dark:border-gray-900 rounded-2xl bg-white dark:bg-gray-950 transition-colors shadow-sm">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
@@ -1612,17 +1554,43 @@ function ProfileContent() {
             <div className="text-center py-12">
               <p className="text-sm text-red-500 dark:text-red-400">Gönderiler yüklenirken bir hata oluştu.</p>
             </div>
-          ) : profilePosts.length > 0 ? (
+          ) : sortedProfilePosts.length > 0 ? (
             <div className="bg-white dark:bg-gray-950 rounded-2xl p-4 md:p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-              <div className="grid grid-cols-3 gap-2">
-                {profilePosts.map((post: any) => {
-                  // Check if current user is the post owner
-                  const isOwner = currentUser?.id === post.userId || currentUser?.username === username
-                  
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50/80 dark:bg-gray-900/50">
+                  {(['newest', 'oldest', 'custom'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPostsSortMode(m)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        postsSortMode === m
+                          ? 'bg-white dark:bg-gray-800 text-[#ff7b00] shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                      }`}
+                    >
+                      {m === 'newest' ? 'En Yeni' : m === 'oldest' ? 'En Eski' : 'Serbest Dizim'}
+                    </button>
+                  ))}
+                </div>
+                {isOwnProfile && postsSortMode === 'custom' && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 sm:text-right">
+                    Kartları sürükleyip bırakarak sıralayabilirsin.
+                  </p>
+                )}
+              </div>
+              <ProfileSortableThreeColumnGrid
+                items={sortedProfilePosts}
+                disabled={!enablePostsDrag}
+                onReorder={handleProfilePostsReorder}
+                renderItem={(post: any, _index: number, { isDragging }) => {
+                  const isOwner =
+                    currentUser?.id === post.userId || currentUser?.username === username
                   return (
                     <div
-                      key={post.id}
-                      className="aspect-square relative cursor-pointer group overflow-hidden rounded-xl transition-all duration-300 hover:ring-2 hover:ring-brand-orange hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-950"
+                      className={`aspect-square relative cursor-pointer group overflow-hidden rounded-xl transition-all duration-300 hover:ring-2 hover:ring-brand-orange hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-950 ${
+                        isDragging ? 'ring-2 ring-[#ff7b00] opacity-90 z-50' : ''
+                      }`}
                       onClick={() => setSelectedPostId(post.id)}
                     >
                       {post.media && post.media.length > 0 ? (
@@ -1674,17 +1642,6 @@ function ProfileContent() {
                                   className="absolute bottom-10 right-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden min-w-[120px] z-[60]"
                                 >
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setEditingPost(post)
-                                      setMenuOpen(null)
-                                    }}
-                                    className="w-full px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-sm font-medium transition-colors"
-                                  >
-                                    <Edit size={16} />
-                                    Düzenle
-                                  </button>
-                                  <button
                                     onClick={(e) => handleDeleteClick(e, post.id)}
                                     disabled={deletePostMutation.isPending}
                                     className="w-full px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1721,8 +1678,8 @@ function ProfileContent() {
                       )}
                     </div>
                   )
-                })}
-              </div>
+                }}
+              />
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-950 rounded-2xl p-12 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors text-center">
@@ -1730,13 +1687,13 @@ function ProfileContent() {
             </div>
           )
         ) : null}
+        </div>
       </div>
 
       {/* Followers Modal */}
       {showFollowers && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowFollowers(false)}
         >
           <div
             className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col transition-colors"
@@ -1756,44 +1713,34 @@ function ProfileContent() {
                 followers.map((follower: any) => (
                   <div
                     key={follower.id}
-                    className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
+                    className="p-4 flex items-center space-x-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={() => {
+                      setShowFollowers(false)
+                      router.push(`/profile/${follower.username}`)
+                    }}
                   >
-                    <div
-                      className="flex items-center space-x-3 flex-1 cursor-pointer min-w-0"
-                      onClick={() => {
-                        setShowFollowers(false)
-                        router.push(`/profile/${follower.username}`)
-                      }}
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-                        <Avatar
-                          src={follower.avatar ? resolveImageUrl(follower.avatar) : null}
+                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
+                      {follower.avatar ? (
+                        <img
+                          src={resolveImageUrl(follower.avatar)}
                           alt={follower.username}
-                          className="w-full h-full"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follower.username}</p>
-                        {follower.fullName && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{follower.fullName}</p>
-                        )}
-                      </div>
-                    </div>
-                    {/* Sağ taraf - Takipten çıkar butonu - sadece kendi profilinde görünür */}
-                    {isMe && (
-                      <div className="flex items-center shrink-0 whitespace-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setShowRemoveFollowerModal({ userId: follower.id, username: follower.username })
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
                           }}
-                          className="text-xs text-red-600 dark:text-red-400 hover:underline leading-none px-2 py-1"
-                          type="button"
-                        >
-                          Takipten çıkar
-                        </button>
-                      </div>
-                    )}
+                        />
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-300">
+                          {follower.username[0].toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{follower.username}</p>
+                      {follower.fullName && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{follower.fullName}</p>
+                      )}
+                    </div>
                   </div>
                 ))
               ) : (
@@ -1804,23 +1751,10 @@ function ProfileContent() {
         </div>
       )}
 
-      {/* Düzenleme modalı - Gönderiler için */}
-      {editingPost && (
-        <EditPostModal
-          post={editingPost}
-          open={!!editingPost}
-          onClose={() => setEditingPost(null)}
-          onSuccess={() => {
-            setEditingPost(null)
-          }}
-        />
-      )}
-
       {/* Silme onay modalı - Gönderiler için */}
       {confirmDelete && (
         <div 
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-40"
-          onClick={handleCancelDelete}
         >
           <div 
             className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl"
@@ -1855,7 +1789,6 @@ function ProfileContent() {
       {showFollowing && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowFollowing(false)}
         >
           <div
             className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col transition-colors"
@@ -1875,127 +1808,39 @@ function ProfileContent() {
                 following.map((follow: any) => (
                   <div
                     key={follow.id}
-                    className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors relative"
+                    className="p-4 flex items-center space-x-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    onClick={() => {
+                      setShowFollowing(false)
+                      router.push(`/profile/${follow.username}`)
+                    }}
                   >
-                    <div
-                      className="flex items-center space-x-3 flex-1 cursor-pointer min-w-0"
-                      onClick={() => {
-                        setShowFollowing(false)
-                        router.push(`/profile/${follow.username}`)
-                      }}
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-                        <Avatar
-                          src={follow.avatar ? resolveImageUrl(follow.avatar) : null}
+                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center overflow-hidden">
+                      {follow.avatar ? (
+                        <img
+                          src={resolveImageUrl(follow.avatar)}
                           alt={follow.username}
-                          className="w-full h-full"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">{follow.username}</p>
-                        {follow.fullName && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{follow.fullName}</p>
-                        )}
-                      </div>
-                    </div>
-                    {/* Sağ taraf - Takibi bırak butonu - sadece kendi profilinde görünür */}
-                    {isMe && (
-                      <div className="flex items-center shrink-0 whitespace-nowrap">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setShowUnfollowModal({ userId: follow.id, username: follow.username })
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
                           }}
-                          className="text-xs text-red-600 dark:text-red-400 hover:underline leading-none px-2 py-1"
-                          type="button"
-                        >
-                          Takibi bırak
-                        </button>
-                      </div>
-                    )}
+                        />
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-300">
+                          {follow.username[0].toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{follow.username}</p>
+                      {follow.fullName && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{follow.fullName}</p>
+                      )}
+                    </div>
                   </div>
                 ))
               ) : (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">Not following anyone yet</div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Remove Follower Confirmation Modal */}
-      {showRemoveFollowerModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowRemoveFollowerModal(null)}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Takipten çıkar
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
-              <span className="font-semibold">@{showRemoveFollowerModal.username}</span> kullanıcısını takipçilerinizden çıkarmak istiyor musunuz? Bu işlem sessizce gerçekleşir ve bildirim gönderilmez.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowRemoveFollowerModal(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-              >
-                İptal
-              </button>
-              <button
-                onClick={() => {
-                  removeFollowerMutation.mutate(showRemoveFollowerModal.userId)
-                  setShowRemoveFollowerModal(null)
-                  setListMenuOpen(null)
-                }}
-                disabled={removeFollowerMutation.isPending}
-                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {removeFollowerMutation.isPending ? 'Kaldırılıyor...' : 'Takipten çıkar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Unfollow Confirmation Modal */}
-      {showUnfollowModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowUnfollowModal(null)}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Takibi bırak
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
-              <span className="font-semibold">@{showUnfollowModal.username}</span> kullanıcısını takip etmeyi bırakmak istiyor musunuz?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowUnfollowModal(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
-              >
-                İptal
-              </button>
-              <button
-                onClick={() => {
-                  unfollowMutation.mutate(showUnfollowModal.userId)
-                  setShowUnfollowModal(null)
-                  setListMenuOpen(null)
-                }}
-                disabled={unfollowMutation.isPending}
-                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {unfollowMutation.isPending ? 'Bırakılıyor...' : 'Takibi bırak'}
-              </button>
             </div>
           </div>
         </div>
@@ -2010,7 +1855,7 @@ function ProfileContent() {
             setPostType('post') // Reset to default
           }}
           username={username}
-          userId={profile?.id}
+          userId={profile?.id} // Pass user ID for query invalidation
           postType={postType}
         />
       )}
@@ -2028,48 +1873,9 @@ function ProfileContent() {
         <ZoomModal src={zoomImage} onClose={() => setZoomImage(null)} />
       )}
 
-      {/* Block User Modal */}
-      {showBlockModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowBlockModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Bu kişiyi engelle
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
-              Bu kişiyi engellersen:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Profilini göremezsin</li>
-                <li>Sana mesaj atamaz</li>
-                <li>Takip edemez</li>
-              </ul>
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowBlockModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                İptal
-              </button>
-              <button
-                onClick={handleConfirmBlock}
-                disabled={blockUserMutation.isPending}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {blockUserMutation.isPending ? '...' : 'Engelle'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* 3D Sergi Turu */}
       <ArtGallery3D
-        artworks={userArtworks || []}
+        artworks={profileArtworksBase}
         isOpen={galleryOpen}
         onClose={() => setGalleryOpen(false)}
       />
