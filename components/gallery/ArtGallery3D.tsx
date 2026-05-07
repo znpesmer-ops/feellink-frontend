@@ -33,7 +33,7 @@ class Gallery3DBoundary extends Component<
   render() {
     if (this.state.crashed) {
       return (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center gap-5 p-6">
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center gap-5 p-6">
           <button
             onClick={this.props.onClose}
             className="absolute top-5 right-5 text-white/50 hover:text-white transition-colors"
@@ -506,7 +506,7 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
 
   // ── Door entrance screen ───────────────────────────────────────────────────
   if (phase === 'black') {
-    return <div style={{ position:'fixed', inset:0, zIndex:100, background:'#000' }} />
+    return <div style={{ position:'fixed', inset:0, zIndex:9999, background:'#000' }} />
   }
 
   if (phase === 'door' || phase === 'opening') {
@@ -525,8 +525,8 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
       <>
         <style>{CSS}</style>
         <div style={{
-          position:'fixed', inset:0, zIndex:100,
-          background:'radial-gradient(ellipse 140% 80% at 50% -5%, rgba(76,29,149,0.45) 0%, #09051a 38%, #060210 100%)',
+          position:'fixed', inset:0, zIndex:9999,
+          background:'#07031a',
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
           userSelect:'none', overflow:'hidden',
         }}>
@@ -567,9 +567,6 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
           <p style={{
             color:'rgba(167,139,250,0.5)', fontSize:9.5, letterSpacing:'0.42em',
             textTransform:'uppercase', fontFamily:'Georgia,serif', marginBottom:32,
-            background:'linear-gradient(90deg,rgba(167,139,250,0.5),rgba(253,186,116,0.5))',
-            WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
-            backgroundSize:'200% auto', animation:'shimmer 4s linear infinite',
           }}>
             Sanal Sergi
           </p>
@@ -744,7 +741,7 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
 
       <div
         style={{
-          position:'fixed', inset:0, zIndex:100,
+          position:'fixed', inset:0, zIndex:9999,
           background:'radial-gradient(ellipse 110% 90% at 50% 60%, #0d1220 0%, #060810 100%)',
           overflow:'hidden', userSelect:'none',
           animation: visible ? 'scaleReveal 1.2s cubic-bezier(0.25,0.1,0.25,1) forwards' : 'none',
@@ -1066,9 +1063,10 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
 // ── Exported wrapper with error boundary ───────────────────────────────────────
 export function ArtGallery3D({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   if (!isOpen) return null
+  // key={String(isOpen)} resets error boundary state every time the gallery is opened
   return (
-    <Gallery3DBoundary onClose={onClose}>
-      <ArtGallery3DInner artworks={artworks} isOpen={isOpen} onClose={onClose} />
+    <Gallery3DBoundary key={String(isOpen)} onClose={onClose}>
+      <ArtGallery3DInner artworks={artworks ?? []} isOpen={isOpen} onClose={onClose} />
     </Gallery3DBoundary>
   )
 }
