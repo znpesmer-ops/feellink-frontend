@@ -219,16 +219,16 @@ function Frame({
 
       {/* ── Gold frame outer border ── */}
       {/* Top bar */}
-      <div style={{ position:'absolute', top:0, left:0, right:0, height:14, background:GOLD_H,
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:14, background:BRAND_H,
         boxShadow:'0 2px 6px rgba(0,0,0,.7)' }} />
       {/* Bottom bar */}
-      <div style={{ position:'absolute', bottom:0, left:0, right:0, height:14, background:GOLD_H,
+      <div style={{ position:'absolute', bottom:0, left:0, right:0, height:14, background:BRAND_H,
         boxShadow:'0 -2px 6px rgba(0,0,0,.7)' }} />
       {/* Left bar */}
-      <div style={{ position:'absolute', top:0, left:0, bottom:0, width:14, background:GOLD_V,
+      <div style={{ position:'absolute', top:0, left:0, bottom:0, width:14, background:BRAND_V,
         boxShadow:'2px 0 6px rgba(0,0,0,.7)' }} />
       {/* Right bar */}
-      <div style={{ position:'absolute', top:0, right:0, bottom:0, width:14, background:GOLD_V,
+      <div style={{ position:'absolute', top:0, right:0, bottom:0, width:14, background:BRAND_V,
         boxShadow:'-2px 0 6px rgba(0,0,0,.7)' }} />
 
       {/* ── Inner shadow rim ── */}
