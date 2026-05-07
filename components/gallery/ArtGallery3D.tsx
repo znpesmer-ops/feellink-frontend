@@ -337,6 +337,7 @@ function Wall({
 
 // ── Main (inner) ───────────────────────────────────────────────────────────────
 function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
+  const [phase,   setPhase]   = useState<'door' | 'opening' | 'gallery'>('door')
   const [rotY,    setRotY]    = useState(0)
   const [camZ,    setCamZ]    = useState(0)
   const [room,    setRoom]    = useState(0)
@@ -346,6 +347,14 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
   const dragRef    = useRef<{ x: number; baseRot: number } | null>(null)
   const [liveRot,  setLiveRot]  = useState(0)
   const [dragging, setDragging] = useState(false)
+
+  const openDoor = useCallback(() => {
+    setPhase('opening')
+    setTimeout(() => {
+      setPhase('gallery')
+      setTimeout(() => setVisible(true), 40)
+    }, 1100)
+  }, [])
 
   const imgs       = artworks.filter(a => a.media?.[0]?.url)
   const FPR        = 9
@@ -406,15 +415,183 @@ function ArtGallery3DInner({ artworks, isOpen, onClose }: ArtGallery3DProps) {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
       setRotY(0); setCamZ(0); setRoom(0); setLiveRot(0)
-      const t = setTimeout(() => setVisible(true), 40)
-      return () => clearTimeout(t)
+      setPhase('door'); setVisible(false)
+      return
     }
     setVisible(false)
+    setPhase('door')
     document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
   if (!isOpen) return null
+
+  // ── Door entrance screen ───────────────────────────────────────────────────
+  if (phase === 'door' || phase === 'opening') {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div style={{
+          position:'fixed', inset:0, zIndex:100,
+          background:'radial-gradient(ellipse 130% 90% at 50% 35%, #13192a 0%, #080b12 100%)',
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+          gap:0, userSelect:'none',
+        }}>
+          {/* Ambient floor glow */}
+          <div style={{
+            position:'absolute', bottom:0, left:0, right:0, height:'40%',
+            background:'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%)',
+            pointerEvents:'none',
+          }} />
+          {/* Ceiling light halo */}
+          <div style={{
+            position:'absolute', top:0, left:'50%', transform:'translateX(-50%)',
+            width:300, height:200,
+            background:'radial-gradient(ellipse at 50% 0%, rgba(201,165,80,0.07), transparent 70%)',
+            pointerEvents:'none',
+          }} />
+
+          {/* Label */}
+          <p style={{
+            color:'rgba(201,165,80,0.35)', fontSize:10, letterSpacing:'0.38em',
+            textTransform:'uppercase', fontFamily:'Georgia,serif', marginBottom:28,
+          }}>
+            Sanal Sergi
+          </p>
+
+          {/* Door scene */}
+          <div style={{ position:'relative', perspective:'900px', perspectiveOrigin:'50% 50%' }}>
+            <div style={{ position:'relative', width:200, height:340 }}>
+
+              {/* Glow from inside the gallery */}
+              <div style={{
+                position:'absolute', inset:0,
+                background:'radial-gradient(ellipse 70% 80% at 50% 40%, rgba(255,200,90,0.13), transparent 70%)',
+                pointerEvents:'none',
+              }} />
+
+              {/* Frame — gold border */}
+              <div style={{ position:'absolute', inset:0, boxSizing:'border-box',
+                border:'10px solid transparent',
+                background:'transparent',
+                outline:'none',
+                boxShadow:'inset 0 0 0 10px rgba(201,165,80,0.0)',
+              }}>
+                {/* Top */}
+                <div style={{ position:'absolute', top:0, left:0, right:0, height:10, background:GOLD_H }} />
+                {/* Bottom */}
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, height:10, background:GOLD_H }} />
+                {/* Left */}
+                <div style={{ position:'absolute', top:0, left:0, bottom:0, width:10, background:GOLD_V }} />
+                {/* Right */}
+                <div style={{ position:'absolute', top:0, right:0, bottom:0, width:10, background:GOLD_V }} />
+                {/* Corners */}
+                {([{top:0,left:0},{top:0,right:0},{bottom:0,left:0},{bottom:0,right:0}] as React.CSSProperties[]).map((s,i) => (
+                  <div key={i} style={{
+                    position:'absolute', ...s, width:14, height:14, zIndex:1,
+                    background:'radial-gradient(circle at 40% 40%, #f0c860, #7a5512)',
+                    boxShadow:'0 0 6px rgba(201,165,80,0.5)',
+                  }} />
+                ))}
+              </div>
+
+              {/* Door panel */}
+              <div style={{
+                position:'absolute', inset:10,
+                transformOrigin:'left center',
+                transform: phase === 'opening' ? 'rotateY(-82deg)' : 'rotateY(0deg)',
+                transition:'transform 1.1s cubic-bezier(0.4,0,0.2,1)',
+                transformStyle:'preserve-3d',
+                boxShadow: phase === 'opening' ? '12px 0 40px rgba(0,0,0,0.8)' : '0 0 0',
+              }}>
+                {/* Front face */}
+                <div style={{
+                  position:'absolute', inset:0, backfaceVisibility:'hidden',
+                  background:'linear-gradient(160deg, #1e1408 0%, #110d04 45%, #1a1008 75%, #0d0804 100%)',
+                }}>
+                  {/* Upper panel recess */}
+                  <div style={{ position:'absolute', top:14, left:14, right:14, height:'36%',
+                    border:'1.5px solid rgba(201,165,80,0.13)',
+                    background:'rgba(0,0,0,0.25)',
+                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.5)',
+                  }} />
+                  {/* Lower panel recess */}
+                  <div style={{ position:'absolute', bottom:14, left:14, right:14, top:'calc(36% + 28px)',
+                    border:'1.5px solid rgba(201,165,80,0.13)',
+                    background:'rgba(0,0,0,0.25)',
+                    boxShadow:'inset 0 2px 8px rgba(0,0,0,0.5)',
+                  }} />
+                  {/* Center divider */}
+                  <div style={{ position:'absolute', top:0, bottom:0, left:'50%', width:1,
+                    background:'rgba(201,165,80,0.06)',
+                  }} />
+                  {/* Handle */}
+                  <div style={{ position:'absolute', right:16, top:'52%', transform:'translateY(-50%)' }}>
+                    <div style={{
+                      width:13, height:13, borderRadius:'50%',
+                      background:'radial-gradient(circle at 35% 35%, #f0c860, #7a5512)',
+                      boxShadow:'0 0 10px rgba(201,165,80,0.5), 0 2px 4px rgba(0,0,0,0.6)',
+                    }} />
+                    <div style={{ width:2, height:20, background:'linear-gradient(180deg,#c8952c,#7a5512)', margin:'3px auto 0', borderRadius:1 }} />
+                  </div>
+                </div>
+                {/* Back face (inner door edge, visible when ajar) */}
+                <div style={{
+                  position:'absolute', inset:0,
+                  transform:'rotateY(180deg)', backfaceVisibility:'hidden',
+                  background:'#120e06',
+                }} />
+              </div>
+
+              {/* Light leak through door crack (shows when opening) */}
+              {phase === 'opening' && (
+                <div style={{
+                  position:'absolute', top:10, left:10, bottom:10, width:4,
+                  background:'linear-gradient(90deg, rgba(255,200,90,0.35), transparent)',
+                  animation:'gIn .3s ease',
+                }} />
+              )}
+            </div>
+          </div>
+
+          {/* Enter button */}
+          <button
+            onClick={openDoor}
+            disabled={phase === 'opening'}
+            style={{
+              marginTop:36,
+              padding:'12px 36px',
+              background: phase === 'opening'
+                ? 'rgba(201,165,80,0.08)'
+                : 'linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.1))',
+              border:'1px solid rgba(201,165,80,' + (phase === 'opening' ? '0.12' : '0.35') + ')',
+              borderRadius:3,
+              color: phase === 'opening' ? 'rgba(201,165,80,0.3)' : 'rgba(201,165,80,0.9)',
+              fontSize:11, letterSpacing:'0.3em', textTransform:'uppercase',
+              fontFamily:'Georgia,serif', cursor: phase === 'opening' ? 'default' : 'pointer',
+              transition:'all .25s',
+            }}
+          >
+            {phase === 'opening' ? 'Açılıyor…' : 'Kapıyı Aç'}
+          </button>
+
+          {/* Close */}
+          <button
+            onClick={onClose}
+            style={{
+              position:'absolute', top:18, right:22, zIndex:25,
+              background:'rgba(255,255,255,.04)', border:'1px solid rgba(201,165,80,.15)',
+              borderRadius:'50%', width:34, height:34,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              cursor:'pointer', color:'rgba(201,165,80,.45)',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </>
+    )
+  }
 
   const effectiveRot = rotY + liveRot
   const viewDir      = effectiveRot > 45 ? 'left' : effectiveRot < -45 ? 'right' : 'center'

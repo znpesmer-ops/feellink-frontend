@@ -1404,84 +1404,77 @@ function ProfileContent() {
 
         {/* Sekme İçerikleri */}
         {activeTab === 'gallery' ? (
-          <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-orange/10 text-brand-orange rounded-full text-xs font-medium">
-                  <Sparkles size={12} />
-                  Sergi
-                </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{username} sergisi</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {isMe && canUploadArtwork && (
-                  <button
-                    onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand-orange hover:text-brand-orange transition-colors"
-                  >
-                    <Plus size={12} />
-                    Eser yükle
-                  </button>
-                )}
+          <div className="rounded-2xl overflow-hidden" style={{ background:'linear-gradient(160deg,#0d1018,#080b12)', border:'1px solid rgba(201,165,80,0.1)' }}>
+            {/* Atmospheric ceiling glow */}
+            <div className="pointer-events-none" style={{ height:3, background:'linear-gradient(90deg,transparent,rgba(201,165,80,0.2),transparent)' }} />
+            <div className="flex flex-col items-center justify-center py-16 px-6 gap-6 relative">
+              {/* Background halo */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background:'radial-gradient(ellipse 70% 50% at 50% 40%, rgba(201,165,80,0.04), transparent 70%)' }} />
+              {/* Label */}
+              <p style={{ color:'rgba(201,165,80,0.35)', fontSize:10, letterSpacing:'0.38em', textTransform:'uppercase', fontFamily:'Georgia,serif' }}>
+                Sanal Sergi
+              </p>
+              {/* Title */}
+              <div className="text-center">
+                <h2 style={{ color:'rgba(255,255,255,0.75)', fontSize:22, fontFamily:'Georgia,serif', fontWeight:400 }}>
+                  {username} sergisi
+                </h2>
                 {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
-                  <button
-                    onClick={() => setGalleryOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-colors"
-                  >
-                    <Sparkles size={12} />
-                    Tur
-                  </button>
+                  <p style={{ color:'rgba(201,165,80,0.3)', fontSize:11, marginTop:6, letterSpacing:'0.1em' }}>
+                    {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length} eser sergileniyor
+                  </p>
                 )}
               </div>
-            </div>
-            {isLoadingArtworks ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="w-6 h-6 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length === 0 ? (
-              <div className="text-center py-16 px-6">
-                <div className="text-5xl mb-3">🖼️</div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Henüz eser yüklenmemiş</p>
-                {isMe && canUploadArtwork && (
-                  <button
-                    onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
-                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-orange text-white rounded-lg text-sm font-medium hover:bg-brand-orange/90 transition-colors"
-                  >
-                    <Plus size={14} />
-                    İlk eseri yükle
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="p-4">
-                <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-                  {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length} eser · Tur butonuyla 3D galeride gez
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).map((artwork: any) => (
-                    <div
-                      key={artwork.id}
-                      className="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 cursor-pointer group relative"
-                      onClick={() => setGalleryOpen(true)}
+              {/* Enter button or empty state */}
+              {(userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 ? (
+                <button
+                  onClick={() => setGalleryOpen(true)}
+                  style={{
+                    padding:'13px 44px',
+                    background:'linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.08))',
+                    border:'1px solid rgba(201,165,80,0.4)',
+                    borderRadius:3,
+                    color:'rgba(201,165,80,0.9)',
+                    fontSize:11, letterSpacing:'0.32em', textTransform:'uppercase',
+                    fontFamily:'Georgia,serif', cursor:'pointer',
+                    boxShadow:'0 0 30px rgba(201,165,80,0.08)',
+                    transition:'all .25s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background='linear-gradient(135deg,rgba(201,165,80,0.28),rgba(201,165,80,0.15))'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(201,165,80,0.7)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background='linear-gradient(135deg,rgba(201,165,80,0.18),rgba(201,165,80,0.08))'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(201,165,80,0.4)' }}
+                >
+                  Sergiye Gir
+                </button>
+              ) : (
+                <div className="text-center">
+                  <p style={{ color:'rgba(255,255,255,0.25)', fontSize:13 }}>Henüz eser yüklenmemiş</p>
+                  {isMe && canUploadArtwork && (
+                    <button
+                      onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
+                      style={{
+                        marginTop:16, padding:'10px 28px',
+                        background:'rgba(201,165,80,0.12)',
+                        border:'1px solid rgba(201,165,80,0.3)',
+                        borderRadius:3, color:'rgba(201,165,80,0.7)',
+                        fontSize:11, letterSpacing:'0.2em', cursor:'pointer',
+                      }}
                     >
-                      <img
-                        src={resolveImageUrl(artwork.media[0].url)}
-                        alt={artwork.title || 'Eser'}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end">
-                        {artwork.title && (
-                          <div className="w-full px-2 py-1.5 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-white text-xs font-medium truncate">{artwork.title}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      + Eser Yükle
+                    </button>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+              {/* Secondary upload button for own profile */}
+              {isMe && canUploadArtwork && (userArtworks || []).filter((a: any) => a.media?.length > 0 && a.media[0]?.url).length > 0 && (
+                <button
+                  onClick={() => { setPostType('artwork'); setShowCreateModal(true) }}
+                  style={{ color:'rgba(201,165,80,0.3)', fontSize:10, letterSpacing:'0.2em', background:'none', border:'none', cursor:'pointer', textTransform:'uppercase' }}
+                >
+                  + Yeni Eser Ekle
+                </button>
+              )}
+            </div>
+            <div className="pointer-events-none" style={{ height:3, background:'linear-gradient(90deg,transparent,rgba(201,165,80,0.1),transparent)' }} />
           </div>
         ) : activeTab === 'articles' ? (
           <div className="bg-white dark:bg-gray-950 rounded-2xl p-6 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
