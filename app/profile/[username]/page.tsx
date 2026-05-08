@@ -1064,15 +1064,6 @@ function ProfileContent() {
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             )}
-            {profile.isOwnProfile && (
-              <button
-                onClick={() => router.push('/profile/edit')}
-                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white text-xs font-medium rounded-lg transition-all"
-              >
-                <Camera size={13} />
-                {(profile as any).coverImage ? 'Kapağı Değiştir' : 'Kapak Ekle'}
-              </button>
-            )}
           </div>
 
           {/* Content below cover */}
