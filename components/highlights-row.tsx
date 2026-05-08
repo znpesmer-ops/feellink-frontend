@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ImageIcon, MessageCircle, Landmark, Palette } from 'lucide-react'
+import { ImageIcon, MessageCircle, Landmark, Palette, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
@@ -142,8 +142,11 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
   ]
 
   // Boş placeholder kartı - Modern overlay tasarımı
-  const EmptyCard = ({ title }: { title: string }) => (
-    <div className="relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-[#1a1a1a] dark:to-[#111] border border-[rgba(255,140,0,0.35)] dark:border-[rgba(255,140,0,0.15)] shadow-sm opacity-50">
+  const EmptyCard = ({ title, index }: { title: string; index: number }) => (
+    <div
+      className="premium-card-enter relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-[#1a1a1a] dark:to-[#111] border border-[rgba(255,140,0,0.2)] dark:border-[rgba(255,140,0,0.08)] shadow-sm opacity-40"
+      style={{ animationDelay: `${index * 0.08}s` }}
+    >
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
         <p className="text-xs font-semibold text-[#ff7b00] mb-1 tracking-wide uppercase">{title}</p>
@@ -154,15 +157,18 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
 
   return (
     <section className={`w-full ${compactTop ? 'mt-0' : ''}`}>
-      <h2 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 mt-0 mb-4 md:mb-6 tracking-wide">
-        Ayın Öne Çıkanları
+      <h2 className="flex items-center gap-2 text-lg md:text-xl font-semibold mt-0 mb-4 md:mb-6">
+        <Sparkles size={17} className="text-orange-400 flex-shrink-0" />
+        <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-wide">
+          Ayın Öne Çıkanları
+        </span>
       </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {highlights.map((item) => {
           if (!item.data) {
             return (
-              <EmptyCard key={item.id} title={item.title} />
+              <EmptyCard key={item.id} title={item.title} index={item.id - 1} />
             )
           }
 
@@ -203,10 +209,12 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
             : 'bg-gradient-to-br from-pink-500/20 to-pink-600/30'
 
           const cardUrl = getCardUrl(item)
-          
+
           // Tüm kartlar aynı yapıyı kullanır (Ayın Yorumu dahil)
           const CardContent = (
-            <div className="relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gray-900 dark:bg-[#111] border border-[rgba(255,140,0,0.35)] dark:border-[rgba(255,140,0,0.15)] shadow-sm hover:shadow-lg hover:shadow-brand-orange/20 transition-all hover:-translate-y-1 group cursor-pointer">
+            <div className="relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gray-900 dark:bg-[#111] border border-[rgba(251,146,60,0.45)] dark:border-[rgba(251,146,60,0.2)] shadow-md hover:shadow-[0_0_28px_rgba(251,146,60,0.35),0_8px_24px_rgba(0,0,0,0.25)] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.015] group cursor-pointer">
+              {/* Shimmer sweep on hover */}
+              <span className="shimmer-bar" />
               {/* Görsel veya Gradient Background - 🔒 Sadece gerçek imageUrl varsa görsel göster */}
               {displayImage && isUsableImage(displayImage) ? (() => {
                 const resolvedUrl = resolveImageUrl(displayImage)
@@ -219,7 +227,7 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
                   <img
                     src={resolvedUrl}
                     alt={item.subtitle}
-                    className="absolute inset-0 w-full h-full object-cover object-center"
+                    className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                     onError={(e) => {
                       // 🔒 Görsel yüklenemezse gizle, fallback gösterme
                       e.currentTarget.style.display = 'none'
@@ -270,11 +278,13 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
 
           // Link varsa kartı Link'e sar, yoksa normal div
           return cardUrl ? (
-            <Link key={item.id} href={cardUrl} className="block">
-              {CardContent}
-            </Link>
+            <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${(item.id - 1) * 0.08}s` }}>
+              <Link href={cardUrl} className="block">
+                {CardContent}
+              </Link>
+            </div>
           ) : (
-            <div key={item.id}>
+            <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${(item.id - 1) * 0.08}s` }}>
               {CardContent}
             </div>
           )

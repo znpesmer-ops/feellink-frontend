@@ -297,9 +297,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
           <>
             {/* 🏛️ Ayın Müzeleri - Her zaman 2x2 grid (4 slot) - Kurumsal hesaplar otomatik hesaplanan */}
             <div className="w-full">
-              {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-              <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
-                Ayın Müzeleri
+              <h3 className="flex items-center gap-1.5 text-xl font-semibold mb-5 mt-0" style={{ fontWeight: 600 }}>
+                <Sparkles size={15} className="text-orange-400 flex-shrink-0" />
+                <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-[0.04em] uppercase" style={{ letterSpacing: '0.3px' }}>
+                  Ayın Müzeleri
+                </span>
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 {Array.from({ length: 4 }, (_, i) => {
@@ -308,9 +310,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
                     <Link
                       key={museum.id}
                       href={`/profile/${museum.username || museum.id}`}
-                      className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-md cursor-pointer group transition-all duration-200 bg-white"
+                      className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-[0_0_22px_rgba(251,146,60,0.28),0_8px_20px_rgba(0,0,0,0.2)] hover:scale-[1.02] cursor-pointer group transition-all duration-300 bg-white"
                       data-dark-bg="rgba(255,255,255,0.04)"
                     >
+                      {/* Shimmer on hover */}
+                      <span className="shimmer-bar" />
                       {/* Background gradient fallback */}
                       <div className={`absolute inset-0 bg-gradient-to-br ${museum.color} opacity-90 z-0`} />
                       <div className="relative w-full h-[110px] overflow-hidden z-10">
@@ -393,9 +397,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
         {/* 🔥 En Çok Beğenilenler */}
         {topLikedArticles.length > 0 && (
           <div className="mt-10 bg-white rounded-2xl p-4 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] border dark:border-white/6" data-dark-bg="rgba(255,255,255,0.04)">
-          {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-            <h3 className="text-xl font-semibold mb-4 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
-              En Çok Beğenilenler
+            <h3 className="flex items-center gap-1.5 text-xl font-semibold mb-4" style={{ fontWeight: 600 }}>
+              <Sparkles size={15} className="text-orange-400 flex-shrink-0" />
+              <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-[0.04em] uppercase" style={{ letterSpacing: '0.3px' }}>
+                En Çok Beğenilenler
+              </span>
             </h3>
           <div className="space-y-3">
             {topLikedArticles.map((article, index) => (
@@ -438,9 +444,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
 
         {/* ✍️ Aktif Yazarlar - 2x2 Grid (Ayın Müzeleri ile aynı yapı) */}
         <div className="mt-10 bg-white rounded-2xl p-4 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] border dark:border-white/6" data-dark-bg="rgba(255,255,255,0.04)">
-        {/* 🔥 KRİTİK: Başlık font boyutu artırıldı - daha profesyonel görünüm */}
-          <h3 className="text-xl font-semibold mb-5 mt-0 bg-gradient-to-r from-brand-orange to-brand-blue bg-clip-text text-transparent dark:from-orange-400 dark:to-blue-400 tracking-[0.06em] uppercase" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>
-            Aktif Yazarlar
+          <h3 className="flex items-center gap-1.5 text-xl font-semibold mb-5 mt-0" style={{ fontWeight: 600 }}>
+            <Sparkles size={15} className="text-orange-400 flex-shrink-0" />
+            <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-[0.04em] uppercase" style={{ letterSpacing: '0.3px' }}>
+              Aktif Yazarlar
+            </span>
           </h3>
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }, (_, i) => {
@@ -449,9 +457,11 @@ export default function RightSidebar({ mode }: RightSidebarProps = {}) {
               <Link
                 key={author.id}
                 href={`/profile/${author.slug || author.id}`}
-                className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-md cursor-pointer group transition-all duration-200 bg-white"
+                className="relative rounded-2xl overflow-hidden border border-black/4 dark:border-white/6 shadow-[0_6px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:shadow-[0_0_22px_rgba(251,146,60,0.28),0_8px_20px_rgba(0,0,0,0.2)] hover:scale-[1.02] cursor-pointer group transition-all duration-300 bg-white"
                 data-dark-bg="rgba(255,255,255,0.04)"
               >
+                {/* Shimmer on hover */}
+                <span className="shimmer-bar" />
                 {/* Profil görseli - Kartın tamamını doldurur */}
                 <div className="relative w-full h-[110px] overflow-hidden">
                   {!imageErrors[`author-${author.id}`] ? (

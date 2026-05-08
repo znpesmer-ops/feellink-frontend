@@ -675,16 +675,16 @@ a:hover {
   border-color: transparent !important;
 }
 
-/* Dark Mode Kartları - Border Yerine Shadow ile Ayrıştır */
-.dark aside [data-dark-bg],
-.dark aside .rounded-2xl[class*="border"],
-.dark aside .rounded-xl[class*="border"] {
+/* Dark Mode Kartları - Border Yerine Shadow ile Ayrıştır (hover'da doğal shadow'a izin ver) */
+.dark aside [data-dark-bg]:not(:hover),
+.dark aside .rounded-2xl[class*="border"]:not(:hover),
+.dark aside .rounded-xl[class*="border"]:not(:hover) {
   border: none !important;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45) !important;
 }
 
 /* Ayın Öne Çıkanları Kartları - Dark Mode (Border Kaldır, Shadow Ekle) */
-.dark .rounded-\[14px\] {
+.dark .rounded-\[14px\]:not(:hover) {
   border: none !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
 }
@@ -915,6 +915,43 @@ button[class*="bg-brand-orange"]:not([disabled]):active {
     rgba(17, 24, 39, 0.9),
     transparent
   );
+}
+
+/* ✨ Premium Feed — Entrance & Hover Animations */
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmerSweep {
+  0%   { transform: translateX(-200%) skewX(-15deg); opacity: 1; }
+  100% { transform: translateX(300%) skewX(-15deg); opacity: 0; }
+}
+
+.premium-card-enter {
+  animation: slideUpFade 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.shimmer-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+  transform: translateX(-200%) skewX(-15deg);
+  pointer-events: none;
+  z-index: 30;
+}
+
+.group:hover .shimmer-bar {
+  animation: shimmerSweep 0.68s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Dark mode sidebar hover — premium glow */
+.dark aside .rounded-2xl[class*="border"]:hover,
+.dark aside .rounded-xl[class*="border"]:hover {
+  box-shadow: 0 0 22px rgba(251, 146, 60, 0.18), 0 12px 28px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Başvurular Scrollbar - Profesyonel ve Minimal */

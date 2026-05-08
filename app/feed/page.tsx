@@ -9,6 +9,7 @@ import HighlightsRow from '@/components/highlights-row'
 import PostCard from '@/components/PostCard'
 import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
+import { Sparkles } from 'lucide-react'
 
 function FeedContent() {
   const router = useRouter()
@@ -234,7 +235,12 @@ function FeedContent() {
       <div className="space-y-6 md:space-y-10">
         {/* 🔸 Keşfet */}
         <div className="w-full">
-          <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4 md:mb-6 tracking-[0.02em]" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>Keşfet</h2>
+          <h2 className="flex items-center gap-2 text-lg md:text-xl font-semibold mb-4 md:mb-6">
+            <Sparkles size={17} className="text-orange-400 flex-shrink-0" />
+            <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-wide">
+              Keşfet
+            </span>
+          </h2>
           
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
@@ -258,13 +264,14 @@ function FeedContent() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {feedPosts.map((post, index) => (
-                <PostCard 
-                  key={post.id} 
-                  post={post} 
-                  variant="explore"
-                  index={index}
-                  showLike={false} 
-                />
+                <div key={post.id} className="premium-card-enter" style={{ animationDelay: `${index * 0.055}s` }}>
+                  <PostCard
+                    post={post}
+                    variant="explore"
+                    index={index}
+                    showLike={false}
+                  />
+                </div>
               ))}
             </div>
           )}
