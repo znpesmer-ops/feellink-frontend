@@ -9,7 +9,6 @@ import HighlightsRow from '@/components/highlights-row'
 import PostCard from '@/components/PostCard'
 import { PostModal } from '@/components/post-modal'
 import api from '@/lib/api'
-import { Compass } from 'lucide-react'
 
 function FeedContent() {
   const router = useRouter()
@@ -235,14 +234,15 @@ function FeedContent() {
       <div className="space-y-6 md:space-y-10">
         {/* 🔸 Keşfet */}
         <div className="w-full">
-          <div className="fl-section-title fl-accent-line mb-4 md:mb-6 pb-2 inline-block">
-            <div className="flex items-center gap-2.5">
-              <span className="fl-dot w-1.5 h-1.5 rounded-full bg-[#FF8A00]" />
+          <div className="fl-section-title mb-4 md:mb-6 pb-2 inline-block">
+            <div className="flex items-center gap-2.5 mb-0.5">
+              <span className="fl-dot inline-block w-1.5 h-1.5 rounded-full bg-[#FF8A00]" />
               <span className="text-[10px] font-bold tracking-[0.32em] uppercase text-[#FF8A00]">Keşfet</span>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight mt-0.5 leading-tight">
+            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
               Seni Bekleyen İçerikler
             </p>
+            <div className="fl-accent-line-el h-[2px] w-full bg-[#FF8A00] mt-1.5 rounded-full" />
           </div>
           
           {isLoading ? (

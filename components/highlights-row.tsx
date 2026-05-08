@@ -111,16 +111,17 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
   return (
     <section className={`w-full ${compactTop ? 'mt-0' : ''}`}>
       {/* Editorial section header */}
-      <div className="fl-section-title fl-accent-line mb-4 md:mb-6 pb-2 inline-block">
-        <div className="flex items-center gap-2.5">
-          <span className="fl-dot w-1.5 h-1.5 rounded-full bg-[#FF8A00] flex-shrink-0" />
+      <div className="fl-section-title mb-4 md:mb-6 pb-2 inline-block">
+        <div className="flex items-center gap-2.5 mb-0.5">
+          <span className="fl-dot inline-block w-1.5 h-1.5 rounded-full bg-[#FF8A00] flex-shrink-0" />
           <span className="text-[10px] font-bold tracking-[0.32em] uppercase text-[#FF8A00]">
             Ayın Öne Çıkanları
           </span>
         </div>
-        <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight mt-0.5 leading-tight">
+        <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
           Bu Ay Sahnede
         </p>
+        <div className="fl-accent-line-el h-[2px] w-full bg-[#FF8A00] mt-1.5 rounded-full" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -143,7 +144,7 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
 
               const Inner = (
                 <div
-                  className={`fl-highlight-card relative w-full h-[148px] md:h-[168px] rounded-[14px] overflow-hidden group cursor-pointer
+                  className={`relative w-full h-[148px] md:h-[168px] rounded-[14px] overflow-hidden group cursor-pointer
                     bg-gray-900 dark:bg-[#0d0d0d]
                     border border-white/6 dark:border-white/[0.04]
                     shadow-[0_4px_20px_rgba(0,0,0,0.18)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.32)]
