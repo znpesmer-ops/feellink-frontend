@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ImageIcon, MessageCircle, Landmark, Palette, Sparkles } from 'lucide-react'
+import { ImageIcon, MessageCircle, Landmark, Palette } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { resolveImageUrl } from '@/lib/resolveImageUrl'
@@ -18,279 +18,223 @@ interface FeaturedData {
   collector: { name: string; username: string; imageUrl: string } | null
 }
 
+const CARD_META = [
+  { num: '01', icon: Landmark,      accentFrom: '#FF8A00', accentTo: '#ea580c' },
+  { num: '02', icon: ImageIcon,     accentFrom: '#6366f1', accentTo: '#818cf8' },
+  { num: '03', icon: MessageCircle, accentFrom: '#10b981', accentTo: '#34d399' },
+  { num: '04', icon: Palette,       accentFrom: '#ec4899', accentTo: '#f472b6' },
+]
+
 export default function HighlightsRow({ compactTop = false }: HighlightsRowProps) {
-  // ✅ TEK KAYNAK: Backend'den monthly highlights çek
   const { data: monthlyHighlights, isLoading } = useQuery({
     queryKey: ['monthly-highlights'],
     queryFn: async () => {
       try {
         const res = await api.get('/highlights/monthly')
-        return res.data || {
-          museum: null,
-          artwork: null,
-          comment: null,
-          collection: null,
-        }
-      } catch (err: any) {
-        console.error('Monthly highlights alınamadı:', err)
-        // Hata durumunda güvenli fallback döndür
-        return {
-          museum: null,
-          artwork: null,
-          comment: null,
-          collection: null,
-        }
+        return res.data || { museum: null, artwork: null, comment: null, collection: null }
+      } catch {
+        return { museum: null, artwork: null, comment: null, collection: null }
       }
     },
-    staleTime: 60 * 60 * 1000, // 1 saat cache
+    staleTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
-    retry: 1, // Sadece 1 kez retry yap
+    retry: 1,
   })
 
-  // Backward compatibility için format dönüşümü - Güvenli null kontrolü
   const featured: FeaturedData = {
     museum: monthlyHighlights?.museum
-      ? {
-          name: monthlyHighlights.museum?.name || '',
-          username: monthlyHighlights.museum?.username || '',
-          imageUrl: monthlyHighlights.museum?.imageUrl || null,
-        }
+      ? { name: monthlyHighlights.museum?.name || '', username: monthlyHighlights.museum?.username || '', imageUrl: monthlyHighlights.museum?.imageUrl || null }
       : null,
     artwork: monthlyHighlights?.artwork
-      ? {
-          title: monthlyHighlights.artwork?.title || '',
-          postId: monthlyHighlights.artwork?.postId || '',
-          imageUrl: monthlyHighlights.artwork?.imageUrl || null,
-        }
+      ? { title: monthlyHighlights.artwork?.title || '', postId: monthlyHighlights.artwork?.postId || '', imageUrl: monthlyHighlights.artwork?.imageUrl || null }
       : null,
     comment: monthlyHighlights?.comment
-      ? {
-          text: monthlyHighlights.comment?.text || '',
-          commentId: monthlyHighlights.comment?.commentId || '',
-          postId: monthlyHighlights.comment?.postId || '',
-          username: monthlyHighlights.comment?.username || '',
-          fullName: monthlyHighlights.comment?.fullName || '',
-        }
+      ? { text: monthlyHighlights.comment?.text || '', commentId: monthlyHighlights.comment?.commentId || '', postId: monthlyHighlights.comment?.postId || '', username: monthlyHighlights.comment?.username || '', fullName: monthlyHighlights.comment?.fullName || '' }
       : null,
     collector: monthlyHighlights?.collection
-      ? {
-          name: monthlyHighlights.collection?.title || '',
-          username: monthlyHighlights.collection?.owner?.username || '',
-          imageUrl: monthlyHighlights.collection?.coverImage || monthlyHighlights.collection?.owner?.avatar || null,
-        }
+      ? { name: monthlyHighlights.collection?.title || '', username: monthlyHighlights.collection?.owner?.username || '', imageUrl: monthlyHighlights.collection?.coverImage || monthlyHighlights.collection?.owner?.avatar || null }
       : null,
   }
 
-  const loading = isLoading
-
-  // Her kart için hedef URL'yi hesapla
-  const getCardUrl = (item: any) => {
-    if (!item.data) return null
-
-    switch (item.id) {
-      case 1: // Ayın Müzesi
-        return featured.museum?.username ? `/profile/${featured.museum.username}` : null
-      case 2: // Ayın Eseri
-        return featured.artwork?.postId ? `/feed?post=${featured.artwork.postId}` : null
-      case 3: // Ayın Yorumu
-        return featured.comment?.postId && featured.comment?.commentId
-          ? `/feed?post=${featured.comment.postId}&comment=${featured.comment.commentId}`
-          : null
-      case 4: // Ayın Koleksiyonu
-        return monthlyHighlights?.collection?.id ? `/collections/${monthlyHighlights.collection.id}` : null
-      default:
-        return null
-    }
-  }
-
-  // Her zaman 4 kart - veri yoksa boş placeholder
   const highlights = [
-    {
-      id: 1,
-      title: 'Ayın Müzesi',
-      subtitle: featured.museum?.name || '—',
-      icon: <Landmark size={20} strokeWidth={1.8} />,
-      data: featured.museum,
-      imageUrl: featured.museum?.imageUrl,
-    },
-    {
-      id: 2,
-      title: 'Ayın Eseri',
-      subtitle: featured.artwork?.title || '—',
-      icon: <ImageIcon size={20} strokeWidth={1.8} />,
-      data: featured.artwork,
-      imageUrl: featured.artwork?.imageUrl,
-    },
+    { id: 1, title: 'Ayın Müzesi',     subtitle: featured.museum?.name || '—',   data: featured.museum,   imageUrl: featured.museum?.imageUrl },
+    { id: 2, title: 'Ayın Eseri',      subtitle: featured.artwork?.title || '—',  data: featured.artwork,  imageUrl: featured.artwork?.imageUrl },
     {
       id: 3,
       title: 'Ayın Yorumu',
       subtitle: featured.comment
-        ? `"${featured.comment.text.length > 30 ? featured.comment.text.substring(0, 30) + '...' : featured.comment.text}"`
+        ? `"${featured.comment.text.length > 30 ? featured.comment.text.substring(0, 30) + '…' : featured.comment.text}"`
         : '—',
-      icon: <MessageCircle size={20} strokeWidth={1.8} />,
       data: featured.comment,
       username: featured.comment?.username,
+      imageUrl: undefined,
     },
-    {
-      id: 4,
-      title: 'Ayın Koleksiyonu',
-      subtitle: featured.collector?.name || '—',
-      icon: <Palette size={20} strokeWidth={1.8} />,
-      data: featured.collector,
-      imageUrl: featured.collector?.imageUrl,
-    },
+    { id: 4, title: 'Ayın Koleksiyonu', subtitle: featured.collector?.name || '—', data: featured.collector, imageUrl: featured.collector?.imageUrl },
   ]
 
-  // Boş placeholder kartı - Modern overlay tasarımı
-  const EmptyCard = ({ title, index }: { title: string; index: number }) => (
-    <div
-      className="premium-card-enter relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-[#1a1a1a] dark:to-[#111] border border-[rgba(255,140,0,0.2)] dark:border-[rgba(255,140,0,0.08)] shadow-sm opacity-40"
-      style={{ animationDelay: `${index * 0.08}s` }}
-    >
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
-        <p className="text-xs font-semibold text-[#ff7b00] mb-1 tracking-wide uppercase">{title}</p>
-        <p className="text-sm text-white/60">—</p>
+  const getCardUrl = (item: any) => {
+    if (!item.data) return null
+    switch (item.id) {
+      case 1: return featured.museum?.username ? `/profile/${featured.museum.username}` : null
+      case 2: return featured.artwork?.postId  ? `/feed?post=${featured.artwork.postId}` : null
+      case 3: return featured.comment?.postId && featured.comment?.commentId
+        ? `/feed?post=${featured.comment.postId}&comment=${featured.comment.commentId}` : null
+      case 4: return monthlyHighlights?.collection?.id ? `/collections/${monthlyHighlights.collection.id}` : null
+      default: return null
+    }
+  }
+
+  const isUsableImage = (url?: string | null): boolean => {
+    if (!url || typeof url !== 'string') return false
+    const u = url.trim()
+    if (!u || u === 'null' || u === 'undefined') return false
+    const blocked = ['default-user','default-avatar','female','woman','avatar-female','placeholder-user','avatar-placeholder']
+    if (blocked.some((k) => u.toLowerCase().includes(k))) return false
+    return true
+  }
+
+  // Skeleton loader card
+  const SkeletonCard = ({ index }: { index: number }) => {
+    const meta = CARD_META[index]
+    return (
+      <div
+        className="premium-card-enter relative w-full h-[148px] md:h-[168px] rounded-[14px] overflow-hidden bg-gray-100 dark:bg-[#111]"
+        style={{ animationDelay: `${index * 0.08}s` }}
+      >
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-gray-200/60 to-gray-300/30 dark:from-white/5 dark:to-white/[0.02]" />
+        {/* num badge skeleton */}
+        <div className="absolute top-3 right-3 w-7 h-5 rounded bg-white/10 animate-pulse" />
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <section className={`w-full ${compactTop ? 'mt-0' : ''}`}>
-      <h2 className="flex items-center gap-2 text-lg md:text-xl font-semibold mt-0 mb-4 md:mb-6">
-        <Sparkles size={17} className="text-orange-400 flex-shrink-0" />
-        <span className="bg-gradient-to-r from-[#fb923c] via-[#ea580c] to-[#7c3aed] bg-clip-text text-transparent tracking-wide">
-          Ayın Öne Çıkanları
-        </span>
-      </h2>
+      {/* Editorial section header */}
+      <div className="fl-section-title fl-accent-line mb-4 md:mb-6 pb-2 inline-block">
+        <div className="flex items-center gap-2.5">
+          <span className="fl-dot w-1.5 h-1.5 rounded-full bg-[#FF8A00] flex-shrink-0" />
+          <span className="text-[10px] font-bold tracking-[0.32em] uppercase text-[#FF8A00]">
+            Ayın Öne Çıkanları
+          </span>
+        </div>
+        <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight mt-0.5 leading-tight">
+          Bu Ay Sahnede
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {highlights.map((item) => {
-          if (!item.data) {
-            return (
-              <EmptyCard key={item.id} title={item.title} index={item.id - 1} />
-            )
-          }
+        {isLoading
+          ? CARD_META.map((_, i) => <SkeletonCard key={i} index={i} />)
+          : highlights.map((item, idx) => {
+              const meta = CARD_META[idx]
+              const Icon = meta.icon
+              const hasImage = isUsableImage(item.imageUrl)
+              const resolvedImg = hasImage ? resolveImageUrl(item.imageUrl!) : null
+              const cardUrl = getCardUrl(item)
+              const isEmpty = !item.data
 
-          // 🔒 Güvenlik: Gerçek imageUrl yoksa hiçbir görsel gösterme (fallback avatar yok)
-          // isUsableImage helper: Tüm placeholder ve fallback path'lerini engeller
-          const isUsableImage = (url?: string | null): boolean => {
-            if (!url || typeof url !== 'string') return false
-            const u = url.trim()
-            if (!u || u === 'null' || u === 'undefined') return false
+              const emptyGradient = [
+                'from-[#FF8A00]/8 to-[#ea580c]/4',
+                'from-indigo-500/8 to-indigo-400/4',
+                'from-emerald-500/8 to-emerald-400/4',
+                'from-pink-500/8 to-pink-400/4',
+              ][idx]
 
-            // Projedeki placeholder isimlerini burada yakala
-            const blocked = [
-              'default-user',
-              'default-avatar',
-              'female',
-              'woman',
-              'avatar-female',
-              'placeholder-user',
-              'avatar-placeholder',
-            ]
+              const Inner = (
+                <div
+                  className={`fl-highlight-card relative w-full h-[148px] md:h-[168px] rounded-[14px] overflow-hidden group cursor-pointer
+                    bg-gray-900 dark:bg-[#0d0d0d]
+                    border border-white/6 dark:border-white/[0.04]
+                    shadow-[0_4px_20px_rgba(0,0,0,0.18)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.32)]
+                    transition-all duration-300 hover:-translate-y-[3px]
+                    ${isEmpty ? 'opacity-35' : ''}
+                  `}
+                >
+                  {/* Shimmer on hover */}
+                  <span className="shimmer-bar" />
 
-            // local asset path veya url içinde geçiyorsa engelle
-            if (blocked.some((k) => u.toLowerCase().includes(k))) return false
+                  {/* Background */}
+                  {!isEmpty && resolvedImg && isUsableImage(resolvedImg) ? (
+                    <img
+                      src={resolvedImg}
+                      alt={item.subtitle}
+                      className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.06]"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${emptyGradient} dark:opacity-60`} />
+                  )}
 
-            return true
-          }
-          
-          const hasValidImage = isUsableImage(item.imageUrl)
-          
-          // Ayın Yorumu için özel görsel yoksa placeholder
-          const displayImage = hasValidImage ? item.imageUrl : null
-          const fallbackBg = item.id === 1 
-            ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30'
-            : item.id === 2
-            ? 'bg-gradient-to-br from-blue-500/20 to-blue-600/30'
-            : item.id === 3
-            ? 'bg-gradient-to-b from-[rgba(120,80,160,0.15)] to-[rgba(20,20,30,0.85)]'
-            : 'bg-gradient-to-br from-pink-500/20 to-pink-600/30'
+                  {/* Cinematic gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/10" />
+                  {/* Subtle left vignette */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
 
-          const cardUrl = getCardUrl(item)
-
-          // Tüm kartlar aynı yapıyı kullanır (Ayın Yorumu dahil)
-          const CardContent = (
-            <div className="relative w-full h-[140px] md:h-[160px] rounded-[14px] overflow-hidden bg-gray-900 dark:bg-[#111] border border-[rgba(251,146,60,0.45)] dark:border-[rgba(251,146,60,0.2)] shadow-md hover:shadow-[0_0_28px_rgba(251,146,60,0.35),0_8px_24px_rgba(0,0,0,0.25)] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.015] group cursor-pointer">
-              {/* Shimmer sweep on hover */}
-              <span className="shimmer-bar" />
-              {/* Görsel veya Gradient Background - 🔒 Sadece gerçek imageUrl varsa görsel göster */}
-              {displayImage && isUsableImage(displayImage) ? (() => {
-                const resolvedUrl = resolveImageUrl(displayImage)
-                // 🔒 resolveImageUrl'in döndürdüğü URL fallback avatar ise görsel gösterme
-                if (!isUsableImage(resolvedUrl)) {
-                  return <div className={`absolute inset-0 ${fallbackBg}`} />
-                }
-                
-                return (
-                  <img
-                    src={resolvedUrl}
-                    alt={item.subtitle}
-                    className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                    onError={(e) => {
-                      // 🔒 Görsel yüklenemezse gizle, fallback gösterme
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                )
-              })() : (
-                <div className={`absolute inset-0 ${fallbackBg}`} />
-              )}
-
-              {/* Gradient Overlay - En altta yazı okunurluğu için */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-
-              {/* Yazılar - En altta overlay içinde */}
-              {item.id === 3 ? (
-                // Ayın Yorumu için özel format: Başlık üstte (diğer kartlarla aynı hizada), kullanıcı adı altında, yorum metni ortada
-                <>
-                  {/* Başlık - Diğer kartlarla birebir aynı bottom padding ve hiza */}
-                  <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
-                    <p className="text-xs font-semibold text-[#ff7b00] mb-1.5 tracking-wide uppercase">
-                      {item.title}
-                    </p>
-                    {/* Kullanıcı adı - Daha sakin, küratoryal ton */}
-                    {item.username && (
-                      <p className="text-xs text-white/60 leading-snug line-clamp-1">@{item.username}</p>
-                    )}
+                  {/* Number badge — top right, editorial */}
+                  <div className="absolute top-3 right-3 z-10">
+                    <span
+                      className="text-[10px] font-black tracking-widest tabular-nums"
+                      style={{ color: meta.accentFrom, textShadow: `0 0 12px ${meta.accentFrom}60` }}
+                    >
+                      {meta.num}
+                    </span>
                   </div>
-                  {/* Yorum metni - Kartın optik merkezinde, quote hissi veren stil */}
-                  <div className="absolute inset-0 flex items-center justify-center px-3 md:px-4 pb-20 md:pb-24">
-                    <p className="relative top-[30px] text-sm text-white/90 font-medium italic leading-snug text-center">
-                      {item.subtitle}
-                    </p>
+
+                  {/* Icon — top left, faint */}
+                  <div className="absolute top-3 left-3 z-10 opacity-40 group-hover:opacity-70 transition-opacity duration-300">
+                    <Icon size={14} strokeWidth={1.5} color="white" />
                   </div>
-                </>
-              ) : (
-                // Diğer kartlar için normal format (başlık önce, içerik sonra)
-                <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4">
-                  <p className="text-xs font-semibold text-[#ff7b00] mb-1.5 tracking-wide uppercase">
-                    {item.title}
-                  </p>
-                  <p className="text-sm text-white font-medium line-clamp-2 leading-snug">
-                    {item.subtitle}
-                  </p>
+
+                  {/* Bottom content */}
+                  {item.id === 3 ? (
+                    <>
+                      <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 z-10">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="w-3 h-[1.5px]" style={{ background: meta.accentFrom }} />
+                          <p className="text-[9px] font-bold tracking-[0.28em] uppercase"
+                            style={{ color: meta.accentFrom }}>
+                            {item.title}
+                          </p>
+                        </div>
+                        {item.username && (
+                          <p className="text-[10px] text-white/50 leading-snug">@{item.username}</p>
+                        )}
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center px-4 pb-14 z-10">
+                        <p className="text-[13px] text-white/85 font-medium italic leading-snug text-center line-clamp-2">
+                          {item.subtitle}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 z-10">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="w-3 h-[1.5px]" style={{ background: meta.accentFrom }} />
+                        <p className="text-[9px] font-bold tracking-[0.28em] uppercase"
+                          style={{ color: meta.accentFrom }}>
+                          {item.title}
+                        </p>
+                      </div>
+                      <p className="text-[13px] text-white font-semibold line-clamp-2 leading-snug">
+                        {item.subtitle}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
+              )
 
-          // Link varsa kartı Link'e sar, yoksa normal div
-          return cardUrl ? (
-            <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${(item.id - 1) * 0.08}s` }}>
-              <Link href={cardUrl} className="block">
-                {CardContent}
-              </Link>
-            </div>
-          ) : (
-            <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${(item.id - 1) * 0.08}s` }}>
-              {CardContent}
-            </div>
-          )
-        })}
+              return cardUrl ? (
+                <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${idx * 0.08}s` }}>
+                  <Link href={cardUrl} className="block">{Inner}</Link>
+                </div>
+              ) : (
+                <div key={item.id} className="premium-card-enter" style={{ animationDelay: `${idx * 0.08}s` }}>
+                  {Inner}
+                </div>
+              )
+            })}
       </div>
     </section>
   )
 }
-
