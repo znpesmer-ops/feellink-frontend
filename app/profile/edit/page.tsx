@@ -284,6 +284,7 @@ function EditProfileContent() {
           // username: username, // ❌ KALDIRILDI - Profil URL'ini bozmamak için
           bio,
           avatar,
+          coverImage: coverImage || null,
           fullName,
           website: websiteValue,
           isPrivate,
@@ -443,12 +444,70 @@ function EditProfileContent() {
           </div>
         )}
 
+        {/* Cover Image Upload */}
+        <div className="mb-8">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-3">
+            Kapak Fotoğrafı
+          </label>
+          <div className="relative w-full h-32 md:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-[#fb923c]/30 via-[#ea580c]/20 to-[#7c3aed]/30 dark:from-[#1a0800] dark:to-[#0c0518] mb-3">
+            {(coverImagePreview || coverImage) ? (
+              <img
+                src={coverImagePreview || coverImage}
+                alt="Kapak fotoğrafı"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs text-gray-400 dark:text-gray-500">Kapak fotoğrafı yok</span>
+              </div>
+            )}
+            {isCoverUploading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverFileChange}
+              disabled={isCoverUploading}
+              className="hidden"
+              id="cover-upload"
+            />
+            <label
+              htmlFor="cover-upload"
+              className={`inline-flex items-center justify-center px-4 py-1.5 bg-brand-orange hover:bg-[#ff8a1d] text-white text-sm font-medium rounded-md transition cursor-pointer ${isCoverUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isCoverUploading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Yükleniyor...
+                </>
+              ) : (coverImage || coverImagePreview) ? 'Kapağı Değiştir' : 'Kapak Fotoğrafı Yükle'}
+            </label>
+            {(coverImage || coverImagePreview) && (
+              <button
+                type="button"
+                onClick={handleRemoveCover}
+                className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 hover:underline transition"
+              >
+                Kaldır
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Önerilen boyut: 1200×400px (3:1 oran). Maks 8MB.</p>
+        </div>
+
         {/* Avatar Upload */}
         <div className="mb-6">
           <label className="block text-sm text-gray-700 dark:text-white/70 mb-3">
             Profil Fotoğrafı
           </label>
-          
+
           {/* Avatar Preview with Change Button */}
           <div className="flex items-center gap-5">
             <div className="relative">
