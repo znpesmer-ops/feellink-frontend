@@ -1079,7 +1079,7 @@ function ProfileContent() {
           <div className="px-6 md:px-8 pb-6 md:pb-8">
 
             {/* Avatar + Buttons row */}
-            <div className="flex items-end justify-between -mt-10 md:-mt-12 mb-4">
+            <div className="relative z-10 flex items-end justify-between -mt-10 md:-mt-12 mb-4">
               {/* Avatar */}
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 ring-4 ring-white dark:ring-gray-950 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {profile.avatar ? (
