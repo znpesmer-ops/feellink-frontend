@@ -30,6 +30,8 @@ function EditProfileContent() {
   // 🔒 KRİTİK: Username state'i kaldırıldı - sadece gösterim için user?.username kullanılacak
   const [bio, setBio] = useState('')
   const [avatar, setAvatar] = useState('')
+  const [coverImage, setCoverImage] = useState('')
+  const [coverImagePreview, setCoverImagePreview] = useState('')
   const [fullName, setFullName] = useState('')
   const [website, setWebsite] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -40,16 +42,25 @@ function EditProfileContent() {
   const [countries, setCountries] = useState<Country[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isCoverUploading, setIsCoverUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [avatarPreview, setAvatarPreview] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  // Crop modal states
+  const coverInputRef = useRef<HTMLInputElement>(null)
+
+  // Crop modal states (avatar — 1:1)
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+
+  // Cover crop modal states (16:9)
+  const [coverCropModalOpen, setCoverCropModalOpen] = useState(false)
+  const [coverImageSrc, setCoverImageSrc] = useState<string | null>(null)
+  const [coverCrop, setCoverCrop] = useState({ x: 0, y: 0 })
+  const [coverZoom, setCoverZoom] = useState(1)
+  const [coverCroppedAreaPixels, setCoverCroppedAreaPixels] = useState<Area | null>(null)
 
   // Load countries data
   useEffect(() => {
@@ -68,6 +79,8 @@ function EditProfileContent() {
       setBio(user.bio || '')
       setAvatar(user.avatar || '')
       setAvatarPreview(user.avatar || '')
+      setCoverImage((user as any).coverImage || '')
+      setCoverImagePreview((user as any).coverImage || '')
       setFullName(user.fullName || '')
       setWebsite((user as any).website || '')
       setIsPrivate(user.isPrivate || false)
@@ -185,6 +198,74 @@ function EditProfileContent() {
     }
   }
 
+  // Cover image handlers
+  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setMessage('Lütfen bir resim dosyası seçin.')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setMessage('Kapak fotoğrafı 8MB\'dan büyük olamaz.')
+      return
+    }
+    setMessage('')
+    const reader = new FileReader()
+    reader.addEventListener('load', () => {
+      setCoverImageSrc(reader.result as string)
+      setCoverCropModalOpen(true)
+    })
+    reader.readAsDataURL(file)
+  }
+
+  const onCoverCropComplete = useCallback((_: Area, croppedPixels: Area) => {
+    setCoverCroppedAreaPixels(croppedPixels)
+  }, [])
+
+  const handleCoverCropFinish = async () => {
+    if (!coverImageSrc || !coverCroppedAreaPixels) return
+    setIsCoverUploading(true)
+    setMessage('')
+    try {
+      const croppedBlob = await getCroppedImg(coverImageSrc, coverCroppedAreaPixels)
+      const previewUrl = URL.createObjectURL(croppedBlob)
+      setCoverImagePreview(previewUrl)
+      const formData = new FormData()
+      formData.append('file', croppedBlob, 'cover.jpg')
+      const response = await api.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setCoverImage(response.data.url)
+      setMessage('')
+      setCoverCropModalOpen(false)
+      setCoverImageSrc(null)
+      setCoverCrop({ x: 0, y: 0 })
+      setCoverZoom(1)
+      setCoverCroppedAreaPixels(null)
+      URL.revokeObjectURL(previewUrl)
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || 'Kapak fotoğrafı yüklenirken hata oluştu')
+    } finally {
+      setIsCoverUploading(false)
+    }
+  }
+
+  const handleCoverCropCancel = () => {
+    setCoverCropModalOpen(false)
+    setCoverImageSrc(null)
+    setCoverCrop({ x: 0, y: 0 })
+    setCoverZoom(1)
+    setCoverCroppedAreaPixels(null)
+    if (coverInputRef.current) coverInputRef.current.value = ''
+  }
+
+  const handleRemoveCover = () => {
+    setCoverImage('')
+    setCoverImagePreview('')
+    if (coverInputRef.current) coverInputRef.current.value = ''
+  }
+
   const handleSave = async () => {
     if (!accessToken) return
 
@@ -203,6 +284,7 @@ function EditProfileContent() {
           // username: username, // ❌ KALDIRILDI - Profil URL'ini bozmamak için
           bio,
           avatar,
+          coverImage: coverImage || null,
           fullName,
           website: websiteValue,
           isPrivate,
@@ -361,6 +443,64 @@ function EditProfileContent() {
             </div>
           </div>
         )}
+
+        {/* Cover Image Upload */}
+        <div className="mb-8">
+          <label className="block text-sm text-gray-700 dark:text-white/70 mb-3">
+            Kapak Fotoğrafı
+          </label>
+          <div className="relative w-full h-32 md:h-40 rounded-xl overflow-hidden bg-gradient-to-br from-[#fb923c]/30 via-[#ea580c]/20 to-[#7c3aed]/30 dark:from-[#1a0800] dark:to-[#0c0518] mb-3">
+            {(coverImagePreview || coverImage) ? (
+              <img
+                src={coverImagePreview || coverImage}
+                alt="Kapak fotoğrafı"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs text-gray-400 dark:text-gray-500">Kapak fotoğrafı yok</span>
+              </div>
+            )}
+            {isCoverUploading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverFileChange}
+              disabled={isCoverUploading}
+              className="hidden"
+              id="cover-upload"
+            />
+            <label
+              htmlFor="cover-upload"
+              className={`inline-flex items-center justify-center px-4 py-1.5 bg-brand-orange hover:bg-[#ff8a1d] text-white text-sm font-medium rounded-md transition cursor-pointer ${isCoverUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isCoverUploading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Yükleniyor...
+                </>
+              ) : (coverImage || coverImagePreview) ? 'Kapağı Değiştir' : 'Kapak Fotoğrafı Yükle'}
+            </label>
+            {(coverImage || coverImagePreview) && (
+              <button
+                type="button"
+                onClick={handleRemoveCover}
+                className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 hover:underline transition"
+              >
+                Kaldır
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Önerilen boyut: 1200×400px (3:1 oran). Maks 8MB.</p>
+        </div>
 
         {/* Avatar Upload */}
         <div className="mb-6">
@@ -694,6 +834,58 @@ function EditProfileContent() {
                 ) : (
                   'Kaydet'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cover Crop Modal (16:9) */}
+      {coverCropModalOpen && coverImageSrc && (
+        <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-[#111111] rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="relative w-full h-[280px] bg-gray-900">
+              <Cropper
+                image={coverImageSrc}
+                crop={coverCrop}
+                zoom={coverZoom}
+                aspect={3 / 1}
+                onCropChange={setCoverCrop}
+                onZoomChange={setCoverZoom}
+                onCropComplete={onCoverCropComplete}
+              />
+            </div>
+            <div className="p-4 bg-white dark:bg-[#111111] border-t border-gray-200 dark:border-gray-800">
+              <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">Yakınlaştır</label>
+              <input
+                type="range"
+                value={coverZoom}
+                min={1}
+                max={3}
+                step={0.1}
+                onChange={(e) => setCoverZoom(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+            <div className="flex gap-3 p-4 bg-white dark:bg-[#111111] border-t border-gray-200 dark:border-gray-800">
+              <button
+                onClick={handleCoverCropCancel}
+                disabled={isCoverUploading}
+                className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition font-medium disabled:opacity-50"
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleCoverCropFinish}
+                disabled={isCoverUploading}
+                className="flex-1 px-4 py-2.5 bg-brand-orange hover:bg-[#ff8a1d] text-white rounded-lg transition font-medium disabled:opacity-50 flex items-center justify-center"
+              >
+                {isCoverUploading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Yükleniyor...
+                  </>
+                ) : 'Kaydet'}
               </button>
             </div>
           </div>

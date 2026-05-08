@@ -12,7 +12,7 @@ import { CreatePostModal } from '@/components/create-post-modal'
 import { PostModal } from '@/components/post-modal'
 import UserArticles from '@/components/user-articles'
 import DraftArticles from '@/components/draft-articles'
-import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, BarChart3, Lock, Sparkles } from 'lucide-react'
+import { Plus, Grid, FileText, Calendar, Image as ImageIcon, Heart, MessageCircle, MoreVertical, Trash2, Clock, BarChart3, Lock, Sparkles, Camera } from 'lucide-react'
 import { FiGrid, FiFileText, FiMessageCircle, FiImage, FiCalendar, FiClock, FiBookmark } from 'react-icons/fi'
 import { initPostsSocket, initCommentsSocket } from '@/lib/socket'
 import { UserBadges } from '@/components/profile/UserBadges'
@@ -1051,49 +1051,61 @@ function ProfileContent() {
   return (
     <>
       <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Profile Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-start space-y-4 md:space-y-0 md:space-x-8 mb-8 bg-white dark:bg-gray-950 rounded-2xl p-6 md:p-8 border border-gray-100 dark:border-gray-900 shadow-sm transition-colors">
-          {/* Avatar */}
-          <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0">
-            {profile.avatar ? (
-              (() => {
-                const imageUrl = resolveImageUrl(profile.avatar)
-                console.log('Profile Avatar IMAGE URL:', imageUrl, 'Original:', profile.avatar)
-                return (
-                  <img
-                    src={imageUrl}
-                    alt={profile.username}
-                    className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-105"
-                    onClick={() => setZoomImage(imageUrl)}
-                    onError={(e) => {
-                      console.error('Profile Avatar Error:', imageUrl)
-                      ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
-                    }}
-                  />
-                )
-              })()
-            ) : (
-              <span className="text-3xl md:text-4xl text-gray-500 dark:text-gray-400">
-                {profile.username[0].toUpperCase()}
-              </span>
+        {/* Profile Header - LinkedIn style */}
+        <div className="mb-8 bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 shadow-sm transition-colors overflow-hidden">
+
+          {/* Cover Photo */}
+          <div className="relative h-32 md:h-44 bg-gradient-to-br from-[#fb923c]/30 via-[#ea580c]/20 to-[#7c3aed]/30 dark:from-[#1a0800] dark:via-[#0f0500] dark:to-[#0c0518]">
+            {(profile as any).coverImage && (
+              <img
+                src={resolveImageUrl((profile as any).coverImage)}
+                alt="Kapak fotoğrafı"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+            {profile.isOwnProfile && (
+              <button
+                onClick={() => router.push('/profile/edit')}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white text-xs font-medium rounded-lg transition-all"
+              >
+                <Camera size={13} />
+                {(profile as any).coverImage ? 'Kapağı Değiştir' : 'Kapak Ekle'}
+              </button>
             )}
           </div>
 
-          {/* Profile Info */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-x-1 gap-y-2">
-                    <span className="inline-flex items-center gap-0">
-                      {profile.username}
-                      <FeellinkRoleBadge roles={profile.roles} />
-                    </span>
-                  </h1>
-                </div>
-                <UserBadges badges={profile.badges} />
+          {/* Content below cover */}
+          <div className="px-6 md:px-8 pb-6 md:pb-8">
+
+            {/* Avatar + Buttons row */}
+            <div className="flex items-end justify-between -mt-10 md:-mt-12 mb-4">
+              {/* Avatar */}
+              <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 ring-4 ring-white dark:ring-gray-950 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {profile.avatar ? (
+                  (() => {
+                    const imageUrl = resolveImageUrl(profile.avatar)
+                    return (
+                      <img
+                        src={imageUrl}
+                        alt={profile.username}
+                        className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-105"
+                        onClick={() => setZoomImage(imageUrl)}
+                        onError={(e) => {
+                          ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
+                        }}
+                      />
+                    )
+                  })()
+                ) : (
+                  <span className="text-3xl md:text-4xl text-gray-500 dark:text-gray-400">
+                    {profile.username[0].toUpperCase()}
+                  </span>
+                )}
               </div>
-              {/* Sağ Buton Grubu - Profili Düzenle + Yeni Gönderi */}
+
+              {/* Buttons */}
+              <div className="flex items-center gap-3 pb-1">
               {profile.isOwnProfile && (
                 <div className="flex items-center gap-3">
                   {/* ➕ Yeni Gönderi/Eser - Açılır Menü */}
@@ -1155,16 +1167,15 @@ function ProfileContent() {
                   {/* Profili Düzenle Butonu */}
                   <button
                     onClick={() => router.push('/profile/edit')}
-                    className="px-4 py-2 text-sm font-medium bg-[#FF8A00] text-white rounded-lg 
+                    className="px-4 py-2 text-sm font-medium bg-[#FF8A00] text-white rounded-lg
                                shadow-sm hover:bg-[#e67a00] transition"
                   >
                     Profili Düzenle
                   </button>
                 </div>
               )}
-            </div>
-            
-            <div className="flex items-center space-x-4 mb-4">
+
+              {/* Follow / Message buttons for non-own profile */}
               {!profile.isOwnProfile && (
                 <>
                   <button
@@ -1197,6 +1208,20 @@ function ProfileContent() {
                   </button>
                 </>
               )}
+              </div>
+            </div>
+
+            {/* Username + Badges */}
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-x-1 gap-y-2">
+                  <span className="inline-flex items-center gap-0">
+                    {profile.username}
+                    <FeellinkRoleBadge roles={profile.roles} />
+                  </span>
+                </h1>
+              </div>
+              <UserBadges badges={profile.badges} />
             </div>
 
             {/* Stats */}
