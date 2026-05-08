@@ -1050,29 +1050,58 @@ function ProfileContent() {
 
   return (
     <>
+      <style>{`
+        @keyframes fadeUpCard {
+          from { opacity: 0; transform: translateY(18px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmerSweep {
+          0% { transform: translateX(-150%); }
+          100% { transform: translateX(300%); }
+        }
+        @keyframes ringGradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes ambientGlow {
+          0%, 100% { opacity: 0; }
+          50% { opacity: 1; }
+        }
+        .profile-card-cinematic { animation: fadeUpCard 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+        .cover-shimmer { animation: shimmerSweep 5s ease-in-out infinite; }
+        .avatar-ring-gradient {
+          background: linear-gradient(135deg, #FF8A00, #ea580c, #a855f7, #3b82f6, #FF8A00);
+          background-size: 300% 300%;
+          animation: ringGradient 5s ease infinite;
+        }
+        .ambient-glow { animation: ambientGlow 4s ease-in-out infinite; }
+      `}</style>
       <div className="max-w-4xl mx-auto py-8 px-4">
-        {/* Profile Header - LinkedIn style */}
-        <div className="mb-8 bg-white dark:bg-gray-950 rounded-2xl border border-gray-100 dark:border-gray-900 shadow-sm transition-colors overflow-hidden">
+        {/* Profile Header - Cinematic Premium */}
+        <div className="profile-card-cinematic mb-8 relative group/profilecard">
+          {/* Ambient glow layer */}
+          <div className="ambient-glow absolute -inset-1 rounded-3xl bg-gradient-to-br from-[#FF8A00]/15 via-purple-500/8 to-blue-500/10 blur-2xl pointer-events-none" />
+
+          <div className="relative bg-white dark:bg-gray-950 rounded-2xl border border-gray-100/80 dark:border-gray-800/60 shadow-[0_8px_40px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.5),0_2px_12px_rgba(0,0,0,0.3)] overflow-hidden transition-shadow duration-500 group-hover/profilecard:shadow-[0_16px_64px_rgba(0,0,0,0.12),0_4px_16px_rgba(255,138,0,0.06)] dark:group-hover/profilecard:shadow-[0_16px_72px_rgba(0,0,0,0.6),0_4px_20px_rgba(255,138,0,0.08)]">
 
           {/* Cover Photo */}
-          <div className="relative h-32 md:h-44 bg-gradient-to-br from-[#fb923c]/30 via-[#ea580c]/20 to-[#7c3aed]/30 dark:from-[#1a0800] dark:via-[#0f0500] dark:to-[#0c0518]">
+          <div className="relative h-32 md:h-44 overflow-hidden bg-gradient-to-br from-[#fb923c]/40 via-[#ea580c]/25 to-[#7c3aed]/35 dark:from-[#1a0500] dark:via-[#0f0300] dark:to-[#0c0420]">
             {(profile as any).coverImage && (
               <img
                 src={resolveImageUrl((profile as any).coverImage)}
                 alt="Kapak fotoğrafı"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover scale-[1.03] group-hover/profilecard:scale-100 transition-transform duration-[8s] ease-out"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             )}
-            {profile.isOwnProfile && (
-              <button
-                onClick={() => router.push('/profile/edit')}
-                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white text-xs font-medium rounded-lg transition-all"
-              >
-                <Camera size={13} />
-                {(profile as any).coverImage ? 'Kapağı Değiştir' : 'Kapak Ekle'}
-              </button>
-            )}
+            {/* Cinematic gradient overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-transparent to-transparent pointer-events-none" />
+            {/* Shimmer sweep */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="cover-shimmer absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/6 to-transparent" />
+            </div>
           </div>
 
           {/* Content below cover */}
@@ -1080,8 +1109,10 @@ function ProfileContent() {
 
             {/* Avatar + Buttons row */}
             <div className="relative z-10 flex items-end justify-between -mt-10 md:-mt-12 mb-4">
-              {/* Avatar */}
-              <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 ring-4 ring-white dark:ring-gray-950 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {/* Avatar with animated gradient ring */}
+              <div className="relative flex-shrink-0">
+                <div className="avatar-ring-gradient absolute -inset-[3px] rounded-full" />
+                <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 ring-[3px] ring-white dark:ring-gray-950 flex items-center justify-center overflow-hidden shadow-[0_4px_20px_rgba(255,138,0,0.25)] dark:shadow-[0_4px_24px_rgba(255,138,0,0.2)]">
                 {profile.avatar ? (
                   (() => {
                     const imageUrl = resolveImageUrl(profile.avatar)
@@ -1089,7 +1120,7 @@ function ProfileContent() {
                       <img
                         src={imageUrl}
                         alt={profile.username}
-                        className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-105"
+                        className="w-full h-full object-cover cursor-zoom-in transition-transform hover:scale-110 duration-500"
                         onClick={() => setZoomImage(imageUrl)}
                         onError={(e) => {
                           ;(e.target as HTMLImageElement).src = '/images/avatar-placeholder.png'
@@ -1102,6 +1133,7 @@ function ProfileContent() {
                     {profile.username[0].toUpperCase()}
                   </span>
                 )}
+                </div>
               </div>
 
               {/* Buttons */}
@@ -1214,7 +1246,7 @@ function ProfileContent() {
             {/* Username + Badges */}
             <div className="mb-3">
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-2xl font-light text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-x-1 gap-y-2">
+                <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-x-1 gap-y-2 tracking-tight">
                   <span className="inline-flex items-center gap-0">
                     {profile.username}
                     <FeellinkRoleBadge roles={profile.roles} />
@@ -1228,31 +1260,31 @@ function ProfileContent() {
             <div className="flex space-x-6 mb-4">
               <button
                 onClick={() => setShowFollowers(true)}
-                className="cursor-pointer"
+                className="cursor-pointer group/stat transition-transform hover:scale-105 active:scale-95"
               >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile._count.posts}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">posts</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100 group-hover/stat:text-[#FF8A00] transition-colors">{profile._count.posts}</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400 text-sm">posts</span>
               </button>
               <button
                 onClick={() => setShowFollowers(true)}
-                className="cursor-pointer"
+                className="cursor-pointer group/stat transition-transform hover:scale-105 active:scale-95"
               >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile.followerCount ?? 0}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">takipçi</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100 group-hover/stat:text-[#FF8A00] transition-colors">{profile.followerCount ?? 0}</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400 text-sm">takipçi</span>
               </button>
               <button
                 onClick={() => setShowFollowing(true)}
-                className="cursor-pointer"
+                className="cursor-pointer group/stat transition-transform hover:scale-105 active:scale-95"
               >
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{profile.followingCount ?? 0}</span>{' '}
-                <span className="text-gray-600 dark:text-gray-400">takip</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100 group-hover/stat:text-[#FF8A00] transition-colors">{profile.followingCount ?? 0}</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400 text-sm">takip</span>
               </button>
             </div>
 
             {/* Bio */}
             <div>
               <p className="font-semibold text-gray-900 dark:text-gray-100">{profile.fullName || profile.username}</p>
-              {profile.bio && <p className="mt-1 text-gray-900 dark:text-gray-100">{profile.bio}</p>}
+              {profile.bio && <p className="mt-1 text-gray-700 dark:text-gray-300 leading-relaxed">{profile.bio}</p>}
               {/* Role Label - Sadece whitelist'teki etiket; raw role asla basılmaz */}
               {(() => {
                 const roleLabel = profile.role ? ROLE_METADATA[normalizeRole(profile.role)]?.label : null
@@ -1262,7 +1294,8 @@ function ProfileContent() {
               })()}
             </div>
           </div>
-        </div>
+          </div>{/* closes inner card bg-white div */}
+        </div>{/* closes outer profile-card-cinematic wrapper */}
 
         {/* Öne Çıkan Temalar - Tüm kullanıcılarda görünür */}
         <ArtistHighlights username={username} userId={profile?.id} isOwnProfile={profile.isOwnProfile} />
