@@ -1,14 +1,49 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-// 🔥 Lazy import - circular dependency'yi önlemek için
-// import { useAuthStore } from './store'
+import { useAuthStore } from './store'
+
+/** Büyük multipart + /events mutasyonları: proxy'de POST JSON bazen kopuyor; doğrudan backend */
+export type ApiRequestConfig = InternalAxiosRequestConfig & { directBackend?: boolean }
+
+const FEELLINK_SYNTHETIC_NETWORK = '__feellinkSyntheticNetwork' as const
+
+function apiDebugEnabled(): boolean {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.NEXT_PUBLIC_API_DEBUG === '1'
+  )
+}
+
+/** /events altında POST/PUT/PATCH/DELETE → create/update/delete/join/comment vb. */
+function isEventsApiMutation(config: Pick<ApiRequestConfig, 'url' | 'method'>): boolean {
+  const path = (config.url || '').split('?')[0] || ''
+  if (!/^\/events(\/|$)/.test(path)) return false
+  const m = (config.method || 'get').toLowerCase()
+  return ['post', 'put', 'patch', 'delete'].includes(m)
+}
+
 import { CapabilitySummary, SidebarVisibility } from '@/types/capabilities'
-import { safeAvatar } from './avatar-constants'
 
 let isRefreshing = false
+let isLoggingOut = false
 let failedQueue: Array<{
   resolve: (value?: any) => void
   reject: (error?: any) => void
 }> = []
+
+export function performForcedLogout() {
+  if (isLoggingOut) return
+  isLoggingOut = true
+  useAuthStore.getState().clearAuth()
+  if (typeof window !== 'undefined') {
+    // Eğer kullanıcı zaten /login sayfasındaysa (restore ekranı dahil), sayfayı yeniden yüklemek state'i sıfırlıyor.
+    // Bu yüzden sadece login'de değilken redirect yap.
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.replace('/login')
+    }
+  }
+  // Reset so next 401 can trigger again if user logs in again
+  setTimeout(() => { isLoggingOut = false }, 1000)
+}
 
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
@@ -21,142 +56,168 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = []
 }
 
-// API base URL - dinamik olarak belirle
-const PRODUCTION_BACKEND_URL = 'https://feellink-backend.vercel.app'
+/** Client-side only: read tokens from persisted auth-storage when store not yet rehydrated (e.g. after nav). */
+function getPersistedAuthState(): { accessToken?: string | null; refreshToken?: string | null } {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem('auth-storage')
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as { state?: { accessToken?: string | null; refreshToken?: string | null } }
+    return parsed?.state ?? {}
+  } catch {
+    return {}
+  }
+}
 
-const getBaseURL = (): string => {
-  const envURL = process.env.NEXT_PUBLIC_API_URL
+function getRefreshTokenFromPersistedStorage(): string | null {
+  const token = getPersistedAuthState().refreshToken
+  return token && typeof token === 'string' ? token : null
+}
 
-  // Server-side (SSR)
+function getAccessTokenFromPersistedStorage(): string | null {
+  const token = getPersistedAuthState().accessToken
+  return token && typeof token === 'string' ? token : null
+}
+
+function ensureProtocol(url: string): string {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  return `https://${url}`
+}
+
+/**
+ * Medya URL'leri, Socket.IO ve doğrudan backend kökü gereken yerler için.
+ * Asla /api-proxy kullanma — görseller ve socket mutlak backend'e gider.
+ */
+export function getAbsoluteBackendBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return envURL || PRODUCTION_BACKEND_URL
+    const ssrURL =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.BACKEND_REWRITE_TARGET ||
+      'http://localhost:3002'
+    return ensureProtocol(ssrURL)
   }
 
-  // Client-side - ENV URL'i varsa kullan
-  if (envURL) {
-    return envURL
+  const envURL = process.env.NEXT_PUBLIC_API_URL
+  const currentHost = window.location.hostname
+  const isHTTPS = window.location.protocol === 'https:'
+
+  if (currentHost === 'feellink.io' || currentHost.includes('feellink.io')) {
+    return 'https://feellink-backend.vercel.app'
   }
 
-  const hostname = window.location.hostname
-
-  // Local development
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3002'
+  if (currentHost.includes('vercel.app')) {
+    return 'https://feellink-backend.vercel.app'
   }
 
-  // Local network IP (dev)
-  if (/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
-    return `${window.location.protocol}//${hostname}:3002`
-  }
-
-  // Production: her zaman gerçek backend URL'ini kullan
-  return PRODUCTION_BACKEND_URL
-}
-
-// 🔥 Lazy evaluation - sadece gerektiğinde baseURL'i hesapla
-let cachedBaseURL: string | null = null
-
-const getCachedBaseURL = (): string => {
-  if (cachedBaseURL === null) {
-    cachedBaseURL = getBaseURL()
-    if (!cachedBaseURL) {
-      // 🔥 Server-side'da console.error kullanma
-      if (typeof window !== 'undefined') {
-        console.error('NEXT_PUBLIC_API_URL tanımlı değil!')
-      }
-      cachedBaseURL = 'http://localhost:3002' // Fallback
+  if (envURL && envURL.includes('192.168.')) {
+    if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+      return 'http://localhost:3002'
     }
-    
-    // Debug logging (sadece client-side)
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-      console.info('[api] ✅ base URL (client):', cachedBaseURL, '← Bu URL kullanılıyor!')
-      try {
-        const savedURL = localStorage.getItem('backend_url')
-        if (savedURL && savedURL !== cachedBaseURL) {
-          console.warn('[api] ⚠️ localStorage backend_url:', savedURL, '(kullanılmıyor, baseURL kullanılıyor)')
-        }
-      } catch (err) {
-        // localStorage erişilemezse sessizce devam et
-      }
-    }
+    return envURL.startsWith('http') ? envURL : `http://${envURL}`
   }
-  return cachedBaseURL
+
+  if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    return envURL ? ensureProtocol(envURL) : 'http://localhost:3002'
+  }
+
+  const isLanHost =
+    /^192\.168\./.test(currentHost) ||
+    /^10\./.test(currentHost) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(currentHost)
+  const envMissing = !envURL || !String(envURL).trim()
+  if (!isLanHost && envMissing && (isHTTPS || process.env.NODE_ENV === 'production')) {
+    return 'https://feellink-backend.vercel.app'
+  }
+
+  const defaultURL = envURL || 'http://localhost:3002'
+  return ensureProtocol(defaultURL)
 }
 
-// getApiBaseURL fonksiyonunu export et (socket.ts ve diğer dosyalar için)
-export const getApiBaseURL = (): string => {
-  return getCachedBaseURL()
+/** feellink.io / Vercel ön yüzünde tarayıcı istekleri same-origin proxy üzerinden gider */
+function shouldUseBrowserApiProxy(): boolean {
+  return false // Proxy devre dışı — doğrudan backend'e git (feellink-backend.vercel.app)
 }
 
-// 🔥 Lazy axios instance - sadece gerektiğinde oluştur
-let apiInstance: ReturnType<typeof axios.create> | null = null
-
-const getApiInstance = () => {
-  if (!apiInstance) {
-    apiInstance = axios.create({
-      baseURL: getCachedBaseURL(),
-      withCredentials: true,
-      timeout: 60000, // 60 saniye timeout (MongoDB bağlantı sorunları için)
-      // 🔥 Network error'ları önlemek için retry mekanizması
-      validateStatus: (status) => {
-        // 2xx ve 3xx status kodlarını başarılı kabul et
-        return status >= 200 && status < 400
-      },
-    })
+/** Axios istekleri için base URL (production web'de /api-proxy) */
+function getAxiosBaseURL(): string {
+  if (typeof window === 'undefined') {
+    return getAbsoluteBackendBaseUrl()
   }
-  return apiInstance
+  if (shouldUseBrowserApiProxy()) {
+    return `${window.location.origin}/api-proxy`
+  }
+  return getAbsoluteBackendBaseUrl()
 }
 
-// ✅ Avatar URL'lerini normalize et
-function normalizeAvatarInData(data: any): any {
-  if (!data || typeof data !== 'object') return data
-  
-  if (Array.isArray(data)) {
-    return data.map(item => normalizeAvatarInData(item))
-  }
-  
-  const normalized: any = {}
-  for (const [key, value] of Object.entries(data)) {
-    // Avatar ile ilgili key'leri normalize et
-    if (key.toLowerCase().includes('avatar') || key.toLowerCase().includes('profileimage')) {
-      normalized[key] = safeAvatar(value as string)
-    } else if (typeof value === 'object' && value !== null) {
-      // Nested object'leri recursive normalize et
-      normalized[key] = normalizeAvatarInData(value)
-    } else {
-      normalized[key] = value
-    }
-  }
-  
-  return normalized
+// Socket / eski import'lar: doğrudan backend kökü
+export const getApiBaseURL = (): string => getAbsoluteBackendBaseUrl()
+
+const baseURL = getAxiosBaseURL()
+
+if (typeof window === 'undefined') {
+  console.info('[api] axios base URL (SSR):', baseURL)
+} else {
+  console.info('[api] axios base URL (client):', baseURL, '| absolute backend:', getAbsoluteBackendBaseUrl())
 }
 
-// 🔥 Interceptor'ları lazy olarak ekle
-let interceptorsInitialized = false
+const api = axios.create({
+  baseURL,
+  withCredentials: true,
+  timeout: 60000, // 60 saniye (Vercel serverless cold start için)
+  maxContentLength: 100 * 1024 * 1024, // 100MB
+  maxBodyLength: 100 * 1024 * 1024, // 100MB
+})
 
-const initializeInterceptors = () => {
-  if (interceptorsInitialized) return
-  interceptorsInitialized = true
-  
-  const instance = getApiInstance()
-  
-  // Add token to requests
-  instance.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-    // 🔥 Lazy import - circular dependency'yi önlemek için
-    const { useAuthStore } = await import('./store')
-    // Önce store'dan token al
-    const state = useAuthStore.getState()
-    const token = state.accessToken
+// Her istekte güncel axios base URL (SSR + client; prod web'de /api-proxy)
+// FormData (medya upload) same-origin /api-proxy üzerinden gider — cross-origin backend upload bazı ağlarda ERR_NETWORK veriyordu.
+// Büyük dosya için CreateEventModal istemci tarafı sıkıştırma yapar (413 önleme).
+// /events mutasyonları doğrudan backend (JSON POST proxy'de sorun çıkabiliyordu).
+// Store rehydrate olmadan (navigasyon sonrası) token için localStorage, yoksa persist yedeği kullan; istek token'sız giderse 401 → forced logout
+api.interceptors.request.use((config: ApiRequestConfig) => {
+  const isFormData =
+    typeof FormData !== 'undefined' && config.data != null && config.data instanceof FormData
+  const bypassProxyForBody =
+    config.directBackend === true ||
+    (typeof window !== 'undefined' &&
+      shouldUseBrowserApiProxy() &&
+      isEventsApiMutation(config))
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    
-    return config
-  })
-  
-  // Handle empty responses and JSON parse errors
-  instance.interceptors.response.use(
+  config.baseURL = bypassProxyForBody ? getAbsoluteBackendBaseUrl() : getAxiosBaseURL()
+
+  if (isFormData) {
+    const minMs = 65000 // 65s: 5s buffer over Vercel backend's 60s maxDuration
+    config.timeout =
+      config.timeout != null && config.timeout > minMs ? config.timeout : minMs
+  }
+
+  const state = useAuthStore.getState()
+  const token =
+    state.accessToken ??
+    (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null) ??
+    (typeof window !== 'undefined' ? getAccessTokenFromPersistedStorage() : null)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+
+  // Girişsiz post önizleme: süresi dolmuş token 401 vermesin diye Authorization gönderme
+  const method = (config.method || 'get').toLowerCase()
+  const rawUrl = String(config.url || '')
+  const pathOnly = rawUrl.split('?')[0] || ''
+  const mergedPath =
+    pathOnly.startsWith('http') ? new URL(pathOnly, 'http://_').pathname : pathOnly
+  // Hem "/posts/public-share/..." hem "posts/public-share/..." (axios göreli url)
+  if (method === 'get' && /(^|\/)posts\/public-share\//.test(mergedPath)) {
+    delete (config.headers as Record<string, unknown>).Authorization
+  }
+
+  return config
+})
+
+// Handle empty responses and JSON parse errors
+api.interceptors.response.use(
   (response) => {
     // Boş response'ları güvenli bir şekilde handle et
     // Axios bazen boş string veya null döndürebilir
@@ -167,35 +228,40 @@ const initializeInterceptors = () => {
       } else {
         response.data = {}
       }
-    } else if (response.data && typeof response.data === 'object') {
-      // ✅ Backend'den gelen tüm avatar URL'lerini normalize et
-      response.data = normalizeAvatarInData(response.data)
     }
     return response
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
-    // 🔥 4. Network/Connection errors - DB kopunca localhost çökmesin
+    // Network/Connection errors - daha anlaşılır hata mesajı ver
     if (!error.response) {
-      // Network hatası (bağlantı yok, timeout, vs.)
-      // Sadece development'ta detaylı log
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[API] ❌ Network Error:', {
-          message: error.message,
+      const baseURL = (originalRequest?.baseURL ?? getAxiosBaseURL() ?? '') as string
+      const isFd =
+        typeof FormData !== 'undefined' &&
+        originalRequest?.data != null &&
+        originalRequest.data instanceof FormData
+      if (apiDebugEnabled()) {
+        console.warn('[api] !error.response (network / CORS / kesilen istek):', {
           code: error.code,
-          status: 'NO_RESPONSE',
-          url: error.config?.url,
-          baseURL: error.config?.baseURL || getCachedBaseURL(),
+          message: error.message,
+          method: originalRequest?.method,
+          url: originalRequest?.url,
+          baseURL,
+          formData: isFd,
         })
       }
-      
-      // 🔥 DB kopunca localhost çökmesin - kullanıcı dostu mesaj
+
       const networkError: AxiosError = {
         ...error,
         response: {
           data: {
-            message: 'Sunucuya bağlanılamadı. Lütfen tekrar deneyin.',
+            [FEELLINK_SYNTHETIC_NETWORK]: true,
+            message: error.code === 'ECONNABORTED' || error.message?.includes('timeout')
+              ? 'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
+              : error.code === 'ERR_NETWORK' || error.message === 'Network Error'
+              ? 'Şu an sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edip kısa süre sonra tekrar deneyin.'
+              : 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.',
           },
           status: 0,
           statusText: 'Network Error',
@@ -208,26 +274,16 @@ const initializeInterceptors = () => {
       return Promise.reject(networkError)
     }
 
-    // 🔒 Hesap askıya alma kontrolü (403 ACCOUNT_SUSPENDED)
-    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_SUSPENDED') {
-      const suspensionData = error.response.data
-      // Global event dispatch (modal component dinleyecek)
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('account-suspended', {
-            detail: {
-              reason: suspensionData.reason || 'Belirtilmemiş',
-              until: suspensionData.until || null,
-            },
-          })
-        )
+    // 403 → sadece /auth/me için forced logout (profil/users endpoint'leri 403/ACCOUNT_SUSPENDED dönse bile logout yapma; askı kaldırılan hesaplar profil açabilsin)
+    if (error.response?.status === 403) {
+      const url = (originalRequest?.url ?? '') as string
+      if (url.includes('/auth/me')) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[api] Forced logout triggered: 403', { url })
+        }
+        performForcedLogout()
       }
-      // Hata mesajını özel olarak işle
-      return Promise.reject({
-        ...error,
-        isSuspended: true,
-        suspensionData,
-      })
+      return Promise.reject(error)
     }
 
     // If error is 401 and we haven't tried to refresh yet
@@ -241,7 +297,7 @@ const initializeInterceptors = () => {
             if (originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${token}`
             }
-            return getApiInstance()(originalRequest)
+            return api(originalRequest)
           })
           .catch((err) => {
             return Promise.reject(err)
@@ -251,21 +307,25 @@ const initializeInterceptors = () => {
       originalRequest._retry = true
       isRefreshing = true
 
-      // 🔥 Lazy import - circular dependency'yi önlemek için
-      const { useAuthStore } = await import('./store')
       const state = useAuthStore.getState()
-      const refreshToken = state.refreshToken
+      const refreshToken = state.refreshToken ?? getRefreshTokenFromPersistedStorage()
+
+      const requestUrl = (originalRequest?.url ?? '') as string
+      const isAuthEndpoint = requestUrl.includes('/auth/me') || requestUrl.includes('/auth/refresh')
 
       if (!refreshToken) {
-        // No refresh token, logout
-        useAuthStore.getState().clearAuth()
-        window.location.href = '/login'
+        if (isAuthEndpoint) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[api] Forced logout triggered: 401 no refreshToken', { url: requestUrl })
+          }
+          performForcedLogout()
+        }
         return Promise.reject(error)
       }
 
       try {
         // api instance'ını kullan (baseURL zaten ayarlı)
-        const response = await getApiInstance().post(
+        const response = await api.post(
           '/auth/refresh',
           { refreshToken }
         )
@@ -279,7 +339,6 @@ const initializeInterceptors = () => {
         }
 
         // Update tokens and user in store
-        // useAuthStore zaten yukarıda import edildi
         useAuthStore.getState().setAuth(user, accessToken, newRefreshToken, capabilities ?? null, sidebar ?? null)
 
         // Update authorization header
@@ -289,14 +348,37 @@ const initializeInterceptors = () => {
 
         processQueue(null, accessToken)
 
-        return getApiInstance()(originalRequest)
-      } catch (refreshError) {
-        // Refresh failed, logout
+        return api(originalRequest)
+      } catch (refreshError: unknown) {
         processQueue(refreshError, null)
-        // useAuthStore zaten yukarıda import edildi
-        useAuthStore.getState().clearAuth()
-        window.location.href = '/login'
-        return Promise.reject(refreshError)
+        if (isAuthEndpoint) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[api] Forced logout triggered: 401 refresh failed', { url: requestUrl })
+          }
+          performForcedLogout()
+        }
+        const ax = refreshError as AxiosError
+        if (ax?.response) {
+          return Promise.reject(refreshError)
+        }
+        if (apiDebugEnabled()) {
+          console.warn('[api] Token refresh failed without HTTP response:', {
+            code: ax?.code,
+            message: ax?.message,
+          })
+        }
+        const sessionMsg =
+          'Oturum doğrulaması başarısız oldu. Lütfen yeniden giriş yapın.'
+        const sessionErr = new AxiosError(sessionMsg, 'ERR_REFRESH_FAILED', originalRequest)
+        sessionErr.response = {
+          status: 401,
+          statusText: 'Unauthorized',
+          data: { message: sessionMsg },
+          headers: {},
+          config: originalRequest as any,
+        }
+        sessionErr.isAxiosError = true
+        return Promise.reject(sessionErr)
       } finally {
         isRefreshing = false
       }
@@ -314,116 +396,169 @@ const initializeInterceptors = () => {
     }
 
     return Promise.reject(error)
-  })
+  }
+)
+
+export type ApiErrorKind =
+  | 'network'
+  | 'timeout'
+  | 'auth'
+  | 'forbidden'
+  | 'validation'
+  | 'payload_too_large'
+  | 'server'
+  | 'unknown'
+
+/** Toast / UI için hata sınıfı (generic ağ mesajı yalnızca `network` | `timeout`) */
+export function getApiErrorKind(error: unknown): ApiErrorKind {
+  const e = error as AxiosError
+  if (!e?.response) {
+    if (e?.code === 'ECONNABORTED' || e?.message?.includes('timeout')) return 'timeout'
+    if (e?.code === 'ERR_NETWORK' || e?.message === 'Network Error') return 'network'
+    return 'network'
+  }
+  const s = e.response.status
+  const data = e.response.data as Record<string, unknown> | undefined
+  if (s === 0 && data?.[FEELLINK_SYNTHETIC_NETWORK]) {
+    const msg = typeof data.message === 'string' ? data.message : ''
+    if (msg.includes('zaman aşımı') || msg.includes('timeout')) return 'timeout'
+    return 'network'
+  }
+  if (s === 401) return 'auth'
+  if (s === 403) return 'forbidden'
+  if (s === 413) return 'payload_too_large'
+  if (s === 400) return 'validation'
+  if (s >= 500) return 'server'
+  return 'unknown'
 }
 
-// Export api - lazy evaluation ile Proxy kullan
-// 🔥 Client-side only - server-side'da kullanılmamalı
-// Server-side'da dummy object, client-side'da gerçek API
-let apiProxy: ReturnType<typeof axios.create> | null = null
-
-const getApiProxy = () => {
-  // 🔥 Server-side'da dummy object döndür (sadece import hatası önlemek için)
-  if (typeof window === 'undefined') {
-    return {
-      get: () => Promise.reject(new Error('API cannot be used on server-side')),
-      post: () => Promise.reject(new Error('API cannot be used on server-side')),
-      put: () => Promise.reject(new Error('API cannot be used on server-side')),
-      patch: () => Promise.reject(new Error('API cannot be used on server-side')),
-      delete: () => Promise.reject(new Error('API cannot be used on server-side')),
-      defaults: { baseURL: '' },
-    } as any
-  }
-  
-  if (!apiProxy) {
-    // Client-side'da gerçek Proxy
-    apiProxy = new Proxy({} as ReturnType<typeof axios.create>, {
-      get(target, prop) {
-        // İlk kullanımda interceptor'ları initialize et
-        initializeInterceptors()
-        const instance = getApiInstance()
-        const value = instance[prop as keyof typeof instance]
-        
-        // Function ise bind et
-        if (typeof value === 'function') {
-          return value.bind(instance)
+function extractNestMessage(responseData: any): string | null {
+  if (!responseData) return null
+  const msg = responseData?.message
+  if (Array.isArray(msg)) {
+    const joined = msg
+      .map((m: unknown) => {
+        if (typeof m === 'string') return m
+        if (m && typeof m === 'object' && m !== null && 'constraints' in m) {
+          const c = (m as { constraints?: Record<string, string> }).constraints
+          return c ? Object.values(c).join(', ') : ''
         }
-        
-        return value
-      }
-    }) as any
+        return ''
+      })
+      .filter(Boolean)
+      .join('. ')
+    return joined || null
   }
-  
-  return apiProxy
+  if (typeof msg === 'string' && msg.trim()) return msg.trim()
+  if (msg && typeof msg === 'object' && typeof (msg as any).message === 'string') {
+    return (msg as any).message
+  }
+  return null
 }
-
-// Export api - lazy evaluation ile Proxy (sadece client-side'da çalışır)
-const api = typeof window !== 'undefined' 
-  ? new Proxy({} as ReturnType<typeof axios.create>, {
-      get(target, prop) {
-        return getApiProxy()[prop as keyof ReturnType<typeof axios.create>]
-      }
-    })
-  : ({
-      get: () => Promise.reject(new Error('API cannot be used on server-side')),
-      post: () => Promise.reject(new Error('API cannot be used on server-side')),
-      put: () => Promise.reject(new Error('API cannot be used on server-side')),
-      patch: () => Promise.reject(new Error('API cannot be used on server-side')),
-      delete: () => Promise.reject(new Error('API cannot be used on server-side')),
-      defaults: { baseURL: '' },
-    } as any)
 
 // Utility function to extract user-friendly error messages
-export const getErrorMessage = (error: any, options?: { isLogin?: boolean }): string => {
-  // Network/Connection errors
+export const getErrorMessage = (error: any): string => {
+  // Ham Axios: henüz interceptor sentetik response eklemediyse
   if (!error?.response) {
     if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
-      return 'İstek zaman aşımına uğradı. Lütfen tekrar deneyin.'
+      return 'İstek zaman aşımına uğradı. Dosya çok büyük olabilir, lütfen tekrar deneyin.'
     }
-    if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error' || error?.message?.includes('Network')) {
-      return 'Backend bağlantısı kurulamadı. Lütfen backend\'in çalıştığından emin olun ve tekrar deneyin.'
+    if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
+      return 'Şu an sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edip kısa süre sonra tekrar deneyin.'
     }
     return 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.'
   }
 
-  // 🔒 GÜVENLİK: Login hataları için tek bir güvenli mesaj (user enumeration önleme)
-  // ⚠️ AMA: Askıya alınmış hesap hatası (403 + ACCOUNT_SUSPENDED) özel olarak handle edilmeli
-  if (options?.isLogin) {
-    // Askıya alınmış hesap hatası - özel mesaj göster (frontend'de zaten handle ediliyor)
-    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_SUSPENDED') {
-      // Bu durumda frontend'de özel mesaj gösterilecek, buraya gelmemeli
-      // Ama yine de fallback mesaj ver
-      return error.response?.data?.message || 'Hesabınız askıya alınmıştır.'
-    }
-    
-    // ✅ Veritabanı bağlantı hatası - özel mesaj göster
-    const responseMessage = error.response?.data?.message || '';
-    if (responseMessage.includes('Veritabanı bağlantı hatası') || 
-        responseMessage.includes('Veritabanı') || 
-        responseMessage.includes('bağlantı hatası')) {
-      return 'Veritabanı bağlantı hatası. Lütfen tekrar deneyin.';
-    }
-    
-    // Diğer 401/403 hataları için güvenli mesaj
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      return 'E-posta adresi veya şifre hatalı.'
-    }
+  const status = error.response?.status
+  const responseData = error.response?.data
+
+  if (status === 0 && responseData?.[FEELLINK_SYNTHETIC_NETWORK]) {
+    const m = typeof responseData.message === 'string' ? responseData.message.trim() : ''
+    if (m.length >= 3) return m
+    return 'Şu an sunucuya bağlanılamıyor. İnternet bağlantınızı kontrol edip kısa süre sonra tekrar deneyin.'
   }
 
-  // Backend error responses
-  const responseData = error.response?.data
+  if (status === 413) {
+    return 'Dosya veya veri boyutu çok büyük. Daha küçük bir görsel seçin veya sıkıştırılmış bir dosya kullanın.'
+  }
+
+  if (status === 401) {
+    const fromBody = extractNestMessage(responseData)
+    if (fromBody && fromBody.length >= 3) return fromBody
+    return 'Oturum doğrulaması başarısız oldu. Lütfen yeniden giriş yapın.'
+  }
+
+  if (status === 403) {
+    const fromBody = extractNestMessage(responseData)
+    if (fromBody && fromBody.length >= 3) return fromBody
+    return 'Bu işlem için yetkiniz yok veya hesap türünüz uygun değil.'
+  }
+
+  if (status === 400) {
+    const fromBody = extractNestMessage(responseData)
+    if (fromBody && fromBody.length >= 3) return fromBody
+    return 'Gönderilen bilgiler geçersiz. Lütfen alanları kontrol edip tekrar deneyin.'
+  }
+
+  if (status != null && status >= 500) {
+    return 'Sunucuda geçici bir sorun oluştu. Lütfen kısa süre sonra tekrar deneyin.'
+  }
+
   if (!responseData) {
     return 'Bir hata oluştu. Lütfen tekrar deneyin.'
   }
 
-  // Handle nested message objects (NestJS format)
-  const nested = typeof responseData?.message === 'object' ? responseData.message : null
-  const errorMessage = nested?.message ?? 
-    (typeof responseData?.message === 'string' ? responseData.message : null) ??
-    responseData?.error ??
-    'Bir hata oluştu. Lütfen tekrar deneyin.'
+  const msg = responseData?.message
+  const errorMessage = extractNestMessage(responseData)
 
-  // Filter out unwanted error messages
+  // Nest bazen message/error'ı nesne döndürür; .toLowerCase() patlamasın (aksi halde UI genel hataya düşer)
+  let rawFinal: unknown = errorMessage ?? responseData?.error ?? 'Bir hata oluştu. Lütfen tekrar deneyin.'
+  if (typeof rawFinal !== 'string') {
+    if (rawFinal && typeof rawFinal === 'object' && typeof (rawFinal as { message?: unknown }).message === 'string') {
+      rawFinal = (rawFinal as { message: string }).message
+    } else if (rawFinal != null && typeof rawFinal !== 'object') {
+      rawFinal = String(rawFinal)
+    } else if (Array.isArray(msg) && msg.length) {
+      rawFinal = msg.map((m: unknown) => (typeof m === 'string' ? m : JSON.stringify(m))).join('. ')
+    } else {
+      rawFinal = 'Bir hata oluştu. Lütfen tekrar deneyin.'
+    }
+  }
+  let finalMessage = String(rawFinal ?? '').trim() || 'Bir hata oluştu. Lütfen tekrar deneyin.'
+
+  // API katmanının ürettiği veya env içeren mesajları sadeleştir
+  if (
+    /NEXT_PUBLIC_|API_URL|Backend adresini/i.test(finalMessage) ||
+    finalMessage.includes('Sunucuya ulaşılamadı')
+  ) {
+    finalMessage =
+      'İşlem sırasında bir bağlantı sorunu oluştu. Lütfen internet bağlantınızı kontrol edip kısa süre sonra tekrar deneyin.'
+  }
+
+  // Teknik / iç sistem mesajları kullanıcıya gösterme (güvenlik ve UX)
+  const technicalTerms = [
+    'internet server error',
+    'internal server error',
+    'DATABASE_URL',
+    'MongoDB',
+    'Vercel',
+    'URL-encode',
+    'connection string',
+    'SCRAM',
+    'authentication failed',
+    'bad auth',
+    'ConnectorError',
+    'Prisma',
+    'env',
+    'Environment variable',
+  ]
+  const lower = finalMessage.toLowerCase()
+  const isTechnical = technicalTerms.some(term => lower.includes(term.toLowerCase()))
+  if (isTechnical) {
+    return 'Kayıt işlemi şu anda tamamlanamıyor. Lütfen daha sonra tekrar deneyin.'
+  }
+
+  // Eski genel filtre
   const unwantedMessages = [
     'internet server error',
     'Internet Server Error',
@@ -431,12 +566,11 @@ export const getErrorMessage = (error: any, options?: { isLogin?: boolean }): st
     'Internal Server Error',
     'internal server error',
   ]
-
-  if (unwantedMessages.some(msg => errorMessage.toLowerCase().includes(msg.toLowerCase()))) {
+  if (unwantedMessages.some(m => lower.includes(m.toLowerCase()))) {
     return 'Bir hata oluştu. Lütfen tekrar deneyin.'
   }
 
-  return errorMessage
+  return finalMessage
 }
 
 export { api }

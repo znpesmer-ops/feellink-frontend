@@ -26,8 +26,10 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
   const [previews, setPreviews] = useState<string[]>([])
   const [caption, setCaption] = useState('')
   const [title, setTitle] = useState('') // 🎨 Eser adı (artwork için)
+  const [artworkCreatedDate, setArtworkCreatedDate] = useState('') // 🎨 Eserin oluşturulduğu tarih (opsiyonel)
   const [location, setLocation] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
   const [colorPalette, setColorPalette] = useState<string[]>([])
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -65,6 +67,10 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
       if (title) {
         formData.append('title', title)
       }
+
+      if (artworkCreatedDate.trim()) {
+        formData.append('artworkCreatedDate', artworkCreatedDate.trim())
+      }
       
       // Konum alanı kaldırıldı - artık gönderilmiyor
 
@@ -76,19 +82,27 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
         formData.append('colorPalette', JSON.stringify(colorPalette))
       }
 
+      setUploadProgress(0)
       const response = await api.post('/posts/create', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+            setUploadProgress(pct)
+          }
+        },
       })
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Reset form
       setFiles([])
       setPreviews([])
       setCaption('')
       setTitle('')
+      setArtworkCreatedDate('')
       setLocation('')
       setColorPalette([])
       setCurrentSlide(0)
@@ -97,8 +111,33 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
         fileInputRef.current.value = ''
       }
       
-      // Invalidate queries to refresh posts
-      queryClient.invalidateQueries({ queryKey: ['profile', username] })
+      // 🎯 OPTIMISTIC UPDATE - Instagram mantığı: Anında sayacı artır
+      queryClient.setQueriesData(
+        { 
+          predicate: (query) => {
+            const key = query.queryKey
+            return Array.isArray(key) && key[0] === 'profile'
+          }
+        },
+        (oldData: any) => {
+          if (!oldData) return oldData
+          return {
+            ...oldData,
+            _count: {
+              ...oldData._count,
+              posts: (oldData._count?.posts || 0) + 1, // ✅ Anında +1
+            }
+          }
+        }
+      )
+      
+      // Invalidate queries to refresh posts (background refresh)
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey
+          return Array.isArray(key) && key[0] === 'profile'
+        }
+      })
       
       // Invalidate user posts query (critical for profile page)
       if (userId) {
@@ -118,20 +157,38 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
       onClose()
     },
     onError: (error: any) => {
-      console.error('Error creating post:', error)
-      const responseData = error?.response?.data
-      const nested = typeof responseData?.message === 'object' ? responseData.message : null
-      const errorCode = nested?.code ?? responseData?.code
-
-      if (errorCode === 'LIMIT_REACHED') {
-        const errorMessage = nested?.message ?? (typeof responseData?.message === 'string' ? responseData.message : responseData?.error)
-        setError(errorMessage ?? 'Bu ayki eser limitinize ulaştınız.')
-      } else {
-        setError(getErrorMessage(error))
+      // 🔍 DEBUG: ULTRA DETAYLI error logging
+      console.error('❌ [CreatePost] ========== POST CREATE ERROR ==========')
+      console.error('❌ [CreatePost] Error message:', error?.message)
+      console.error('❌ [CreatePost] Error code:', error?.code)
+      console.error('❌ [CreatePost] Status code:', error?.response?.status)
+      console.error('❌ [CreatePost] Status text:', error?.response?.statusText)
+      console.error('❌ [CreatePost] Response data:', error?.response?.data)
+      console.error('❌ [CreatePost] Request URL:', error?.config?.url)
+      console.error('❌ [CreatePost] Full error:', error)
+      
+      // ✅ HATA TİPİ KONTROLÜ VE ÇÖZÜM ÖNERİSİ
+      if (error?.response?.status === 401) {
+        console.error('🚨 [CreatePost] 401 UNAUTHORIZED!')
+        console.error('🚨 [CreatePost] Auth token geçersiz! LOGOUT → LOGIN yap!')
+      } else if (error?.response?.status === 413) {
+        console.error('🚨 [CreatePost] 413 CONTENT TOO LARGE!')
+        console.error('🚨 [CreatePost] Dosya çok büyük! Max 50MB')
+      } else if (error?.response?.status === 500) {
+        console.error('🚨 [CreatePost] 500 INTERNAL SERVER ERROR!')
+        console.error('🚨 [CreatePost] Backend crash! Vercel log\'larını kontrol et!')
+      } else if (!error?.response) {
+        console.error('🚨 [CreatePost] NETWORK ERROR!')
+        console.error('🚨 [CreatePost] Backend\'e erişilemiyor veya CORS hatası!')
       }
+      
+      console.error('❌ [CreatePost] ========== END ERROR ==========')
+
+      setError(getErrorMessage(error))
     },
     onSettled: () => {
       setUploading(false)
+      setUploadProgress(0)
     },
   })
 
@@ -306,6 +363,7 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
     setPreviews([])
     setCaption('')
     setTitle('')
+    setArtworkCreatedDate('')
     setLocation('')
     setColorPalette([])
     setCurrentSlide(0)
@@ -341,7 +399,6 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-      onClick={handleClose}
     >
       <div
         className="bg-[#101014] dark:bg-[#0f0f0f] w-full max-w-[550px] rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
@@ -608,24 +665,42 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
 
           {/* Eser Adı (sadece artwork için) */}
           {postType === 'artwork' && (
-            <div>
-              <label htmlFor="title" className="block text-gray-300 dark:text-gray-300 text-sm mb-2">
-                Eser Adı <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Eserinizin adını girin"
-                required
-                disabled={uploading}
-                className="w-full mt-2 bg-[#151519] dark:bg-gray-800 text-gray-200 dark:text-gray-200 rounded-xl px-4 py-3 border border-gray-700 dark:border-gray-600 focus:border-brand-orange focus:outline-none resize-none placeholder-gray-500 transition-all"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Eserinizi tanımlayan bir ad girin
-              </p>
-            </div>
+            <>
+              <div>
+                <label htmlFor="title" className="block text-gray-300 dark:text-gray-300 text-sm mb-2">
+                  Eser Adı <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="title"
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Eserinizin adını girin"
+                  required
+                  disabled={uploading}
+                  className="w-full mt-2 bg-[#151519] dark:bg-gray-800 text-gray-200 dark:text-gray-200 rounded-xl px-4 py-3 border border-gray-700 dark:border-gray-600 focus:border-brand-orange focus:outline-none resize-none placeholder-gray-500 transition-all"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Eserinizi tanımlayan bir ad girin
+                </p>
+              </div>
+              <div>
+                <label htmlFor="artworkCreatedDate" className="block text-gray-300 dark:text-gray-300 text-sm mb-2">
+                  Eserin Oluşturulduğu Tarih
+                </label>
+                <input
+                  id="artworkCreatedDate"
+                  type="date"
+                  value={artworkCreatedDate}
+                  onChange={(e) => setArtworkCreatedDate(e.target.value)}
+                  disabled={uploading}
+                  className="w-full mt-2 bg-[#151519] dark:bg-gray-800 text-gray-200 dark:text-gray-200 rounded-xl px-4 py-3 border border-gray-700 dark:border-gray-600 focus:border-brand-orange focus:outline-none placeholder-gray-500 transition-all [color-scheme:dark]"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  İsteğe bağlı — eserin yapıldığı günü kaydedebilirsin
+                </p>
+              </div>
+            </>
           )}
 
           {/* Caption */}
@@ -674,9 +749,13 @@ export function CreatePostModal({ isOpen, onClose, username, userId, postType = 
             <button
               type="submit"
               disabled={uploading || files.length === 0 || hasBadWord}
-              className="px-8 py-2 rounded-xl bg-brand-orange text-white font-semibold hover:bg-[#e67a00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-8 py-2 rounded-xl bg-brand-orange text-white font-semibold hover:bg-[#e67a00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
             >
-              {uploading ? 'Yükleniyor...' : 'Paylaş'}
+              {uploading
+                ? uploadProgress > 0 && uploadProgress < 100
+                  ? `%${uploadProgress} Yüklendi`
+                  : 'İşleniyor...'
+                : 'Paylaş'}
             </button>
           </div>
         </form>
