@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { AppLogo } from '@/components/common/AppLogo'
 import {
   Home,
   Compass,
@@ -265,12 +266,8 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
     <aside className="w-full h-full bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm flex flex-col">
 
       {/* LOGO */}
-      <div className="w-full flex items-center justify-start px-4 pt-0 pb-0 -mt-2">
-        <img
-          src="/logo.png"
-          alt="Feellink Logo"
-          className="h-8 w-auto object-contain pl-3"
-        />
+      <div className="w-full flex items-center justify-start px-4 pt-0 pb-0 -mt-2 text-gray-900 dark:text-white pl-3">
+        <AppLogo width={168} height={44} />
       </div>
 
       {/* MENU */}
