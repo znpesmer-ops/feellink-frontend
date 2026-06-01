@@ -263,45 +263,84 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
     : roleLabels[0] ?? ROLE_METADATA.art_lover.label
 
   return (
-    <aside className="w-full h-full bg-white dark:bg-gray-950 border-r border-gray-200/70 dark:border-white/10 shadow-sm flex flex-col">
+    <aside
+      className="w-full h-full flex flex-col relative overflow-hidden
+                 bg-white dark:bg-[#080810]
+                 border-r border-gray-200/60 dark:border-white/[0.06]"
+      style={{
+        background: 'linear-gradient(180deg, #080810 0%, #0a0a14 60%, #08080f 100%)',
+      }}
+    >
+      {/* Subtle ambient glow top-left */}
+      <div
+        className="pointer-events-none absolute -top-20 -left-10 w-48 h-48 rounded-full opacity-[0.06]"
+        style={{ background: 'radial-gradient(circle, #ff7b00 0%, transparent 70%)' }}
+      />
 
       {/* LOGO */}
-      <div className="w-full flex items-center justify-start px-4 pt-0 pb-0 -mt-2 text-gray-900 dark:text-white pl-3">
+      <div className="relative z-10 w-full flex items-center justify-start px-4 pt-1 pb-3 pl-3 border-b border-white/[0.04]">
         <AppLogo width={168} height={44} />
       </div>
 
       {/* MENU */}
-      <nav className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-        <ul className="flex flex-col gap-3">
-          {navItems.map((item) => {
+      <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-0.5
+                      scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+        <ul className="flex flex-col gap-0.5">
+          {navItems.map((item, idx) => {
             const isActive =
               activeRoute === item.href ||
               activeRoute.startsWith(`${item.href}/`)
             const Icon = item.icon
-            const baseClasses =
-              'sidebar-item group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
-            const inactiveClasses =
-              'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10'
 
             return (
-              <li key={item.key}>
+              <li key={item.key} style={{ animationDelay: `${idx * 30}ms` }} className="premium-card-enter">
                 <Link
                   href={item.href}
                   onClick={onLinkClick}
-                  className={`${baseClasses} ${
-                    isActive ? 'bg-brand-blue/10 text-brand-orange' : inactiveClasses
-                  }`}
+                  className={`
+                    group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium
+                    transition-all duration-200 ease-out overflow-hidden
+                    ${isActive
+                      ? 'text-[#ff8f20] bg-gradient-to-r from-[#ff7b00]/14 to-[#ff7b00]/4'
+                      : 'text-gray-400 hover:text-white hover:bg-white/[0.06]'
+                    }
+                  `}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1">{item.label}</span>
+                  {/* Active left-bar accent */}
+                  {isActive && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-r-full"
+                      style={{ background: 'linear-gradient(180deg, #ff9a30, #ff5500)', boxShadow: '0 0 8px #ff7b00aa' }}
+                    />
+                  )}
 
-                  {/* 🔥 Tek dot kuralı: badgeCount varsa onu göster, yoksa highlight dot'u göster */}
+                  {/* Hover shimmer sweep */}
+                  <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                        style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent)' }} />
+
+                  <span className={`transition-all duration-200 flex-shrink-0
+                    ${isActive ? 'text-[#ff8030]' : 'text-gray-500 group-hover:text-gray-300 group-hover:scale-110'}`}
+                    style={isActive ? { filter: 'drop-shadow(0 0 6px rgba(255,123,0,0.5))' } : {}}>
+                    <Icon className="h-[17px] w-[17px]" />
+                  </span>
+
+                  <span className="flex-1 tracking-[0.01em]">{item.label}</span>
+
                   {item.badgeCount !== undefined && item.badgeCount > 0 ? (
-                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-orange text-white text-xs font-semibold">
+                    <span
+                      className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-white text-[11px] font-bold"
+                      style={{
+                        background: 'linear-gradient(135deg, #ff7b00, #ff4500)',
+                        boxShadow: '0 0 10px rgba(255,100,0,0.45)',
+                      }}
+                    >
                       {item.badgeCount > 99 ? '99+' : item.badgeCount}
                     </span>
                   ) : item.highlight ? (
-                    <span className="inline-flex h-2 w-2 rounded-full bg-brand-orange"></span>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ff7b00] opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ff7b00]" />
+                    </span>
                   ) : null}
                 </Link>
               </li>
@@ -311,31 +350,50 @@ export function Sidebar({ forceVisible = false, onLinkClick }: SidebarProps = {}
       </nav>
 
       {/* ROLE / PLAN */}
-      <div className="border-t border-gray-200/70 dark:border-white/10 px-6 py-5 text-sm text-gray-500 dark:text-gray-400">
-        <p className="font-medium text-gray-900 dark:text-white">Aktif Rol</p>
+      <div className="relative z-10 px-4 py-4">
+        <div
+          className="rounded-xl px-4 py-3.5 relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,123,0,0.08) 0%, rgba(124,58,237,0.06) 100%)',
+            border: '1px solid rgba(255,123,0,0.15)',
+            boxShadow: '0 2px 16px rgba(255,100,0,0.08)',
+          }}
+        >
+          {/* Subtle gradient blob */}
+          <div className="pointer-events-none absolute -top-4 -right-4 w-16 h-16 rounded-full opacity-20"
+               style={{ background: 'radial-gradient(circle, #ff7b00, transparent 70%)' }} />
 
-        <div className="mt-3 text-gray-900 dark:text-white font-semibold tracking-wide">
-          {isAdmin ? (
-            <span className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-[#ff7b00]" />
-              <span>Admin</span>
-            </span>
-          ) : (
-            primaryRoleLabel
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500 mb-2">Aktif Rol</p>
+
+          <div className="text-white font-semibold text-sm tracking-wide">
+            {isAdmin ? (
+              <span className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full"
+                      style={{ background: 'linear-gradient(135deg,#ff7b00,#ff4500)', boxShadow: '0 0 8px rgba(255,100,0,0.4)' }}>
+                  <Shield className="w-3 h-3 text-white" />
+                </span>
+                <span>Admin</span>
+              </span>
+            ) : (
+              <span className="bg-gradient-to-r from-[#ffaa55] to-[#ff6600] bg-clip-text text-transparent">
+                {primaryRoleLabel}
+              </span>
+            )}
+          </div>
+
+          {!isAdmin && roleLabels.length > 1 && (
+            <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed">
+              {roleLabels.slice(1).join(' • ')}
+            </p>
+          )}
+
+          {isAdmin && (
+            <p className="mt-1.5 text-[11px] font-medium leading-relaxed"
+               style={{ color: '#ff9040' }}>
+              Tüm özelliklere erişim
+            </p>
           )}
         </div>
-
-        {!isAdmin && roleLabels.length > 1 && (
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            {roleLabels.slice(1).join(' • ')}
-          </p>
-        )}
-        
-        {isAdmin && (
-          <p className="mt-2 text-xs text-[#ff7b00] dark:text-[#ff9500] leading-relaxed font-medium">
-            Tüm özelliklere erişim
-          </p>
-        )}
       </div>
     </aside>
   )
