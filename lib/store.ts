@@ -26,6 +26,8 @@ interface User {
   city?: string | null
   gender?: string | null
   activeRole?: string | null // 🎯 Aktif rol (profil header'da gösterilecek, onboarding kontrolü için)
+  usernameLastChangedAt?: string | null // 🔒 Kullanıcı adı son değiştirilme tarihi (14 günlük limit için)
+  website?: string | null // 🔗 Website URL
 }
 
 interface AuthState {
@@ -36,6 +38,9 @@ interface AuthState {
   refreshToken: string | null
   unreadCount: number
   unreadMessageCount: number
+  isAuthenticated: boolean // ✅ Backend doğrulaması ile set edilir
+  loading: boolean // ✅ Auth kontrolü yapılırken true
+  hasInitialized: boolean // ✅ Backend doğrulaması yapıldı mı?
   setAuth: (
     user: User,
     accessToken: string,
@@ -51,6 +56,9 @@ interface AuthState {
   refreshUser: () => Promise<void> // Kullanıcı bilgilerini backend'den yenile
   setUnreadCount: (count: number) => void // Bildirim okunmamış sayısını güncelle
   setUnreadMessageCount: (count: number) => void // Mesaj okunmamış sayısını güncelle
+  setLoading: (loading: boolean) => void // ✅ Loading state kontrolü
+  setAuthenticated: (isAuthenticated: boolean) => void // ✅ Auth state kontrolü
+  setHasInitialized: (hasInitialized: boolean) => void // ✅ Initialization state kontrolü
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -63,8 +71,15 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       unreadCount: 0,
       unreadMessageCount: 0,
+      isAuthenticated: false, // ✅ Backend doğrulaması ile set edilir - persist edilmez
+      loading: false, // ✅ AuthGuard başladığında true olacak - persist edilmez
+      hasInitialized: false, // ✅ Backend doğrulaması yapıldı mı? - persist edilmez
       setAuth: (user, accessToken, refreshToken, capabilities = null, sidebar = null) => {
-        set({ user, accessToken, refreshToken, capabilities, sidebar })
+        // Token'ı localStorage'a kaydet (middleware ve diğer kontroller için)
+        if (typeof window !== 'undefined' && accessToken) {
+          localStorage.setItem('access_token', accessToken)
+        }
+        set({ user, accessToken, refreshToken, capabilities, sidebar, isAuthenticated: true, loading: false })
       },
       setUser: (user, capabilities = null, sidebar = null) => {
         set((state) => ({
@@ -81,16 +96,34 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({ ...state, sidebar }))
       },
       updateTokens: (accessToken, refreshToken) => {
+        // Token'ı localStorage'a kaydet (API interceptor için)
+        if (typeof window !== 'undefined' && accessToken) {
+          localStorage.setItem('access_token', accessToken)
+        }
         set((state) => ({
           accessToken,
           refreshToken: refreshToken || state.refreshToken,
         }))
       },
       clearAuth: () => {
-        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0, unreadMessageCount: 0 })
+        set({ user: null, capabilities: null, sidebar: null, accessToken: null, refreshToken: null, unreadCount: 0, unreadMessageCount: 0, isAuthenticated: false, loading: false, hasInitialized: true })
         if (typeof window !== 'undefined') {
           localStorage.removeItem('feellink_roles')
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('auth-storage')
+          sessionStorage.removeItem('access_token')
+          sessionStorage.removeItem('refresh_token')
         }
+      },
+      setLoading: (loading: boolean) => {
+        set({ loading })
+      },
+      setAuthenticated: (isAuthenticated: boolean) => {
+        set({ isAuthenticated, loading: false })
+      },
+      setHasInitialized: (hasInitialized: boolean) => {
+        set({ hasInitialized })
       },
       refreshUser: async () => {
         try {
@@ -120,11 +153,27 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       partialize: (state) => ({
+        // ⛔️ loading ve isAuthenticated persist edilmez - her mount'ta backend doğrulaması yapılır
         user: state.user,
         capabilities: state.capabilities,
         sidebar: state.sidebar,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        unreadCount: state.unreadCount,
+        unreadMessageCount: state.unreadMessageCount,
       }),
+      // axios / login sayfası `access_token` anahtarını da okuyor; rehydrate sonrası senkron tut
+      onRehydrateStorage: () => (state) => {
+        if (typeof window === 'undefined' || !state) return
+        try {
+          if (state.accessToken) localStorage.setItem('access_token', state.accessToken)
+          else localStorage.removeItem('access_token')
+          if (state.refreshToken) localStorage.setItem('refresh_token', state.refreshToken)
+          else localStorage.removeItem('refresh_token')
+        } catch {
+          /* ignore */
+        }
+      },
     }
   )
 )
-
