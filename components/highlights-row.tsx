@@ -151,22 +151,14 @@ export default function HighlightsRow({ compactTop = false }: HighlightsRowProps
 
   return (
     <section className={`w-full ${compactTop ? 'mt-0' : ''}`}>
-      {/* Editorial header — no custom CSS classes, all inline */}
-      <div className="mb-4 md:mb-6">
-        <div className="flex items-center gap-2.5 mb-0.5">
-          <span
-            className="inline-block w-1.5 h-1.5 rounded-full"
-            style={{ background: '#FF8A00', animation: 'pulse 2s ease-in-out infinite' }}
-          />
-          <span className="text-[10px] font-bold tracking-[0.32em] uppercase" style={{ color: '#FF8A00' }}>
-            Ayın Öne Çıkanları
-          </span>
-        </div>
-        <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-          Bu Ay Sahnede
-        </p>
-        <div className="mt-1.5 h-[2px] w-16 rounded-full" style={{ background: '#FF8A00' }} />
-      </div>
+      <h2 className="flex items-center gap-3 text-lg md:text-xl font-semibold mt-0 mb-4 md:mb-6">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+          <rect x="5" y="0.5" width="6.36" height="6.36" rx="1" transform="rotate(45 5 0.5)" fill="#FF8A00"/>
+        </svg>
+        <span className="text-white tracking-wide">
+          Ayın Öne Çıkanları
+        </span>
+      </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {isLoading ? (

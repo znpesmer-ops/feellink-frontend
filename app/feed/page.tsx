@@ -234,16 +234,14 @@ function FeedContent() {
       <div className="space-y-6 md:space-y-10">
         {/* 🔸 Keşfet */}
         <div className="w-full">
-          <div className="mb-4 md:mb-6">
-            <div className="flex items-center gap-2.5 mb-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#FF8A00]" />
-              <span className="text-[10px] font-bold tracking-[0.32em] uppercase text-[#FF8A00]">Keşfet</span>
-            </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-tight">
-              Seni Bekleyen İçerikler
-            </p>
-            <div className="mt-1.5 h-[2px] w-16 rounded-full bg-[#FF8A00]" />
-          </div>
+          <h2 className="flex items-center gap-3 text-lg md:text-xl font-semibold mb-4 md:mb-6">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+              <rect x="5" y="0.5" width="6.36" height="6.36" rx="1" transform="rotate(45 5 0.5)" fill="#FF8A00"/>
+            </svg>
+            <span className="text-white tracking-wide">
+              Keşfet
+            </span>
+          </h2>
           
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
